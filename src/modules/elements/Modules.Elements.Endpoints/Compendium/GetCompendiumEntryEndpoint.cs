@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using FastEndpoints;
 using Starlights.Modules.Elements.Data;
 using Starlights.Modules.Elements.Domain.Components;
@@ -39,7 +40,15 @@ public sealed record CompendiumEntry
     public string Description { get; init; } = string.Empty;
     public IReadOnlyCollection<string> Supports { get; init; } = [];
     public List<CompendiumRule> Rules { get; init; } = [];
+
+    /// <summary>Aurora's setters (e.g. a class's "hd", a spell's "level" and "school", an item's "rarity").</summary>
+    public Dictionary<string, string> Setters { get; init; } = [];
+
+    /// <summary>A spellcasting class's &lt;spellcasting&gt; name and ability (e.g. Wizard, Intelligence).</summary>
+    public CompendiumSpellcasting? Spellcasting { get; init; }
 }
+
+public sealed record CompendiumSpellcasting(string Name, string Ability);
 
 /// <summary>
 /// An element with its description, source and rules (include targets resolved to names).
@@ -123,7 +132,43 @@ public sealed class GetCompendiumEntryEndpoint : Endpoint<GetCompendiumEntryRequ
             AuroraType = aurora?.AuroraType,
             Description = element.GetComponent<DescriptionComponent>()?.Content ?? string.Empty,
             Supports = element.GetComponent<SupportsComponent>()?.Supports ?? [],
-            Rules = rules
+            Rules = rules,
+            Setters = aurora is null ? [] : ParseSetters(aurora.RawXml),
+            Spellcasting = aurora is null ? null : ParseSpellcasting(aurora.RawXml)
         }, ct);
+    }
+
+    /// <summary>
+    /// The &lt;setters&gt; of the original Aurora XML; repeated names are joined with a comma.
+    /// </summary>
+    internal static CompendiumSpellcasting? ParseSpellcasting(string rawXml)
+    {
+        try
+        {
+            var spellcasting = XElement.Parse(rawXml).Element("spellcasting");
+            var name = (string?)spellcasting?.Attribute("name");
+            var ability = (string?)spellcasting?.Attribute("ability");
+            return name is null || ability is null ? null : new CompendiumSpellcasting(name, ability);
+        }
+        catch (System.Xml.XmlException)
+        {
+            return null;
+        }
+    }
+
+    internal static Dictionary<string, string> ParseSetters(string rawXml)
+    {
+        try
+        {
+            return XElement.Parse(rawXml).Element("setters")?.Elements("set")
+                .Where(s => s.Attribute("name") is not null && !string.IsNullOrWhiteSpace(s.Value))
+                .GroupBy(s => (string)s.Attribute("name")!)
+                .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(s => s.Value.Trim())))
+                ?? [];
+        }
+        catch (System.Xml.XmlException)
+        {
+            return [];
+        }
     }
 }

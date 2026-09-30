@@ -103,6 +103,27 @@ public sealed class StatisticsCalculatorTests
 
     #endregion
 
+    [TestMethod]
+    public void Calculate_WithSeveralValueRulesForOneAbility_ShouldAddThemAllToTheScore()
+    {
+        // Arrange: Wisdom 15 with a +1 (feat) and a +2 (background)
+        var character = CreateTestCharacter();
+        AddAbilityScore(character, "Wisdom", "WIS", 15);
+        var registrations = new List<Registration>
+        {
+            CreateRegistrationWithStatisticRule(character, "Wisdom +1", "Ability Score Improvement", "wisdom", "1"),
+            CreateRegistrationWithStatisticRule(character, "Wisdom", "Ability Score Improvement", "wisdom", "2"),
+        };
+
+        // Act
+        var result = _calculator.Calculate(character, registrations);
+
+        // Assert
+        result.Statistics.GetGroup("wisdom").IsCompleted.Should().BeTrue();
+        result.Statistics.GetValue("wisdom:score").Should().Be(18);
+        character.GetRequiredComponent<AbilitiesComponent>().AbilityScores.Single().CalculatedScore.Should().Be(18);
+    }
+
     #region Character Level Tests
 
     [TestMethod]

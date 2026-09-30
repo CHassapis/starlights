@@ -11,6 +11,7 @@ import CharactersCreatePage from "./pages/characters/create/Index.tsx";
 import CharactersDetailsPage from "./pages/characters/details/Index.tsx";
 import { CompendiumPage } from "./pages/compendium/Index.tsx";
 import { CharacterBuilderPage } from "./pages/characters/builder/builder-page.tsx";
+import { CharacterSheetPage } from "./pages/characters/sheet/sheet-page.tsx";
 import { PlayerProvider } from "./lib/player.tsx";
 import { LandingPage2 } from "./pages/landing/Index.tsx";
 // import "./styles/typography.css";
@@ -64,6 +65,11 @@ const router = createBrowserRouter([
       { path: ":id/debug", element: <CharactersDetailsPage /> },
       { path: "create", element: <CharactersCreatePage /> },
     ],
+  },
+  {
+    // the printable sheet has no app chrome
+    path: "/characters/:id/sheet",
+    element: <CharacterSheetPage />,
   },
   {
     path: "/characters/:id/builder",

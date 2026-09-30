@@ -196,7 +196,7 @@ export async function importAuroraCharacter(
     ["input > background-flaws", "flaws"],
     ["input > background-trinket", "trinket"],
     ["input > background", "background"],
-    ["input > organization", "allies"],
+    ["input > experience", "experience"],
     ["input > additional-features", "features"],
     ["input > quest", "quests"],
     ["input > notes", "notes"],
@@ -211,6 +211,9 @@ export async function importAuroraCharacter(
     const value = text(build, `:scope > ${selector}`);
     if (value) story[key] = value;
   }
+  // Aurora keeps the organization's name and the allies text under <organization>
+  const organization = [text(build, ":scope > input > organization > name"), text(build, ":scope > input > organization > allies")].filter(Boolean).join("\n\n");
+  if (organization) story.allies = organization;
   if (Object.keys(story).length > 0) {
     await apiClient.put(`/api/characters/${characterId}/story`, { fields: story });
   }

@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ImageIcon, InfoIcon, MinusIcon, PlusIcon, ScaleIcon, ScrollTextIcon, SparklesIcon, SwordsIcon, UserIcon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon, FileTextIcon, ImageIcon, InfoIcon, MinusIcon, PlusIcon, ScaleIcon, ScrollTextIcon, SparklesIcon, SwordsIcon, UserIcon, UsersIcon } from "lucide-react";
 import { useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ import { usePlayer } from "@/lib/player";
 import { shrinkImage } from "@/lib/image";
 import { SourcesPicker } from "@/components/sources-picker";
 import { StoryTab } from "./story-tab";
+import { AbilitiesTab } from "./abilities-tab";
 import { useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { cn } from "@/lib/utils";
 
@@ -86,9 +87,14 @@ export function CharacterBuilderPage() {
       <Tabs defaultValue="build">
         <TabsList>
           <TabsTrigger value="build">Build</TabsTrigger>
+          <TabsTrigger value="abilities">Abilities</TabsTrigger>
           <TabsTrigger value="story">Story</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="abilities" className="mt-4">
+          <AbilitiesTab characterId={id} />
+        </TabsContent>
 
         <TabsContent value="story" className="mt-4">
           <StoryTab characterId={id} />
@@ -190,6 +196,11 @@ function BuilderHeader({ characterId, choices, pending }: { characterId: string;
         </div>
 
         <div className="flex items-center gap-3">
+          <Button variant="outline" asChild>
+            <Link to={`/characters/${characterId}/sheet`}>
+              <FileTextIcon /> Character sheet
+            </Link>
+          </Button>
           {(pending || setLevel.isPending) && (
             <span className="flex items-center gap-2 text-sm text-muted-foreground">
               <Spinner className="size-4" /> Updating…

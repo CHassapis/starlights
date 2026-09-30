@@ -63,14 +63,18 @@ public class StatisticsCalculator
 
                 // add the value to the statistic group
                 group.WithValue(determinedValue, determinedName);
-
-                // if this group does not exist in pending groups, mark it as complete, this helps with dependency resolution later
-                // also check that no other pending rules exist for this group in valueRules (in case of multiple registrations adding direct values to same group)
-                if (!pendingGroups.ContainsKey(rule.Name) && !valueRules.Except([rule]).Any(x => x.Name == rule.Name))
-                {
-                    group.Complete();
-                }
             });
+        }
+
+        // groups made only of direct values are complete once all their values are in, which helps with dependency
+        // resolution later. (Completing per rule never happened for a group with several value rules, e.g. two
+        // ability score increases to the same ability, so their total never reached the ability score.)
+        foreach (var name in valueRules.Select(r => r.Name).Distinct())
+        {
+            if (!pendingGroups.ContainsKey(name) && context.Statistics.TryGetGroup(name, out var group) && !group.IsCompleted)
+            {
+                group.Complete();
+            }
         }
 
         // process special group processors first, other statistic groups may depend on these
