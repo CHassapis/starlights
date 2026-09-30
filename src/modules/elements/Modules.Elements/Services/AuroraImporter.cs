@@ -8,6 +8,7 @@ using Starlights.Modules.Elements.Data;
 using Starlights.Modules.Elements.Domain;
 using Starlights.Modules.Elements.Domain.Components;
 using Starlights.Modules.Elements.Integration;
+using Starlights.Modules.Elements.Services.FiveETools;
 using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Elements.Services;
@@ -20,6 +21,9 @@ public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<str
 {
     /// <summary>The index name that imports every file in the homebrew folder.</summary>
     public const string HomebrewIndex = "homebrew";
+
+    /// <summary>The index name that imports what is generated from the 5etools data (deities Aurora lacks).</summary>
+    public const string FiveEToolsIndex = "5etools";
 
     public bool IsExcluded(string relativePath) =>
         Exclude?.Any(folder => relativePath.StartsWith(folder.Trim('/') + "/", StringComparison.OrdinalIgnoreCase)) == true;
@@ -48,12 +52,14 @@ internal sealed class AuroraImporter : IAuroraImporter
     private readonly ILogger<AuroraImporter> _logger;
     private readonly IPersistence _persistence;
     private readonly AuroraImporterOptions _options;
+    private readonly FiveEToolsData _fiveETools;
 
-    public AuroraImporter(ILogger<AuroraImporter> logger, IPersistence persistence, AuroraImporterOptions options)
+    public AuroraImporter(ILogger<AuroraImporter> logger, IPersistence persistence, AuroraImporterOptions options, FiveEToolsData fiveETools)
     {
         _logger = logger;
         _persistence = persistence;
         _options = options;
+        _fiveETools = fiveETools;
     }
 
     public async Task<AuroraImportResult> ImportAsync(string indexPath, bool replace = false, bool update = false, CancellationToken cancellationToken = default)
@@ -63,11 +69,16 @@ internal sealed class AuroraImporter : IAuroraImporter
         var root = Path.GetFullPath(_options.ContentPath);
         var (byId, byFile) = BuildCatalog(root);
 
-        // "homebrew" imports every file of the homebrew folder; anything else is an .index of the content repository
+        // "homebrew" imports every file of the homebrew folder, "5etools" what is generated from the 5etools data;
+        // anything else is an .index of the content repository
         var files = new List<string>();
         if (string.Equals(indexPath, AuroraImporterOptions.HomebrewIndex, StringComparison.OrdinalIgnoreCase))
         {
             files.AddRange(byFile.Keys.Where(f => f.StartsWith(HomebrewPrefix, StringComparison.Ordinal)));
+        }
+        else if (string.Equals(indexPath, AuroraImporterOptions.FiveEToolsIndex, StringComparison.OrdinalIgnoreCase))
+        {
+            files.AddRange(byFile.Keys.Where(f => f.StartsWith(FiveEToolsData.Prefix, StringComparison.Ordinal)));
         }
         else
         {
@@ -312,6 +323,29 @@ internal sealed class AuroraImporter : IAuroraImporter
             folders.Add((Path.GetFullPath(homebrew), HomebrewPrefix));
         }
 
+        void AddDocument(string file, XDocument document)
+        {
+            var elements = new List<AuroraElement>();
+            foreach (var xml in document.Descendants("element"))
+            {
+                var id = (string?)xml.Attribute("id");
+                var name = (string?)xml.Attribute("name");
+                var type = (string?)xml.Attribute("type");
+                if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(type))
+                {
+                    continue;
+                }
+
+                var element = new AuroraElement(id, name, type, (string?)xml.Attribute("source"), file, xml);
+                elements.Add(element);
+                if (!byId.TryAdd(id, element))
+                {
+                    duplicates++;
+                }
+            }
+            byFile[file] = elements;
+        }
+
         foreach (var (folder, prefix) in folders)
         foreach (var path in Directory.EnumerateFiles(folder, "*.xml", SearchOption.AllDirectories))
         {
@@ -332,25 +366,18 @@ internal sealed class AuroraImporter : IAuroraImporter
                 continue;
             }
 
-            var elements = new List<AuroraElement>();
-            foreach (var xml in document.Descendants("element"))
-            {
-                var id = (string?)xml.Attribute("id");
-                var name = (string?)xml.Attribute("name");
-                var type = (string?)xml.Attribute("type");
-                if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(type))
-                {
-                    continue;
-                }
+            AddDocument(file, document);
+        }
 
-                var element = new AuroraElement(id, name, type, (string?)xml.Attribute("source"), file, xml);
-                elements.Add(element);
-                if (!byId.TryAdd(id, element))
-                {
-                    duplicates++;
-                }
+        // the deities Aurora has no entry for, generated from the 5etools data
+        if (_fiveETools.Available)
+        {
+            var deityNames = byId.Values.Where(e => e.Type == "Deity").Select(e => e.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var sources = byId.Values.Select(e => e.Source).OfType<string>().Distinct().ToList();
+            if (_fiveETools.DeitiesAsAurora(deityNames, sources) is { } deities)
+            {
+                AddDocument(FiveEToolsData.Prefix + "deities.xml", deities);
             }
-            byFile[file] = elements;
         }
 
         _logger.LogInformation("aurora catalog: {Elements} elements in {Files} files ({Duplicates} duplicate ids ignored)", byId.Count, byFile.Count, duplicates);

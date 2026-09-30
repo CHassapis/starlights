@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Hosting;
 using Starlights.Modules.Elements.Integration;
 using Starlights.Modules.Elements.Services;
+using Starlights.Modules.Elements.Services.FiveETools;
 using Starlights.Platform.Eventing.EventPublisher;
 using Starlights.Platform.Hosting;
 
@@ -21,6 +22,10 @@ public sealed class ElementsModule : IPlatformModule
             builder.Configuration["Aurora:ContentPath"] ?? "/data/aurora-elements",
             builder.Configuration["Aurora:Exclude"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             builder.Configuration["Aurora:HomebrewPath"] ?? "/data/homebrew"));
+
+        builder.Services.AddSingleton(new FiveEToolsOptions(builder.Configuration["FiveETools:Path"] ?? "/data/5etools"));
+        builder.Services.AddSingleton<FiveEToolsData>();
+        builder.Services.AddSingleton<IFiveEToolsLore>(sp => sp.GetRequiredService<FiveEToolsData>());
 
         builder.Services.AddDomainEventHandlersFrom(typeof(ElementsModule).Assembly);
     }

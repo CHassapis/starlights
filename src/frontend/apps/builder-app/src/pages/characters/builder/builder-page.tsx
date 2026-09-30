@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, FileTextIcon, ImageIcon, InfoIcon, MinusIcon, PlusIcon, ScaleIcon, ScrollTextIcon, SparklesIcon, SwordsIcon, UserIcon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon, ChurchIcon, FileTextIcon, ImageIcon, InfoIcon, MinusIcon, PlusIcon, ScaleIcon, ScrollTextIcon, SparklesIcon, SwordsIcon, UserIcon, UsersIcon } from "lucide-react";
 import { useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -32,12 +32,13 @@ import { editionOf, restrictedForEdition, useCharacterSources, useSetCharacterSo
 import { EditionPicker } from "@/components/edition-picker";
 import { cn } from "@/lib/utils";
 
-const SECTION_ORDER = ["Class", "Species", "Background", "Alignment"];
+const SECTION_ORDER = ["Class", "Species", "Background", "Alignment", "Deity"];
 const SECTION_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   Class: SwordsIcon,
   Species: UsersIcon,
   Background: ScrollTextIcon,
   Alignment: ScaleIcon,
+  Deity: ChurchIcon,
 };
 
 export function CharacterBuilderPage() {
@@ -239,17 +240,23 @@ function BuilderHeader({ characterId, choices, pending }: { characterId: string;
 
 function SectionCard({ section, choices, children }: { section: string; choices: BuilderChoice[]; children: ReactNode }) {
   const Icon = SECTION_ICONS[section] ?? SparklesIcon;
-  const open = choices.filter((c) => !c.selected).length;
+  const open = choices.filter((c) => !c.selected && !c.optional).length;
 
   return (
     <section className="rounded-lg border bg-background/60">
       <div className="flex items-center gap-2 border-b px-4 py-3">
         <Icon className="size-5 text-muted-foreground" />
         <h2 className="font-heading text-lg tracking-wide">{section}</h2>
-        {open > 0 && (
+        {open > 0 ? (
           <Badge variant="secondary" className="ms-auto">
             {open} to choose
           </Badge>
+        ) : (
+          choices.every((c) => c.optional && !c.selected) && (
+            <Badge variant="outline" className="ms-auto">
+              optional
+            </Badge>
+          )
         )}
       </div>
       <div className="space-y-3 p-4">{children}</div>

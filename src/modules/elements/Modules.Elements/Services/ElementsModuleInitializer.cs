@@ -70,9 +70,10 @@ internal class ElementsModuleInitializer : IElementsModuleInitializer
             .WithSelectionRule(ElementTypeConstants.Background, "Background")
             .Build();
 
-        // alignment selection
+        // alignment and deity (optional, like Aurora's)
         var alignmentSelectionRule = ElementBuilder.Create(ElementTypeConstants.Rule, "Alignment Selection")
             .WithSelectionRule(ElementTypeConstants.Alignment, "Alignment")
+            .WithSelectionRule(ElementTypeConstants.Deity, "Deity", configure: rule => rule.UpdateIsOptional(true))
             .Build();
 
         // default character creation option

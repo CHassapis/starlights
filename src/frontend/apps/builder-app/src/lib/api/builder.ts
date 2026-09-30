@@ -26,6 +26,8 @@ export interface BuilderChoice {
   level: number;
   slot: number;
   slots: number;
+  /** may stay empty (a deity, Aurora's optional choices) */
+  optional: boolean;
   selected: { elementId: string; name: string; source: string | null } | null;
 }
 

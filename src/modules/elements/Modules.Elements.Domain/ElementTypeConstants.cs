@@ -9,6 +9,7 @@ public static class ElementTypeConstants
     public static readonly string SavingThrow = "Saving Throw";
     public static readonly string Skill = "Skill";
     public static readonly string Alignment = "Alignment";
+    public static readonly string Deity = "Deity";
     public static readonly string Class = "Class";
     public static readonly string ClassFeature = "Class Feature";
     public static readonly string SubClass = "SubClass";

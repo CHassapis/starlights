@@ -32,7 +32,7 @@ interface Pick {
 }
 
 // Aurora's top-level choices and the Starlights sections they correspond to
-const TOP_LEVEL: Record<string, string> = { Race: "Species", Class: "Class", Background: "Background", Alignment: "Alignment" };
+const TOP_LEVEL: Record<string, string> = { Race: "Species", Class: "Class", Background: "Background", Alignment: "Alignment", Deity: "Deity" };
 
 const ABILITIES = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"];
 
@@ -161,7 +161,7 @@ export async function importAuroraCharacter(
 
   // class first (its level gates the rest), then the other top-level picks, then everything they unlock
   let choices = await settledChoices(characterId);
-  for (const type of ["Class", "Race", "Background", "Alignment"]) {
+  for (const type of ["Class", "Race", "Background", "Alignment", "Deity"]) {
     const pick = open.find((p) => p.parent === null && p.type === type);
     const slot = choices.find((c) => c.depth === 0 && c.section === TOP_LEVEL[type]);
     if (pick && slot) {
@@ -241,9 +241,12 @@ export async function importAuroraCharacter(
     const value = text(build, `:scope > ${selector}`);
     if (value) story[key] = value;
   }
-  // Aurora keeps the organization's name and the allies text under <organization>
-  const organization = [text(build, ":scope > input > organization > name"), text(build, ":scope > input > organization > allies")].filter(Boolean).join("\n\n");
-  if (organization) story.allies = organization;
+  // Aurora keeps the organization's name and the allies text under <organization> (its symbol is a path on the
+  // Aurora user's own computer, so it cannot come along)
+  const organization = text(build, ":scope > input > organization > name");
+  const allies = text(build, ":scope > input > organization > allies");
+  if (organization) story.organization = organization;
+  if (allies) story.allies = allies;
   if (Object.keys(story).length > 0) {
     await apiClient.put(`/api/characters/${characterId}/story`, { fields: story });
   }

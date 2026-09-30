@@ -101,7 +101,7 @@ function MainPage({ data, features }: { data: SheetData; features: SheetFeature[
           ["Experience", s.experience ?? ""],
           ["Background", data.background],
           ["Alignment", data.alignment],
-          ["Deity", s.faith ?? ""],
+          ["Deity", data.deity],
           ["Player name", data.player],
         ]}
       />
@@ -281,7 +281,15 @@ function DetailsPage({ data }: { data: SheetData }) {
           {box("Trinket", s.trinket, "h-[70px]")}
         </div>
         <div className="flex min-h-0 flex-col gap-2">
-          {box("Allies & organizations", s.allies, "h-[250px]")}
+          <Frame label="Allies & organizations" className="h-[250px]">
+            <div className="flex h-full gap-2 overflow-hidden">
+              <div className="min-w-0 flex-1 overflow-hidden">
+                {s.organization && <div className="mb-1 text-[11px] font-bold">{s.organization}</div>}
+                <div className="whitespace-pre-line text-[9px] leading-snug">{s.allies}</div>
+              </div>
+              {s.organizationSymbol && <img src={s.organizationSymbol} alt="" className="h-[110px] w-[110px] shrink-0 object-contain" />}
+            </div>
+          </Frame>
           {box("Background story", s.backstory, "flex-[2]")}
           {box("Additional features", [s.features, s.appearance].filter(Boolean).join("\n\n"), "flex-1")}
         </div>

@@ -96,9 +96,10 @@ public sealed partial class Program
         app.Use(async (context, next) =>
         {
             var path = context.Request.Path;
-            var needsAdmin = path.StartsWithSegments("/api/elements") &&
+            var needsAdmin = (path.StartsWithSegments("/api/elements") &&
                 (!HttpMethods.IsGet(context.Request.Method) || path.StartsWithSegments("/api/elements/initialize")) &&
-                !path.StartsWithSegments("/api/elements/aurora-lookup"); // read-only, POST only for the id list
+                !path.StartsWithSegments("/api/elements/aurora-lookup")) || // read-only, POST only for the id list
+                (path.StartsWithSegments("/api/admin") && !path.StartsWithSegments("/api/admin/unlock"));
 
             var given = Encoding.UTF8.GetBytes(context.Request.Headers["X-Admin-Key"].ToString());
             var keyOk = adminKey.Length > 0 && CryptographicOperations.FixedTimeEquals(given, adminKey);

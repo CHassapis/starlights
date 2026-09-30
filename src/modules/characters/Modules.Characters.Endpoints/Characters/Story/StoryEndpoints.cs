@@ -1,6 +1,7 @@
 using FastEndpoints;
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain.Characters;
+using Starlights.Modules.Characters.Endpoints.Characters.Portraits;
 using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Characters.Endpoints.Characters.Story;
@@ -78,8 +79,16 @@ public sealed class UpdateCharacterStoryEndpoint : Endpoint<CharacterStoryModel>
             return;
         }
 
+        // pictures the story no longer uses (a replaced organization symbol) are deleted
+        var dropped = character.Story.Values.Except(req.Fields.Values).ToList();
+
         character.UpdateStory(req.Fields);
         await _persistence.SaveChangesAsync();
+
+        foreach (var value in dropped)
+        {
+            StoryImages.Delete(Config, character.Id.Value, value);
+        }
         await Send.NoContentAsync(ct);
     }
 }

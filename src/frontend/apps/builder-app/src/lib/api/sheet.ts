@@ -83,6 +83,7 @@ export interface SheetData {
   classLine: string;
   background: string;
   alignment: string;
+  deity: string;
   proficiencyBonus: number;
   abilities: AbilityScore[];
   saves: (Bonus & { proficiency: Proficiency })[];
@@ -305,6 +306,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       classLine: `Level ${level} ${top("Species")} ${primary?.name ?? ""}${subclass ? `, ${subclass}` : ""}`.replace(/\s+/g, " ").trim(),
       background: top("Background"),
       alignment: top("Alignment"),
+      deity: top("Deity"),
       proficiencyBonus,
       abilities: abilities.data.abilityScores,
       saves: saves.data.savingThrows.map((s) => ({ ...s, proficiency: proficiencyOf(s, proficiencyBonus) })),

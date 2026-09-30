@@ -14,7 +14,7 @@ public sealed record GetSourcesResponse(List<SourceModel> Sources);
 /// </summary>
 public sealed class GetSourcesEndpoint : EndpointWithoutRequest<GetSourcesResponse>
 {
-    private static readonly string[] GroupOrder = ["core", "supplements", "collaborations", "unearthed-arcana"];
+    private static readonly string[] GroupOrder = ["core", "supplements", "collaborations", "5etools", "unearthed-arcana"];
 
     private readonly IPersistence _persistence;
 

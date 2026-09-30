@@ -36,6 +36,9 @@ public sealed record BuilderChoice
     public int Level { get; init; }
     public int Slot { get; init; } = 1;
     public int Slots { get; init; } = 1;
+
+    /// <summary>A choice that may stay empty (a deity, Aurora's optional selects).</summary>
+    public bool Optional { get; init; }
     public BuilderChoiceSelection? Selected { get; init; }
 }
 
@@ -137,6 +140,7 @@ public sealed class GetBuilderChoicesEndpoint : EndpointWithoutRequest<GetBuilde
                         Level = definition?.LevelRequirement ?? 0,
                         Slot = i + 1,
                         Slots = slots.Count,
+                        Optional = definition?.Optional ?? false,
                         Selected = selected is null ? null : new BuilderChoiceSelection(
                             selected.AssociatedElementId.Value,
                             selected.AssociatedElementName,
