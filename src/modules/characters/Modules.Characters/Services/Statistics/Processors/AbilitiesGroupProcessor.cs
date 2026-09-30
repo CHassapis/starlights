@@ -10,66 +10,45 @@ internal sealed class AbilitiesGroupProcessor : IStatisticGroupProcessor
     {
         var component = context.Character.GetRequiredComponent<AbilitiesComponent>();
 
-        // ensure ability score related groups are processed to completion
+        // ensure ability score related groups are processed to completion: the bonuses, the maximum (20 unless
+        // raised: strength:max, strength:max:extra) and a value the score is set to (strength:score:set, e.g.
+        // Gauntlets of Ogre Power); the maximum and set groups used to be skipped when bonuses existed
         foreach (var score in component.AbilityScores)
         {
             var groupKey = score.Name.ToSlug();
-
-            if (pendingGroups.TryGetValue(groupKey, out var pendingGroup))
+            foreach (var key in new[] { groupKey, $"{groupKey}:max", $"{groupKey}:max:extra", $"{groupKey}:score:set" })
             {
+                if (!pendingGroups.TryGetValue(key, out var pendingGroup))
+                {
+                    continue;
+                }
+
                 var result = processGroupNode(pendingGroup, context);
                 if (result is StatisticValuesGroup group && group.IsCompleted)
                 {
                     continue;
                 }
 
-                context.AddError($"Failed to process ability score group '{groupKey}' - if this group has dependencies, those need to be processed first (recursively)");
-                throw new InvalidOperationException($"Failed to process ability score group '{groupKey}' - if this group has dependencies, those need to be processed first (recursively)");
-            }
-
-            if (pendingGroups.TryGetValue($"{groupKey}:max", out var pendingMaximumGroup))
-            {
-                var result = processGroupNode(pendingMaximumGroup, context);
-                if (result is StatisticValuesGroup group && group.IsCompleted)
+                context.AddError($"Failed to process ability score group '{key}' - if this group has dependencies, those need to be processed first (recursively)");
+                if (key == groupKey)
                 {
-                    continue;
+                    throw new InvalidOperationException($"Failed to process ability score group '{key}' - if this group has dependencies, those need to be processed first (recursively)");
                 }
-
-                context.AddError($"Failed to process ability score group '{groupKey}:max' - if this group has dependencies, those need to be processed first (recursively)");
-                throw new InvalidOperationException($"Failed to process ability score group '{groupKey}:max' - if this group has dependencies, those need to be processed first (recursively)");
             }
         }
 
-
-        // update ability scores based on processed groups
+        // update ability scores based on processed groups, like Aurora: base + bonuses, no higher than the maximum
+        // (unless the base already is), and at least the value an item sets it to
         foreach (var score in component.AbilityScores)
         {
             var groupKey = score.Name.ToSlug();
 
-            var newMaximumScore = 20; // default maximum
-
-            if (context.Statistics.TryGetGroup($"{groupKey}:max", out var maximumGroup))
-            {
-                if (maximumGroup.IsCompleted)
-                {
-                    newMaximumScore = maximumGroup.Sum();
-                }
-                else
-                {
-                    context.AddError($"Ability score maximum group '{groupKey}:max' is not completed");
-                }
-            }
-
-            // TODO: maximum score on entity defaults to 20 in ruleset, but can be increased via statistic rules
-
-            // in case statistics were removed, make sure to still update the additional score (to zero)
-            var newAdditionalScore = 0;
-
+            var bonuses = 0;
             if (context.Statistics.TryGetGroup(groupKey, out var abilityGroup))
             {
                 if (abilityGroup.IsCompleted)
                 {
-                    newAdditionalScore = abilityGroup.Sum();
+                    bonuses = abilityGroup.Sum();
                 }
                 else
                 {
@@ -78,6 +57,21 @@ internal sealed class AbilitiesGroupProcessor : IStatisticGroupProcessor
                 }
             }
 
+            var maximum = CompletedSum(context, $"{groupKey}:max") ?? 20;
+            maximum += CompletedSum(context, $"{groupKey}:max:extra") ?? 0;
+
+            var calculated = score.BaseScore + bonuses;
+            if (calculated > maximum)
+            {
+                calculated = Math.Max(maximum, score.BaseScore);
+            }
+            if (context.Statistics.TryGetGroup($"{groupKey}:score:set", out var setGroup) && setGroup.IsCompleted
+                && setGroup.GetStatisticValues().Select(v => v.Value).DefaultIfEmpty(0).Max() is var setTo && setTo > calculated)
+            {
+                calculated = setTo;
+            }
+
+            var newAdditionalScore = calculated - score.BaseScore;
             component.UpdateAbilityAdditionalScore(score.Id, newAdditionalScore);
 
 
@@ -98,4 +92,7 @@ internal sealed class AbilitiesGroupProcessor : IStatisticGroupProcessor
         }
 
     }
+
+    private static int? CompletedSum(StatisticsProcessorContext context, string groupName) =>
+        context.Statistics.TryGetGroup(groupName, out var group) && group.IsCompleted ? group.Sum() : null;
 }

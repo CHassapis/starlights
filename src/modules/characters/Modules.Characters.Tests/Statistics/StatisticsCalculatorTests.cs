@@ -124,6 +124,66 @@ public sealed class StatisticsCalculatorTests
         character.GetRequiredComponent<AbilitiesComponent>().AbilityScores.Single().CalculatedScore.Should().Be(18);
     }
 
+    [TestMethod]
+    public void Calculate_AboveTheMaximum_ShouldStopAtTwenty()
+    {
+        // Arrange: Strength 19 with +2 from two improvements; the ability's own maximum is 20
+        var character = CreateTestCharacter();
+        AddAbilityScore(character, "Strength", "STR", 19);
+        var registrations = new List<Registration>
+        {
+            CreateRegistrationWithStatisticRule(character, "Strength", "Ability", "strength:max", "20", r => r.UpdateStackingBonus("base")),
+            CreateRegistrationWithStatisticRule(character, "Improvement", "Ability Score Improvement", "strength", "2"),
+        };
+
+        // Act
+        var result = _calculator.Calculate(character, registrations);
+
+        // Assert
+        result.Statistics.GetValue("strength:score").Should().Be(20);
+    }
+
+    [TestMethod]
+    public void Calculate_WithARaisedMaximum_ShouldGoAboveTwenty()
+    {
+        // Arrange: Primal Champion style, +4 Strength and the maximum raised by 4
+        var character = CreateTestCharacter();
+        AddAbilityScore(character, "Strength", "STR", 20);
+        var registrations = new List<Registration>
+        {
+            CreateRegistrationWithStatisticRule(character, "Strength", "Ability", "strength:max", "20", r => r.UpdateStackingBonus("base")),
+            CreateRegistrationWithStatisticRule(character, "Primal Champion", "Class Feature", "strength", "4"),
+            CreateRegistrationWithStatisticRule(character, "Primal Champion", "Class Feature", "strength:max:extra", "4"),
+        };
+
+        // Act
+        var result = _calculator.Calculate(character, registrations);
+
+        // Assert
+        result.Statistics.GetValue("strength:score").Should().Be(24);
+    }
+
+    [TestMethod]
+    [DataRow(8, 19)]
+    [DataRow(20, 20)]
+    public void Calculate_WithAScoreSetByAnItem_ShouldUseTheHigherOfTheTwo(int baseScore, int expected)
+    {
+        // Arrange: Gauntlets of Ogre Power set Strength to 19 (a higher score stays)
+        var character = CreateTestCharacter();
+        AddAbilityScore(character, "Strength", "STR", baseScore);
+        var registrations = new List<Registration>
+        {
+            CreateRegistrationWithStatisticRule(character, "Gauntlets of Ogre Power", "Magic Item", "strength:score:set", "19", r => r.UpdateStackingBonus("base")),
+        };
+
+        // Act
+        var result = _calculator.Calculate(character, registrations);
+
+        // Assert
+        result.Statistics.GetValue("strength:score").Should().Be(expected);
+        character.GetRequiredComponent<AbilitiesComponent>().AbilityScores.Single().CalculatedScore.Should().Be(expected);
+    }
+
     #region Character Level Tests
 
     [TestMethod]

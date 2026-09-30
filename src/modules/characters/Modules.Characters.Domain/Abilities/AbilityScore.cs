@@ -80,7 +80,9 @@ public sealed class AbilityScore : EntityBase<AbilityScoreId>
     /// </summary>
     internal bool UpdateAdditionalScore(int value)
     {
-        if (AdditionalScore == value)
+        // an unchanged value still repairs a stored total that does not add up (the base and the total can be
+        // saved by two writers at once: the builder request and the background processing)
+        if (AdditionalScore == value && CalculatedScore == BaseScore + AdditionalScore)
         {
             return false;
         }

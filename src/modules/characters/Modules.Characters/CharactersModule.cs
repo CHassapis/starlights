@@ -24,6 +24,7 @@ internal class CharactersModule : IPlatformServiceComponent
             builder.Configuration["Players:TokenKey"] ?? builder.Configuration["Admin:Key"] ?? string.Empty,
             builder.Configuration["Admin:MasterPassword"]));
         builder.Services.AddScoped<IRegistrationManager, RegistrationManager>();
+        builder.Services.AddScoped<AttachedRegistrations>();
 
         builder.Services.AddScoped<ClassManagementService>();
         builder.Services.AddScoped<ICharacterCreationService, CharacterCreationService>();

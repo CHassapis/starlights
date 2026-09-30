@@ -1,6 +1,8 @@
 using FastEndpoints;
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain.Characters;
+using Starlights.Modules.Characters.Services.Processing;
+using Starlights.Modules.Elements.Integration;
 using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Characters.Endpoints.Characters.Inventory;
@@ -43,10 +45,16 @@ public sealed class GetCharacterInventoryEndpoint : EndpointWithoutRequest<Chara
 public sealed class UpdateCharacterInventoryEndpoint : Endpoint<CharacterInventory>
 {
     private readonly IPersistence _persistence;
+    private readonly IItemCatalog _catalog;
+    private readonly AttachedRegistrations _attached;
+    private readonly IRegistrationProcessor _processor;
 
-    public UpdateCharacterInventoryEndpoint(IPersistence persistence)
+    public UpdateCharacterInventoryEndpoint(IPersistence persistence, IItemCatalog catalog, AttachedRegistrations attached, IRegistrationProcessor processor)
     {
         _persistence = persistence;
+        _catalog = catalog;
+        _attached = attached;
+        _processor = processor;
     }
 
     public override void Configure()
@@ -72,19 +80,43 @@ public sealed class UpdateCharacterInventoryEndpoint : Endpoint<CharacterInvento
             return;
         }
 
-        // registrations belong to the server: keep the ones entries already had, whatever the client sent
-        var registrations = character.Inventory.Items.Where(i => i.RegistrationId is not null).ToDictionary(i => i.Id, i => i.RegistrationId);
-        character.UpdateInventory(req with
+        // registrations belong to the server (whatever the client sent): an item whose element has rules is
+        // registered while it is active, i.e. equipped, or attuned when it needs attunement (as Aurora applies them);
+        // mundane weapons and armor are not, the sheet works them out from the catalog
+        var catalog = await _catalog.GetAsync(ct);
+        var previous = character.Inventory.Items.Where(i => i.RegistrationId is not null).ToDictionary(i => i.Id, i => i.RegistrationId);
+        var items = new List<InventoryItem>(req.Items.Count);
+        foreach (var entry in req.Items)
         {
-            Version = 1,
-            Items = req.Items.ConvertAll(i => i with
+            var info = entry.ElementId is { } elementId ? catalog.Find(elementId) : null;
+            var active = info is { HasRules: true, BuildOption: false } && !entry.Stored
+                && (info.Magic?.Attunement == true ? entry.Attuned : entry.Equipped is not null);
+            var registration = await _attached.SyncAsync(character.Id, previous.GetValueOrDefault(entry.Id), entry.ElementId, active);
+            items.Add(entry with
             {
-                Name = string.IsNullOrWhiteSpace(i.Name) ? null : i.Name.Trim(),
-                Notes = string.IsNullOrWhiteSpace(i.Notes) ? null : i.Notes,
-                RegistrationId = registrations.GetValueOrDefault(i.Id),
-            }),
-        });
+                Name = string.IsNullOrWhiteSpace(entry.Name) ? null : entry.Name.Trim(),
+                Notes = string.IsNullOrWhiteSpace(entry.Notes) ? null : entry.Notes,
+                RegistrationId = registration,
+            });
+        }
+
+        // entries that are gone take their registrations with them
+        var kept = items.Select(i => i.RegistrationId).OfType<Guid>().ToHashSet();
+        foreach (var gone in previous.Values.OfType<Guid>().Where(id => !kept.Contains(id)))
+        {
+            await _attached.RemoveAsync(character.Id, gone);
+        }
+
+        character.UpdateInventory(req with { Version = 1, Items = items });
         await _persistence.SaveChangesAsync();
+
+        // an item's rules came or went: work the character out again now, so the sheet is right when this returns
+        // (the background processing that follows finds nothing left to change)
+        var registrationsChanged = !previous.Values.OfType<Guid>().ToHashSet().SetEquals(kept);
+        if (registrationsChanged)
+        {
+            await _processor.ReproccessRegistrations(character.Id);
+        }
         await Send.NoContentAsync(ct);
     }
 }

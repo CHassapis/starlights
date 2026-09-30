@@ -1,3 +1,4 @@
+using Starlights.Modules.Characters.Domain.Abilities;
 using Starlights.Modules.Characters.Domain.Skills;
 
 namespace Starlights.Modules.Characters.Services.Statistics.Processors;
@@ -9,6 +10,12 @@ internal sealed class SkillStatisticsPostProcessor : IStatisticsPostProcessor
     public void Process(StatisticsProcessorContext context)
     {
         var skillsComponent = context.Character.GetRequiredComponent<SkillsComponent>();
+
+        // the ability modifier in the same pass as the bonuses (see the saving throw post-processor)
+        foreach (var ability in context.Character.GetRequiredComponent<AbilitiesComponent>().AbilityScores)
+        {
+            skillsComponent.UpdateAbilityScoreModifier(ability.Id, ability.CalculatedModifier);
+        }
 
         foreach (var skill in skillsComponent.Skills)
         {
