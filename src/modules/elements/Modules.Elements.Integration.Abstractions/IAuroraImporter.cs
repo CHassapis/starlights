@@ -33,3 +33,9 @@ public record AuroraImportResult(
     int SkippedConditionalRules,
     int SkippedUnresolvedGrants,
     IReadOnlyDictionary<string, int> ImportedByType);
+
+public static class AuroraImporterIndex
+{
+    /// <summary>The index name that imports every file of the homebrew folder.</summary>
+    public const string Homebrew = "homebrew";
+}

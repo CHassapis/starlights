@@ -9,7 +9,7 @@ namespace Starlights.Modules.Characters.Services.Players;
 /// <summary>
 /// Key for signing unlock tokens. Unset means a random key per process (unlocks last until a restart).
 /// </summary>
-public sealed record PlayerAccessOptions(string TokenKey);
+public sealed record PlayerAccessOptions(string TokenKey, string? MasterPassword = null);
 
 /// <summary>
 /// Optional per-player passwords. Unlocking returns a token the browser sends back in the X-Player-Token header
@@ -19,17 +19,40 @@ public sealed class PlayerAccess
 {
     public const string TokenHeader = "X-Player-Token";
 
+    // the admin token is a token for this name: it opens every player (and campaign) and allows content changes
+    private const string AdminName = "*admin*";
+
     private static readonly TimeSpan TokenLifetime = TimeSpan.FromDays(180);
     private const int Iterations = 210_000;
 
     private readonly IPersistence _persistence;
     private readonly byte[] _key;
 
+    private readonly string? _masterPassword;
+
     public PlayerAccess(IPersistence persistence, PlayerAccessOptions options)
     {
         _persistence = persistence;
         _key = string.IsNullOrEmpty(options.TokenKey) ? ProcessKey : Encoding.UTF8.GetBytes(options.TokenKey);
+        _masterPassword = string.IsNullOrEmpty(options.MasterPassword) ? null : options.MasterPassword;
     }
+
+    /// <summary>
+    /// Checks the master admin password; returns the admin token, or null when wrong or not configured.
+    /// </summary>
+    public string? UnlockAdmin(string password)
+    {
+        if (_masterPassword is null ||
+            !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(password), Encoding.UTF8.GetBytes(_masterPassword)))
+        {
+            return null;
+        }
+
+        return IssueToken(AdminName);
+    }
+
+    /// <summary>Whether the header carries a valid admin token.</summary>
+    public bool HasAdminToken(string? tokensHeader) => HasToken(tokensHeader, AdminName, allowAdmin: false);
 
     private static readonly byte[] ProcessKey = RandomNumberGenerator.GetBytes(32);
 
@@ -85,7 +108,9 @@ public sealed class PlayerAccess
     /// <summary>
     /// Whether the header carries a valid, unexpired token for the player.
     /// </summary>
-    public bool HasToken(string? tokensHeader, string playerName)
+    public bool HasToken(string? tokensHeader, string playerName) => HasToken(tokensHeader, playerName, allowAdmin: true);
+
+    private bool HasToken(string? tokensHeader, string playerName, bool allowAdmin)
     {
         if (string.IsNullOrWhiteSpace(tokensHeader))
         {
@@ -111,7 +136,8 @@ public sealed class PlayerAccess
                 continue;
             }
 
-            if (string.Equals(name, playerName.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            var matches = string.Equals(name, playerName.Trim(), StringComparison.OrdinalIgnoreCase) || (allowAdmin && name == AdminName);
+            if (matches &&
                 CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(parts[2]), Encoding.ASCII.GetBytes(Sign(name, expires))))
             {
                 return true;

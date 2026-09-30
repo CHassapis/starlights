@@ -9,6 +9,7 @@ const GROUP_LABELS: Record<string, { title: string; hint: string }> = {
   supplements: { title: "Supplements & adventures", hint: "Xanathar's, Tasha's, setting books, adventures" },
   "unearthed-arcana": { title: "Unearthed Arcana", hint: "Playtest material, not final rules" },
   collaborations: { title: "Collaborations", hint: "Partner and third-party content" },
+  homebrew: { title: "Homebrew", hint: "Your group's own content (Homebrew page)" },
 };
 
 function Checkbox({ checked, indeterminate, onChange, label }: { checked: boolean; indeterminate?: boolean; onChange: (checked: boolean) => void; label: string }) {

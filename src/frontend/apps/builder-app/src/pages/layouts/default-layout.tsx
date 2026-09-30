@@ -32,6 +32,7 @@ import { Outlet } from "react-router-dom";
 import { ModeToggle } from "@/components/mode-toggle";
 import { GitHubIconButton } from "@/components/navigation/github-icon-button";
 import { usePlayer } from "@/lib/player";
+import { AdminButton } from "@/components/admin-button";
 
 export function LandingBackground() {
   return (
@@ -225,6 +226,19 @@ export function MainNavigation() {
                           </div>
                         </NavigationMenuLink>
                       </li>
+                      <li>
+                        <NavigationMenuLink asChild>
+                          <div>
+                            <Link to="/homebrew" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
+                              <Icon iconNode={cauldron} size={16} className=" size-9 rounded-sm p-2 stroke-starlights-indigo-600"></Icon>
+                              <div>
+                                <div className="font-medium mt-0.5">Homebrew</div>
+                                <div className="text-muted-foreground text-xs ">Your group's own content.</div>
+                              </div>
+                            </Link>
+                          </div>
+                        </NavigationMenuLink>
+                      </li>
                     </ul>
                   </NavigationMenuContent>
                 </NavigationMenuItem>
@@ -370,6 +384,7 @@ export function MainNavigation() {
             </Link>
           </div>
           <PlayerChip />
+          <AdminButton />
           <div className="flex items-center justify-end gap-2">
             <ModeToggle />
             <GitHubIconButton />

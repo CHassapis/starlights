@@ -101,7 +101,8 @@ public sealed partial class Program
                 !path.StartsWithSegments("/api/elements/aurora-lookup"); // read-only, POST only for the id list
 
             var given = Encoding.UTF8.GetBytes(context.Request.Headers["X-Admin-Key"].ToString());
-            if (needsAdmin && (adminKey.Length == 0 || !CryptographicOperations.FixedTimeEquals(given, adminKey)))
+            var keyOk = adminKey.Length > 0 && CryptographicOperations.FixedTimeEquals(given, adminKey);
+            if (needsAdmin && !keyOk && !context.RequestServices.GetRequiredService<PlayerAccess>().HasAdminToken(context.Request.Headers[PlayerAccess.TokenHeader]))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 await context.Response.WriteAsync("This needs the admin key (X-Admin-Key header).");

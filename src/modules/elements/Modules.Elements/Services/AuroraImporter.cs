@@ -16,8 +16,11 @@ namespace Starlights.Modules.Elements.Services;
 /// Location of the local clone of the Aurora content repository, and top-level folders of it to leave out
 /// entirely (e.g. "unearthed-arcana"): never imported, not even to fill a choice.
 /// </summary>
-public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<string>? Exclude = null)
+public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<string>? Exclude = null, string? HomebrewPath = null)
 {
+    /// <summary>The index name that imports every file in the homebrew folder.</summary>
+    public const string HomebrewIndex = "homebrew";
+
     public bool IsExcluded(string relativePath) =>
         Exclude?.Any(folder => relativePath.StartsWith(folder.Trim('/') + "/", StringComparison.OrdinalIgnoreCase)) == true;
 }
@@ -58,16 +61,23 @@ internal sealed class AuroraImporter : IAuroraImporter
         using var _ = ElementsInstrumentation.StartActivity();
 
         var root = Path.GetFullPath(_options.ContentPath);
-        var indexFile = Path.GetFullPath(Path.Combine(root, indexPath));
-        if (!indexFile.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) || !File.Exists(indexFile))
-        {
-            throw new FileNotFoundException($"The index '{indexPath}' was not found in the content repository.");
-        }
-
         var (byId, byFile) = BuildCatalog(root);
 
+        // "homebrew" imports every file of the homebrew folder; anything else is an .index of the content repository
         var files = new List<string>();
-        CollectIndexFiles(root, indexFile, files, []);
+        if (string.Equals(indexPath, AuroraImporterOptions.HomebrewIndex, StringComparison.OrdinalIgnoreCase))
+        {
+            files.AddRange(byFile.Keys.Where(f => f.StartsWith(HomebrewPrefix, StringComparison.Ordinal)));
+        }
+        else
+        {
+            var indexFile = Path.GetFullPath(Path.Combine(root, indexPath));
+            if (!indexFile.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) || !File.Exists(indexFile))
+            {
+                throw new FileNotFoundException($"The index '{indexPath}' was not found in the content repository.");
+            }
+            CollectIndexFiles(root, indexFile, files, []);
+        }
 
         // the requested elements, then (transitively) everything they grant from anywhere in the repository,
         // plus the options for choices that nothing in the import can satisfy (e.g. gaming sets for the Soldier)
@@ -283,15 +293,29 @@ internal sealed class AuroraImporter : IAuroraImporter
         return removed;
     }
 
+    /// <summary>Folder name homebrew files are filed under (their "file" and their sources group).</summary>
+    public const string HomebrewPrefix = "homebrew/";
+
+    /// <summary>
+    /// Every element of the content repository and of the homebrew folder (under "homebrew/"), so grants and
+    /// choices resolve across both.
+    /// </summary>
     private (Dictionary<string, AuroraElement> ById, Dictionary<string, List<AuroraElement>> ByFile) BuildCatalog(string root)
     {
         var byId = new Dictionary<string, AuroraElement>(StringComparer.Ordinal);
         var byFile = new Dictionary<string, List<AuroraElement>>(StringComparer.Ordinal);
         var duplicates = 0;
 
-        foreach (var path in Directory.EnumerateFiles(root, "*.xml", SearchOption.AllDirectories))
+        var folders = new List<(string Root, string Prefix)> { (root, "") };
+        if (_options.HomebrewPath is { } homebrew && Directory.Exists(homebrew))
         {
-            var file = Path.GetRelativePath(root, path).Replace('\\', '/');
+            folders.Add((Path.GetFullPath(homebrew), HomebrewPrefix));
+        }
+
+        foreach (var (folder, prefix) in folders)
+        foreach (var path in Directory.EnumerateFiles(folder, "*.xml", SearchOption.AllDirectories))
+        {
+            var file = prefix + Path.GetRelativePath(folder, path).Replace('\\', '/');
             if (file.StartsWith(".git/", StringComparison.Ordinal) || _options.IsExcluded(file))
             {
                 continue;

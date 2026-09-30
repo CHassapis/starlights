@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { usePlayers, useUnlockPlayer } from "@/lib/api/builder";
-import { usePlayer } from "@/lib/player";
+import { isAdmin, usePlayer } from "@/lib/player";
 
 /**
  * Shows the "who's playing?" picker until this browser has a player name, then the page.
@@ -26,7 +26,8 @@ export function PlayerPicker() {
   const taken = players.some((p) => p.name.toLowerCase() === name.trim().toLowerCase() && p.locked);
 
   function choose(playerName: string, locked: boolean) {
-    if (!locked) {
+    // the master admin password opens every player
+    if (!locked || isAdmin()) {
       setPlayer(playerName);
       return;
     }

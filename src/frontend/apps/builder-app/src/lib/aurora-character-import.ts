@@ -42,6 +42,13 @@ function text(root: Element | null | undefined, selector: string): string {
   return root?.querySelector(selector)?.textContent?.trim() ?? "";
 }
 
+function idVariants(id: string): string[] {
+  const variants = [id];
+  if (id.includes("_ARCHETYPE_FEATURE_")) variants.push(id.replace("_ARCHETYPE_FEATURE_", "_ARCHETYPE_"));
+  else if (id.includes("_ARCHETYPE_")) variants.push(id.replace("_ARCHETYPE_", "_ARCHETYPE_FEATURE_"));
+  return variants;
+}
+
 function collectPicks(elements: Element): Pick[] {
   const picks: Pick[] = [];
   for (const node of Array.from(elements.querySelectorAll("element[registered]"))) {
@@ -123,9 +130,17 @@ export async function importAuroraCharacter(
   }
 
   const picks = collectPicks(elements);
+  const wanted = [...new Set(picks.flatMap((p) => [p.registered, p.parent ?? ""]).filter(Boolean))];
   const { elements: ids } = await apiClient.post<{ ids: string[] }, { elements: Record<string, string> }>("/api/elements/aurora-lookup", {
-    ids: [...new Set(picks.flatMap((p) => [p.registered, p.parent ?? ""]).filter(Boolean))],
+    ids: [...new Set(wanted.flatMap(idVariants))],
   });
+  // homebrew ids sometimes change between versions of a file ("…_ARCHETYPE_FEATURE_…" vs "…_ARCHETYPE_…")
+  for (const id of wanted) {
+    if (!ids[id]) {
+      const variant = idVariants(id).find((v) => ids[v]);
+      if (variant) ids[id] = ids[variant];
+    }
+  }
 
   const report: AuroraImportReport = { characterId, name, playerInFile: text(build, ":scope > input > player-name"), picked: 0, missing: [], unmatched: [] };
   const open = picks.filter((p) => {
@@ -171,7 +186,13 @@ export async function importAuroraCharacter(
 
     for (const pick of [...open]) {
       const parentId = pick.parent ? ids[pick.parent] : undefined;
-      const choice = parentId && bySlot.get(`${parentId}|${pick.name}|${pick.level}|${pick.slot}`);
+      // exact name first; otherwise the one open choice of the same element, level and slot whose name ends in
+      // the same "(…)" (homebrew renamed "Skill (X)" to "Skill Proficiency (X)")
+      const suffix = pick.name.match(/\([^)]*\)$/)?.[0];
+      const loose = choices.filter(
+        (c) => c.parentElementId === parentId && Math.max(1, c.level) === pick.level && c.slot === pick.slot && !!suffix && c.name.endsWith(suffix),
+      );
+      const choice = parentId && (bySlot.get(`${parentId}|${pick.name}|${pick.level}|${pick.slot}`) ?? (loose.length === 1 ? loose[0] : undefined));
       if (!choice) continue;
 
       open.splice(open.indexOf(pick), 1);
@@ -183,7 +204,16 @@ export async function importAuroraCharacter(
     }
     if (!progress) break;
   }
-  report.unmatched = open.filter((p) => p.parent !== null).map((p) => `${p.name} (${p.registered})`);
+  // picks the character already has another way (a newer version of the content grants them) are not missing
+  const registered = await apiClient.get<{ registrations: { associatedElementId: string; children?: unknown[] }[] }>(`/api/characters/${characterId}/registrations`);
+  const has = new Set<string>();
+  const walk = (list: { associatedElementId: string; children?: unknown[] }[]) =>
+    list.forEach((r) => {
+      has.add(r.associatedElementId);
+      walk((r.children ?? []) as { associatedElementId: string; children?: unknown[] }[]);
+    });
+  walk(registered.registrations);
+  report.unmatched = open.filter((p) => p.parent !== null && !has.has(ids[p.registered])).map((p) => `${p.name} (${p.registered})`);
 
   // backstory, personality and appearance, under the Story tab's field names
   const story: Record<string, string> = {};
@@ -218,10 +248,20 @@ export async function importAuroraCharacter(
     await apiClient.put(`/api/characters/${characterId}/story`, { fields: story });
   }
 
+  // old Aurora-internal ability score increases (not in Aurora Legacy) were +1 to one ability each
+  const internalIncreases: Record<string, number> = {};
+  for (const pick of picks) {
+    const ability = pick.registered.match(/^ID_INTERNAL_ASI_([A-Z]+)$/)?.[1]?.toLowerCase();
+    if (ability && ABILITIES.includes(ability) && !ids[pick.registered]) {
+      internalIncreases[ability] = (internalIncreases[ability] ?? 0) + 1;
+      report.missing = report.missing.filter((m) => !m.endsWith(pick.registered));
+    }
+  }
+
   onProgress?.(`${name}: ability scores…`);
   const scores = await apiClient.get<{ abilityScores: { abilityScoreId: string; name: string }[] }>(`/api/characters/${characterId}/ability-scores`);
   for (const ability of ABILITIES) {
-    const value = Number(text(build, `:scope > abilities > ${ability}`));
+    const value = Number(text(build, `:scope > abilities > ${ability}`)) + (internalIncreases[ability] ?? 0);
     const target = scores.abilityScores?.find((s) => s.name.toLowerCase() === ability);
     if (target && value > 0) {
       await apiClient.post(`/api/characters/${characterId}/ability-scores/${target.abilityScoreId}/base`, { value });

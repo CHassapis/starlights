@@ -19,7 +19,8 @@ public sealed class ElementsModule : IPlatformModule
         builder.Services.AddScoped<IAuroraImporter, AuroraImporter>();
         builder.Services.AddSingleton(new AuroraImporterOptions(
             builder.Configuration["Aurora:ContentPath"] ?? "/data/aurora-elements",
-            builder.Configuration["Aurora:Exclude"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)));
+            builder.Configuration["Aurora:Exclude"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            builder.Configuration["Aurora:HomebrewPath"] ?? "/data/homebrew"));
 
         builder.Services.AddDomainEventHandlersFrom(typeof(ElementsModule).Assembly);
     }

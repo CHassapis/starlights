@@ -40,6 +40,21 @@ export function forgetUnlockToken(player: string) {
   writeTokens(tokens);
 }
 
+const ADMIN = "*admin*";
+
+/** Whether this browser unlocked the master admin password. */
+export function isAdmin(): boolean {
+  return ADMIN in readTokens();
+}
+
+export function saveAdminToken(token: string) {
+  writeTokens({ ...readTokens(), [ADMIN]: token });
+}
+
+export function forgetAdminToken() {
+  forgetUnlockToken(ADMIN);
+}
+
 /** The X-Player-Token header value: every token this browser holds. */
 export function unlockTokenHeader(): string {
   return Object.values(readTokens()).join(",");
