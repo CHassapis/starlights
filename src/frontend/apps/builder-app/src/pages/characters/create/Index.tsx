@@ -5,7 +5,8 @@ import { SourcesPicker } from "@/components/sources-picker";
 import { apiClient } from "@/lib/api-client";
 import { shrinkImage } from "@/lib/image";
 import { UploadIcon } from "lucide-react";
-import { defaultRestrictedSources, useSources } from "@/lib/api/sources";
+import { editionOf, restrictedForEdition, useSources } from "@/lib/api/sources";
+import { EditionPicker } from "@/components/edition-picker";
 import { CheckIcon, OctagonAlertIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ function CharacterCreation() {
   const [restricted, setRestricted] = useState<string[] | null>(null);
   const [uploadedPortrait, setUploadedPortrait] = useState<string | null>(null);
   useEffect(() => {
-    if (sourceData && restricted === null) setRestricted(defaultRestrictedSources(sourceData.sources));
+    if (sourceData && restricted === null) setRestricted(restrictedForEdition("mixed", sourceData.sources));
   }, [sourceData, restricted]);
 
   const {
@@ -109,6 +110,17 @@ function CharacterCreation() {
         {/* <FieldLegend>Character</FieldLegend>
         <FieldDescription>Fill in your character information. You can change all these fields later.</FieldDescription>
         <FieldSeparator /> */}
+        <Field>
+          <FieldContent>
+            <FieldLabel>Rules</FieldLabel>
+            <FieldDescription>Are you playing with the 2014 rules, the 2024 rules, or both mixed?</FieldDescription>
+          </FieldContent>
+          <EditionPicker
+            value={sourceData && restricted ? editionOf(restricted, sourceData.sources) : "mixed"}
+            onChange={(edition) => sourceData && setRestricted(restrictedForEdition(edition, sourceData.sources))}
+          />
+        </Field>
+        <FieldSeparator />
         <Field>
           <FieldContent>
             <FieldLabel>Sources</FieldLabel>

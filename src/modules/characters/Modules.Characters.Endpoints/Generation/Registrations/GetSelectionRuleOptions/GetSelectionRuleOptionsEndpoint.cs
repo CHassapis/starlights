@@ -67,11 +67,17 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
         // except this slot's own pick, and list repeatable copies of an element (the nine "Skilled") once
         var owned = characterRegistrations.Select(r => r.AssociatedElementId.Value).ToHashSet();
         var current = selectionRule.SelectedOption?.Value;
+        // a choice only one edition's books fill (deities are in the 2014 Player's Handbook alone) stays open
+        // for the other edition: when none of the ticked books offer anything, every book counts
+        var allowed = elements.Where(e => e.Id == current || !owned.Contains(e.Id)).ToList();
+        if (allowed.Any(e => !character.RestrictedSources.Contains(e.Source)))
+        {
+            allowed = allowed.Where(e => e.Id == current || !character.RestrictedSources.Contains(e.Source)).ToList();
+        }
+
         var seen = new HashSet<(string, string?)>();
-        var options = elements
+        var options = allowed
             .OrderByDescending(e => e.Id == current)
-            .Where(e => e.Id == current || !owned.Contains(e.Id))
-            .Where(e => e.Id == current || !character.RestrictedSources.Contains(e.Source))
             .Where(e => seen.Add((e.Name, e.Source)))
             .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(e => e.Source)

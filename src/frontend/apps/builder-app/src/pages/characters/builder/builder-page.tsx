@@ -28,7 +28,8 @@ import { shrinkImage } from "@/lib/image";
 import { SourcesPicker } from "@/components/sources-picker";
 import { StoryTab } from "./story-tab";
 import { AbilitiesTab } from "./abilities-tab";
-import { useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
+import { editionOf, restrictedForEdition, useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
+import { EditionPicker } from "@/components/edition-picker";
 import { cn } from "@/lib/utils";
 
 const SECTION_ORDER = ["Class", "Species", "Background", "Alignment"];
@@ -345,18 +346,24 @@ function SourcesTab({ characterId }: { characterId: string }) {
   const { data: characterSources } = useCharacterSources(characterId);
   const setSources = useSetCharacterSources(characterId);
 
+  const save = (restricted: string[]) =>
+    setSources.mutate(restricted, { onError: (e) => toast.error("Could not save the sources", { description: e.message }) });
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Tick the books this character uses. The dropdowns only offer content from ticked books; picks you already made stay.
+      <p className="text-sm text-muted-foreground">Which rules does this character use?</p>
+      <EditionPicker
+        value={sourceData && characterSources ? editionOf(characterSources.restricted, sourceData.sources) : null}
+        onChange={(edition) => sourceData && save(restrictedForEdition(edition, sourceData.sources))}
+      />
+      <p className="pt-3 text-sm text-muted-foreground">
+        Or tick the books yourself. The dropdowns only offer content from ticked books; picks you already made stay.
       </p>
       <SourcesPicker
         sources={sourceData?.sources}
         restricted={characterSources?.restricted ?? []}
         loading={isLoading || !characterSources}
-        onChange={(restricted) =>
-          setSources.mutate(restricted, { onError: (e) => toast.error("Could not save the sources", { description: e.message }) })
-        }
+        onChange={save}
       />
     </div>
   );
