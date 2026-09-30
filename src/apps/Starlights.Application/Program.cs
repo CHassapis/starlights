@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
+using Starlights.Modules.Characters.Services.Players;
 using Scalar.AspNetCore;
 using Starlights.Modules.Characters.Data.EntityFramework;
 using Starlights.Modules.Characters.Data.EntityFramework.EventProcessing;
@@ -16,8 +18,11 @@ using Starlights.Platform.Hosting;
 
 namespace Starlights.Application;
 
-public sealed class Program
+public sealed partial class Program
 {
+    [GeneratedRegex("^/api/characters/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(/|$)")]
+    private static partial Regex LockedCharacterRoute();
+
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -100,6 +105,27 @@ public sealed class Program
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 await context.Response.WriteAsync("This needs the admin key (X-Admin-Key header).");
                 return;
+            }
+
+            await next();
+        });
+
+        // everything under /api/characters/{id} of a password-locked player needs that player's unlock token
+        // (lists and creation check it in their endpoints)
+        app.Use(async (context, next) =>
+        {
+            var match = LockedCharacterRoute().Match(context.Request.Path.Value ?? string.Empty);
+            if (match.Success)
+            {
+                var access = context.RequestServices.GetRequiredService<PlayerAccess>();
+                var player = await access.GetCharacterPlayerAsync(Guid.Parse(match.Groups[1].Value));
+                if (!string.IsNullOrEmpty(player) && await access.IsLockedAsync(player) &&
+                    !access.HasToken(context.Request.Headers[PlayerAccess.TokenHeader], player))
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    await context.Response.WriteAsJsonAsync(new { locked = player });
+                    return;
+                }
             }
 
             await next();

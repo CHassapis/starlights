@@ -1,5 +1,5 @@
-import { ArrowLeftIcon, InfoIcon, MinusIcon, PlusIcon, ScaleIcon, ScrollTextIcon, SparklesIcon, SwordsIcon, UserIcon, UsersIcon } from "lucide-react";
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { ArrowLeftIcon, ImageIcon, InfoIcon, MinusIcon, PlusIcon, ScaleIcon, ScrollTextIcon, SparklesIcon, SwordsIcon, UserIcon, UsersIcon } from "lucide-react";
+import { useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ElementPanel } from "@/components/element-panel";
@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useAssignPlayer,
+  useRemovePortrait,
+  useUploadPortrait,
   useBuilderChoices,
   useCharacterClassList,
   useCharacterHeader,
@@ -22,6 +24,7 @@ import {
   type BuilderChoice,
 } from "@/lib/api/builder";
 import { usePlayer } from "@/lib/player";
+import { shrinkImage } from "@/lib/image";
 import { SourcesPicker } from "@/components/sources-picker";
 import { useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { cn } from "@/lib/utils";
@@ -60,9 +63,14 @@ export function CharacterBuilderPage() {
   }
 
   if (header.isError) {
+    const locked = (header.error as { status?: number }).status === 401;
     return (
       <div className="container mx-auto px-4 py-16 text-center">
-        <p className="text-muted-foreground">This character does not exist (any more).</p>
+        <p className="text-muted-foreground">
+          {locked
+            ? "This character belongs to a player who locked their characters with a password. Pick that player (and enter the password) to open it."
+            : "This character does not exist (any more)."}
+        </p>
         <Link to="/characters" className="mt-4 inline-block underline">
           Back to the characters
         </Link>
@@ -158,6 +166,8 @@ function BuilderHeader({ characterId, choices, pending }: { characterId: string;
         <ArrowLeftIcon className="size-4" /> Characters
       </Link>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
+        <PortraitEditor characterId={characterId} url={character?.portraitUrl} />
         <div className="min-w-0">
           <h1 className="truncate font-heading text-3xl tracking-wide">{character?.name ?? "…"}</h1>
           <p className="text-muted-foreground">{summary || "Pick a class, species and background to get started."}</p>
@@ -170,6 +180,7 @@ function BuilderHeader({ characterId, choices, pending }: { characterId: string;
               </Button>
             )}
           </p>
+        </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -329,6 +340,59 @@ function SourcesTab({ characterId }: { characterId: string }) {
         onChange={(restricted) =>
           setSources.mutate(restricted, { onError: (e) => toast.error("Could not save the sources", { description: e.message }) })
         }
+      />
+    </div>
+  );
+}
+
+/** The character's portrait; click to upload your own picture (shrunk in the browser first) or remove it. */
+function PortraitEditor({ characterId, url }: { characterId: string; url?: string | null }) {
+  const upload = useUploadPortrait(characterId);
+  const remove = useRemovePortrait(characterId);
+  const input = useRef<HTMLInputElement>(null);
+  const busy = upload.isPending || remove.isPending;
+
+  return (
+    <div className="group relative size-24 shrink-0 overflow-hidden rounded-xl border-4 border-double bg-muted sm:size-28">
+      {url ? (
+        <img src={url} alt="Portrait" className="size-full object-cover" />
+      ) : (
+        <button type="button" onClick={() => input.current?.click()} className="flex size-full flex-col items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          <ImageIcon className="size-6" />
+          Add portrait
+        </button>
+      )}
+      {url && (
+        <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2 bg-black/70 py-1 text-xs text-white sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+          <button type="button" onClick={() => input.current?.click()} className="hover:underline">
+            Change
+          </button>
+          <button type="button" onClick={() => remove.mutate()} className="hover:underline">
+            Remove
+          </button>
+        </div>
+      )}
+      {busy && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <Spinner className="size-5 text-white" />
+        </div>
+      )}
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          try {
+            const data = await shrinkImage(file);
+            upload.mutate(data, { onError: (err) => toast.error("Could not upload the portrait", { description: err.message }) });
+          } catch (err) {
+            toast.error("Could not read that picture", { description: (err as Error).message });
+          }
+        }}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Starlights.Modules.Characters.Domain.Services;
+using Starlights.Modules.Characters.Services.Players;
 using Starlights.Modules.Characters.Services.Processing;
 using Starlights.Modules.Characters.Services.Processing.Behaviors;
 using Starlights.Modules.Characters.Services.Statistics;
@@ -18,6 +19,8 @@ internal class CharactersModule : IPlatformServiceComponent
     public void ConfigureServices(IHostApplicationBuilder builder)
     {
         builder.Services.AddScoped<IRegistrationProcessor, RegistrationProcessor>();
+        builder.Services.AddScoped<PlayerAccess>();
+        builder.Services.AddSingleton(new PlayerAccessOptions(builder.Configuration["Players:TokenKey"] ?? builder.Configuration["Admin:Key"] ?? string.Empty));
         builder.Services.AddScoped<IRegistrationManager, RegistrationManager>();
 
         builder.Services.AddScoped<ClassManagementService>();

@@ -5,6 +5,7 @@ using Starlights.Modules.Characters.Domain;
 using Starlights.Modules.Characters.Domain.Appearances;
 using Starlights.Modules.Characters.Domain.Classes;
 using Starlights.Modules.Characters.Domain.Progression;
+using Starlights.Modules.Characters.Services.Players;
 using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Characters.Endpoints.Characters.GetCharacters;
@@ -21,10 +22,12 @@ public sealed record GetCharactersRequest
 sealed class GetCharactersEndpoint : Endpoint<GetCharactersRequest, GetCharactersResponse>
 {
     private readonly IPersistence _persistence;
+    private readonly PlayerAccess _access;
 
-    public GetCharactersEndpoint(IPersistence persistence)
+    public GetCharactersEndpoint(IPersistence persistence, PlayerAccess access)
     {
         _persistence = persistence;
+        _access = access;
     }
 
     public override void Configure()
@@ -45,6 +48,11 @@ sealed class GetCharactersEndpoint : Endpoint<GetCharactersRequest, GetCharacter
         {
             characters = characters.Where(c => string.Equals(c.PlayerName, req.Player.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
         }
+
+        // characters of password-locked players only with their unlock token
+        var locked = await _access.GetLockedPlayersAsync();
+        var tokens = HttpContext.Request.Headers[PlayerAccess.TokenHeader].ToString();
+        characters = characters.Where(c => !locked.Contains(c.PlayerName) || _access.HasToken(tokens, c.PlayerName)).ToList();
 
         var models = new List<CharacterDetailsDataModel>();
 

@@ -11,6 +11,7 @@ import {
   type GetSelectionRuleOptionsResponse,
 } from "@starlights/api-client";
 import { apiClient } from "@/lib/api-client";
+import { saveUnlockToken } from "@/lib/player";
 
 export interface BuilderChoice {
   ruleId: string;
@@ -30,6 +31,7 @@ export interface BuilderChoice {
 export interface PlayerSummary {
   name: string;
   characters: number;
+  locked: boolean;
 }
 
 export interface CharacterListItem {
@@ -151,5 +153,55 @@ export function useCharacterList(player: string | null) {
     queryKey: keys.characters(player),
     queryFn: () =>
       apiClient.get<{ characters: CharacterListItem[] }>(player ? `/api/characters?player=${encodeURIComponent(player)}` : "/api/characters"),
+  });
+}
+
+/** Checks a locked player's password; on success the unlock token is remembered by this browser. */
+export function useUnlockPlayer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, password }: { name: string; password: string }) =>
+      apiClient.post<{ name: string; password: string }, { name: string; token: string }>("/api/characters/players/unlock", { name, password }),
+    onSuccess: (result) => {
+      saveUnlockToken(result.name, result.token);
+      qc.invalidateQueries({ queryKey: keys.players }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ["characters"] }).catch(() => {});
+    },
+  });
+}
+
+/** Sets, changes or (empty password) removes a player's password. */
+export function useSetPlayerPassword() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, password }: { name: string; password: string }) =>
+      apiClient.put<{ name: string; password: string }, { name: string; token: string }>("/api/characters/players/password", { name, password }),
+    onSuccess: (result) => {
+      if (result.token) saveUnlockToken(result.name, result.token);
+      qc.invalidateQueries({ queryKey: keys.players }).catch(() => {});
+    },
+  });
+}
+
+export function useUploadPortrait(characterId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dataUrl: string) =>
+      apiClient.post<{ data: string }, { portraitUrl: string }>(`/api/characters/${characterId}/portrait`, { data: dataUrl }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: keys.details(characterId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ["characters"] }).catch(() => {});
+    },
+  });
+}
+
+export function useRemovePortrait(characterId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.delete<void>(`/api/characters/${characterId}/portrait`),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: keys.details(characterId) }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ["characters"] }).catch(() => {});
+    },
   });
 }

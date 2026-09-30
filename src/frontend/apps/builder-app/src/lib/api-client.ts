@@ -1,4 +1,5 @@
 import { createHttpClient } from "@starlights/api-client";
+import { unlockTokenHeader } from "@/lib/player";
 
 /**
  * Singleton HTTP client instance for builder-app.
@@ -14,4 +15,9 @@ import { createHttpClient } from "@starlights/api-client";
  */
 export const apiClient = createHttpClient({
   baseUrl: import.meta.env.VITE_API_BASE ?? "https://localhost:7246",
+  // unlock tokens of password-locked players (see lib/player.tsx)
+  getHeaders: (): Record<string, string> => {
+    const tokens = unlockTokenHeader();
+    return tokens ? { "X-Player-Token": tokens } : {};
+  },
 });

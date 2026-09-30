@@ -2,6 +2,9 @@ import { useCharacterCreationOptions, useCharacterPortraitOptions, useCreateChar
 import { CharacterCreationOptionsSelect } from "./character-creation-options-select";
 import { useEffect, useMemo, useState } from "react";
 import { SourcesPicker } from "@/components/sources-picker";
+import { apiClient } from "@/lib/api-client";
+import { shrinkImage } from "@/lib/image";
+import { UploadIcon } from "lucide-react";
 import { defaultRestrictedSources, useSources } from "@/lib/api/sources";
 import { CheckIcon, OctagonAlertIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -61,6 +64,7 @@ function CharacterCreation() {
   const { player } = usePlayer();
   const { data: sourceData, isLoading: sourcesLoading } = useSources();
   const [restricted, setRestricted] = useState<string[] | null>(null);
+  const [uploadedPortrait, setUploadedPortrait] = useState<string | null>(null);
   useEffect(() => {
     if (sourceData && restricted === null) setRestricted(defaultRestrictedSources(sourceData.sources));
   }, [sourceData, restricted]);
@@ -93,6 +97,9 @@ function CharacterCreation() {
     const payload = { ...values, PlayerName: player ?? undefined, RestrictedSources: restricted ?? [] };
     const result = (await createMutation.mutateAsync(payload as typeof values)) as { id?: string; Id?: string };
     const newId = result?.id ?? result?.Id;
+    if (newId && uploadedPortrait) {
+      await apiClient.post(`/api/characters/${newId}/portrait`, { data: uploadedPortrait }).catch(() => {});
+    }
     if (newId) navigate(`/characters/${newId}`);
   });
 
@@ -151,13 +158,39 @@ function CharacterCreation() {
         <Field>
           <FieldContent>
             <FieldLabel>Portrait</FieldLabel>
-            <FieldDescription>Select a portrait for your character.</FieldDescription>
+            <FieldDescription>Upload your own picture or pick one of these.</FieldDescription>
           </FieldContent>
           <ScrollArea className="h-60 rounded-md border border-dashed whitespace-nowrap">
             <div className="p-2">
               {portraitsLoading && <PortraitsLoading />}
               {portraitsIsError && <PortraitsError errorMessage={portraitsError.message} />}
               <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-12 gap-2">
+                <label
+                  className={cn("relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded border border-dashed text-xs text-muted-foreground hover:ring-2 hover:ring-tertiary", {
+                    "ring-2 ring-tertiary": uploadedPortrait !== null,
+                  })}
+                >
+                  {uploadedPortrait ? (
+                    <img className="size-full object-cover" src={uploadedPortrait} alt="Your portrait" />
+                  ) : (
+                    <>
+                      <UploadIcon className="size-5" />
+                      Upload your own
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      setUploadedPortrait(await shrinkImage(file));
+                      setValue("PortraitUrl", undefined, { shouldValidate: true });
+                    }}
+                  />
+                </label>
                 {portraits &&
                   portraits.portraits.map((portrait: CharacterPortraitOption, index: number) => (
                     <div
@@ -165,7 +198,10 @@ function CharacterCreation() {
                         "ring-2 ring-tertiary": selectedPortrait === portrait.url,
                       })}
                       key={index}
-                      onClick={() => setValue("PortraitUrl", portrait.url, { shouldValidate: true })}
+                      onClick={() => {
+                        setUploadedPortrait(null);
+                        setValue("PortraitUrl", portrait.url, { shouldValidate: true });
+                      }}
                     >
                       <img className="size-full aspect-square object-cover" src={portrait.url} alt={portrait.description} title={portrait.description} />
                       {selectedPortrait === portrait.url && (

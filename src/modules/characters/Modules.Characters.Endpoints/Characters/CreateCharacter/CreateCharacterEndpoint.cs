@@ -5,6 +5,7 @@ using Starlights.Modules.Characters.Domain.Appearances;
 using Starlights.Modules.Characters.Domain.Elements;
 using Starlights.Modules.Characters.Domain.Registrations;
 using Starlights.Modules.Characters.Domain.Services;
+using Starlights.Modules.Characters.Services.Players;
 using Starlights.Modules.Elements.Integration;
 using Starlights.Platform.Data;
 
@@ -15,12 +16,14 @@ public sealed class CreateCharacterEndpoint : Endpoint<CreateCharacterRequest, C
     private readonly IPersistence _persistence;
     private readonly ICharacterCreationService _characterCreationService;
     private readonly IElementsModuleQueries _queries;
+    private readonly PlayerAccess _access;
 
-    public CreateCharacterEndpoint(IPersistence persistence, ICharacterCreationService characterCreationService, IElementsModuleQueries queries)
+    public CreateCharacterEndpoint(IPersistence persistence, ICharacterCreationService characterCreationService, IElementsModuleQueries queries, PlayerAccess access)
     {
         _persistence = persistence;
         _characterCreationService = characterCreationService;
         _queries = queries;
+        _access = access;
     }
 
     public override void Configure()
@@ -33,6 +36,14 @@ public sealed class CreateCharacterEndpoint : Endpoint<CreateCharacterRequest, C
     public override async Task HandleAsync(CreateCharacterRequest req, CancellationToken ct)
     {
         using var _ = CharactersInstrumentation.StartActivity(nameof(CreateCharacterEndpoint));
+
+        // a password-locked player's characters can only be created with their unlock token
+        if (!string.IsNullOrWhiteSpace(req.PlayerName) && await _access.IsLockedAsync(req.PlayerName) &&
+            !_access.HasToken(HttpContext.Request.Headers[PlayerAccess.TokenHeader], req.PlayerName))
+        {
+            await Send.UnauthorizedAsync(ct);
+            return;
+        }
 
         // character entity
         var newCharacter = _characterCreationService.Create(req.Name);

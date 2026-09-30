@@ -2,6 +2,7 @@ import { useDeleteCharacter, type CharacterCard } from "@/lib/api/characters/que
 import { useCharacterList } from "@/lib/api/builder";
 import { usePlayer } from "@/lib/player";
 import { PlayerGate } from "./player-picker";
+import { PlayerPasswordDialog } from "./player-password-dialog";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -320,6 +321,7 @@ function CharactersPageContent() {
                 <button type="button" className="underline" onClick={() => setPlayer(null)}>
                   Switch player
                 </button>
+                {player && <PlayerPasswordDialog player={player} />}
                 <ButtonGroup>
                   <Button size="sm" variant={showAll ? "outline" : "secondary"} onClick={() => setShowAll(false)}>
                     Mine

@@ -19,6 +19,7 @@ internal class EntityFrameworkComponent : IPlatformServiceComponent, IPlatformAp
     {
         builder.Services.AddScoped<ICharactersRepository, CharactersRepository>();
         builder.Services.AddScoped<IRegistrationRepository, RegistrationRepository>();
+        builder.Services.AddScoped<IPlayersRepository, PlayersRepository>();
 
         builder.Services.AddSingleton<PersistenceCharactersContextFactory>();
         builder.Services.AddDbContextFactory<CharactersContext>(options =>
@@ -56,5 +57,6 @@ internal class EntityFrameworkComponent : IPlatformServiceComponent, IPlatformAp
     {
         host.UseRepositoryWithContext<ICharactersRepository, PersistenceCharactersContextFactory>();
         host.UseRepositoryWithContext<IRegistrationRepository, PersistenceCharactersContextFactory>();
+        host.UseRepositoryWithContext<IPlayersRepository, PersistenceCharactersContextFactory>();
     }
 }
