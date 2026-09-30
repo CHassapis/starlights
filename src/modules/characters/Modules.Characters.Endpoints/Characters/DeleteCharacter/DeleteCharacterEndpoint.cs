@@ -1,7 +1,9 @@
 ﻿using FastEndpoints;
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain;
+using Starlights.Modules.Characters.Domain.Appearances;
 using Starlights.Modules.Characters.Domain.Characters;
+using Starlights.Modules.Characters.Endpoints.Characters.Portraits;
 using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Characters.Endpoints.Characters.DeleteCharacter;
@@ -29,6 +31,7 @@ sealed class DeleteCharacterEndpoint : EndpointWithoutRequest
         var characterId = new CharacterId(Route<Guid>("characterId"));
 
         var characters = _persistence.GetRepository<ICharactersRepository>();
+        var portraitUrl = (await characters.GetCharacterAsync(characterId))?.GetRequiredComponent<AppearanceComponent>().PortraitUrl;
 
         var deleted = await characters.DeleteCharacterAsync(characterId);
         if (!deleted)
@@ -43,6 +46,14 @@ sealed class DeleteCharacterEndpoint : EndpointWithoutRequest
         var rows = await _persistence.SaveChangesAsync();
 
         activity?.AddTag("db.rows_affected", rows);
+
+        // the uploaded pictures go with the character
+        PortraitFiles.DeleteUploaded(Config, portraitUrl);
+        var storyImages = StoryImages.Folder(Config, characterId.Value);
+        if (Directory.Exists(storyImages))
+        {
+            Directory.Delete(storyImages, recursive: true);
+        }
 
         await Send.NoContentAsync(cancellation: c);
     }
