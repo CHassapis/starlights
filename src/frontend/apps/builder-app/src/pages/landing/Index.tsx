@@ -28,13 +28,17 @@ function LandingTile({
         to={url}
         className={`block h-full relative overflow-hidden rounded-xl group border-4 border-double shadow-lg ${enabled ? "" : "pointer-events-none"} `}
       >
-        <img
-          src={image || "https://www.dndbeyond.com/attachments/12/424/flash-sale.jpg"}
-          alt={title}
-          className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 scale-100 group-hover:scale-105 ${
-            enabled ? "" : "grayscale-85 group-hover:grayscale-0 "
-          }`}
-        />
+        {image ? (
+          <img
+            src={image}
+            alt={title}
+            className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 scale-100 group-hover:scale-105 ${
+              enabled ? "" : "grayscale-85 group-hover:grayscale-0 "
+            }`}
+          />
+        ) : (
+          <div className="absolute inset-0 bg-linear-to-br from-muted to-background" />
+        )}
 
         <div className="absolute inset-0 bg-linear-to-tr from-black/40 group-hover:from-black/20 to-transparent" />
         {/* 

@@ -29,6 +29,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 import { CardWrapper } from "./components/card-wrapper";
+import { PortraitDrop } from "./components/portrait-drop";
 
 function CharacterItem({
   title,
@@ -53,13 +54,17 @@ function CharacterItem({
     <>
       <div className="relative rounded-xl hover:shadow">
         <Link to={url} className="block relative aspect-square overflow-hidden rounded-xl group border-4 border-double ">
-          <img
-            src={image || "https://www.dndbeyond.com/attachments/12/424/flash-sale.jpg"}
-            alt={title}
-            className={`size-full aspect-square object-cover transition-transform duration-500 scale-100 group-hover:scale-110 ${
-              enabled ? "" : "grayscale-100 group-hover:grayscale-0 "
-            }`}
-          />
+          {image ? (
+            <img
+              src={image}
+              alt={title}
+              className={`size-full aspect-square object-cover transition-transform duration-500 scale-100 group-hover:scale-110 ${
+                enabled ? "" : "grayscale-100 group-hover:grayscale-0 "
+              }`}
+            />
+          ) : (
+            <div className="size-full aspect-square bg-linear-to-br from-muted to-background" />
+          )}
           <div className="absolute inset-0 bg-linear-to-tr from-black/80 group-hover:from-black/50 to-transparent" />
           <div
             className={`prose prose-neutral dark:prose-invert absolute text-white ${
@@ -239,15 +244,17 @@ function CharactersCollection({ showAll }: { showAll: boolean }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4">
           {characterCards.characters.map((card) => (
             <div key={card.characterId} className="group relative">
-              <CharacterItem
-                key={card.characterId}
-                title={card.name}
-                description={`Level ${card.level} ${card.build}`}
-                url={`/characters/${card.characterId}`}
-                image={card.portraitUrl}
-                size="sm"
-                tag={showAll ? card.playerName || "No player" : undefined}
-              />
+              <PortraitDrop characterId={card.characterId} name={card.name} hasPortrait={!!card.portraitUrl}>
+                <CharacterItem
+                  key={card.characterId}
+                  title={card.name}
+                  description={`Level ${card.level} ${card.build}`}
+                  url={`/characters/${card.characterId}`}
+                  image={card.portraitUrl}
+                  size="sm"
+                  tag={showAll ? card.playerName || "No player" : undefined}
+                />
+              </PortraitDrop>
 
               {isMobile && (
                 <div className="absolute top-0 inset-e-0">

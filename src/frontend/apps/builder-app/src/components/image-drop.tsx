@@ -1,6 +1,7 @@
 import { ImagePlusIcon } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Spinner } from "@/components/ui/spinner";
+import { firstImage, usePictureDrop } from "@/lib/picture-drop";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,12 +26,7 @@ export function ImageDrop({
   children?: ReactNode;
 }) {
   const input = useRef<HTMLInputElement>(null);
-  const [over, setOver] = useState(false);
-
-  function take(files: FileList | null | undefined) {
-    const file = Array.from(files ?? []).find((f) => f.type.startsWith("image/"));
-    if (file) onFile(file);
-  }
+  const { over, handlers } = usePictureDrop(onFile);
 
   return (
     <div className="space-y-1">
@@ -38,16 +34,7 @@ export function ImageDrop({
         type="button"
         disabled={busy}
         onClick={() => input.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setOver(false);
-          take(e.dataTransfer.files);
-        }}
+        {...handlers}
         className={cn(
           "relative flex items-center justify-center overflow-hidden rounded-lg border-2 border-dashed bg-muted/40 transition-colors hover:border-primary/60",
           over && "border-primary bg-primary/10",
@@ -89,8 +76,9 @@ export function ImageDrop({
         accept="image/*"
         hidden
         onChange={(e) => {
-          take(e.target.files);
+          const file = firstImage(e.target.files);
           e.target.value = "";
+          if (file) onFile(file);
         }}
       />
     </div>

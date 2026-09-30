@@ -13,7 +13,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useAssignPlayer,
   useRemovePortrait,
-  useUploadPortrait,
   useBuilderChoices,
   useCharacterClassList,
   useCharacterHeader,
@@ -24,7 +23,7 @@ import {
   type BuilderChoice,
 } from "@/lib/api/builder";
 import { usePlayer } from "@/lib/player";
-import { shrinkImage } from "@/lib/image";
+import { firstImage, usePictureDrop, usePortraitUpload } from "@/lib/picture-drop";
 import { SourcesPicker } from "@/components/sources-picker";
 import { StoryTab } from "./story-tab";
 import { AbilitiesTab } from "./abilities-tab";
@@ -376,21 +375,33 @@ function SourcesTab({ characterId }: { characterId: string }) {
   );
 }
 
-/** The character's portrait; click to upload your own picture (shrunk in the browser first) or remove it. */
+/** The character's portrait: drop a picture on it or click it to choose one (shrunk in the browser first). */
 function PortraitEditor({ characterId, url }: { characterId: string; url?: string | null }) {
-  const upload = useUploadPortrait(characterId);
+  const upload = usePortraitUpload(characterId);
   const remove = useRemovePortrait(characterId);
   const input = useRef<HTMLInputElement>(null);
   const busy = upload.isPending || remove.isPending;
+  const { over, handlers } = usePictureDrop(upload.send);
 
   return (
-    <div className="group relative size-24 shrink-0 overflow-hidden rounded-xl border-4 border-double bg-muted sm:size-28">
+    <div
+      {...handlers}
+      className={cn(
+        "group relative size-24 shrink-0 overflow-hidden rounded-xl border-4 border-double bg-muted sm:size-28",
+        over && "border-primary ring-4 ring-primary/40",
+      )}
+    >
       {url ? (
         <img src={url} alt="Portrait" className="size-full object-cover" />
       ) : (
-        <button type="button" onClick={() => input.current?.click()} className="flex size-full flex-col items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <button
+          type="button"
+          onClick={() => input.current?.click()}
+          className="flex size-full flex-col items-center justify-center gap-1 px-1 text-center text-xs text-muted-foreground hover:text-foreground"
+        >
           <ImageIcon className="size-6" />
           Add portrait
+          <span className="text-[10px] leading-tight">drop a picture or click</span>
         </button>
       )}
       {url && (
@@ -403,6 +414,7 @@ function PortraitEditor({ characterId, url }: { characterId: string; url?: strin
           </button>
         </div>
       )}
+      {over && <div className="absolute inset-0 flex items-center justify-center bg-primary/30 text-xs font-medium text-white">Drop it</div>}
       {busy && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <Spinner className="size-5 text-white" />
@@ -413,16 +425,10 @@ function PortraitEditor({ characterId, url }: { characterId: string; url?: strin
         type="file"
         accept="image/*"
         hidden
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
+        onChange={(e) => {
+          const file = firstImage(e.target.files);
           e.target.value = "";
-          if (!file) return;
-          try {
-            const data = await shrinkImage(file);
-            upload.mutate(data, { onError: (err) => toast.error("Could not upload the portrait", { description: err.message }) });
-          } catch (err) {
-            toast.error("Could not read that picture", { description: (err as Error).message });
-          }
+          if (file) upload.send(file);
         }}
       />
     </div>

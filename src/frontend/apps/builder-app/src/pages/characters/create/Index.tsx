@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SourcesPicker } from "@/components/sources-picker";
 import { apiClient } from "@/lib/api-client";
 import { shrinkImage } from "@/lib/image";
+import { firstImage, usePictureDrop } from "@/lib/picture-drop";
 import { UploadIcon } from "lucide-react";
 import { editionOf, restrictedForEdition, useSources } from "@/lib/api/sources";
 import { EditionPicker } from "@/components/edition-picker";
@@ -11,6 +12,7 @@ import { CheckIcon, OctagonAlertIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -85,6 +87,16 @@ function CharacterCreation() {
       PortraitUrl: undefined,
     },
   });
+
+  async function takeOwnPortrait(file: File) {
+    try {
+      setUploadedPortrait(await shrinkImage(file));
+      setValue("PortraitUrl", undefined, { shouldValidate: true });
+    } catch (err) {
+      toast.error("Could not read that picture", { description: (err as Error).message });
+    }
+  }
+  const portraitDrop = usePictureDrop(takeOwnPortrait);
 
   // with a single creation option there is nothing to choose
   useEffect(() => {
@@ -178,8 +190,10 @@ function CharacterCreation() {
               {portraitsIsError && <PortraitsError errorMessage={portraitsError.message} />}
               <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-12 gap-2">
                 <label
-                  className={cn("relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded border border-dashed text-xs text-muted-foreground hover:ring-2 hover:ring-tertiary", {
+                  {...portraitDrop.handlers}
+                  className={cn("relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded border border-dashed text-center text-xs text-muted-foreground hover:ring-2 hover:ring-tertiary", {
                     "ring-2 ring-tertiary": uploadedPortrait !== null,
+                    "ring-4 ring-primary bg-primary/10": portraitDrop.over,
                   })}
                 >
                   {uploadedPortrait ? (
@@ -188,18 +202,17 @@ function CharacterCreation() {
                     <>
                       <UploadIcon className="size-5" />
                       Upload your own
+                      <span className="text-[10px] leading-tight">or drop it here</span>
                     </>
                   )}
                   <input
                     type="file"
                     accept="image/*"
                     hidden
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
+                    onChange={(e) => {
+                      const file = firstImage(e.target.files);
                       e.target.value = "";
-                      if (!file) return;
-                      setUploadedPortrait(await shrinkImage(file));
-                      setValue("PortraitUrl", undefined, { shouldValidate: true });
+                      if (file) takeOwnPortrait(file);
                     }}
                   />
                 </label>
