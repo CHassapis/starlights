@@ -29,7 +29,7 @@ public static class DataModelMappingExtensions
             Id = element.Id,
             Name = element.Name,
             Type = element.Type,
-            Source = "Internal",
+            Source = element.GetComponent<AuroraSourceComponent>()?.Source ?? "Internal",
             IncludeRules = [.. element.GetComponents<IncludeRuleComponent>().Select(rule => rule.AsIncludeRuleDataModel())],
             StatisticRules = [.. element.GetComponents<StatisticRuleComponent>().Select(rule => rule.AsStatisticRuleDataModel())],
             SelectionRules = [.. element.GetComponents<SelectionRuleComponent>().Select(rule => rule.AsSelectionRuleDataModel())]
@@ -51,7 +51,7 @@ public static class DataModelMappingExtensions
     public static SelectionRuleDataModel AsSelectionRuleDataModel(this SelectionRuleComponent rule)
     {
         ArgumentNullException.ThrowIfNull(rule, nameof(rule));
-        return new SelectionRuleDataModel(rule.Id, rule.ElementType, rule.Name, rule.LevelRequirement);
+        return new SelectionRuleDataModel(rule.Id, rule.ElementType, rule.Name, rule.LevelRequirement, rule.Supports);
     }
 
     public static AbilityDataModel AsAbilityDataModel(this Element element)

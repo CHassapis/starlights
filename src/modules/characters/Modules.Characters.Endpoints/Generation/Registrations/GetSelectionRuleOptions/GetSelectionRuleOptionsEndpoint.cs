@@ -56,7 +56,12 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
             return;
         }
 
-        var elements = await _elements.GetElementsByType(selectionRule.ElementType);
+        // narrow the options by the rule's supports expression, which lives on the rule definition of the owning element
+        var owner = characterRegistrations.Single(x => x.Id == selectionRule.ParentRegistrationId);
+        var ownerElement = await _elements.GetElementWithRules(owner.AssociatedElementId);
+        var supports = ownerElement?.SelectionRules.SingleOrDefault(x => x.RuleId == selectionRule.AssociatedSelectionRuleId.Value)?.Supports;
+
+        var elements = await _elements.GetSelectionOptions(selectionRule.ElementType, supports);
 
         var response = new GetSelectionRuleOptionsResponse
         {

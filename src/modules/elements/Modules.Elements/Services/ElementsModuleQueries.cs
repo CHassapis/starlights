@@ -1,5 +1,6 @@
 ﻿using Starlights.Modules.Elements.Data;
 using Starlights.Modules.Elements.Domain;
+using Starlights.Modules.Elements.Domain.Components;
 using Starlights.Modules.Elements.Integration;
 using Starlights.Modules.Elements.Integration.Models;
 using Starlights.Modules.Elements.Integration.Models.Rules;
@@ -69,6 +70,22 @@ internal class ElementsModuleQueries : IElementsModuleQueries
     {
         var repository = _persistence.GetRepository<IElementsRepository>();
         var elements = await repository.GetElementsByTypeAsync(elementType);
+        return elements.ConvertAll(e => e.AsElementDataModel());
+    }
+
+    public async Task<List<ElementDataModel>> GetSelectionOptions(string elementType, string? supports)
+    {
+        var repository = _persistence.GetRepository<IElementsRepository>();
+        var elements = await repository.GetElementsByTypeAsync(elementType);
+
+        if (!string.IsNullOrWhiteSpace(supports))
+        {
+            var matches = SupportsExpression.Compile(supports);
+            elements = elements.FindAll(e => matches(
+                e.GetComponent<SupportsComponent>()?.Supports ?? [],
+                e.GetComponent<AuroraSourceComponent>()?.AuroraId));
+        }
+
         return elements.ConvertAll(e => e.AsElementDataModel());
     }
 }

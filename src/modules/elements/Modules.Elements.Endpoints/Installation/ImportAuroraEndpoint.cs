@@ -11,11 +11,17 @@ public sealed record ImportAuroraRequest
     /// The Aurora .index file to import, relative to the content repository root.
     /// </summary>
     public string Index { get; init; } = "core/players-handbook-2024.index";
+
+    /// <summary>
+    /// Re-create elements that were imported before; characters built on them need to be recreated.
+    /// </summary>
+    public bool Replace { get; init; }
 }
 
 /// <summary>
 /// Imports Aurora content from the local content repository, e.g.
-/// <c>POST /api/elements/import-aurora?index=core/players-handbook-2024.index</c>. Safe to re-run.
+/// <c>POST /api/elements/import-aurora {"index": "core/players-handbook-2024.index"}</c>.
+/// Safe to re-run: without <c>replace</c> it only adds elements that are not there yet.
 /// </summary>
 public class ImportAuroraEndpoint : Endpoint<ImportAuroraRequest>
 {
@@ -43,7 +49,7 @@ public class ImportAuroraEndpoint : Endpoint<ImportAuroraRequest>
 
         try
         {
-            var result = await _importer.ImportAsync(req.Index, ct);
+            var result = await _importer.ImportAsync(req.Index, req.Replace, ct);
             await Send.OkAsync(result, ct);
         }
         catch (FileNotFoundException ex)

@@ -47,4 +47,9 @@ public interface IElementsModuleQueries
     /// Retrieves a list of elements by their type.
     /// </summary>
     Task<List<ElementDataModel>> GetElementsByType(string elementType);
+
+    /// <summary>
+    /// The elements of a type that satisfy a selection rule's supports expression (all of them when it is empty).
+    /// </summary>
+    Task<List<ElementDataModel>> GetSelectionOptions(string elementType, string? supports);
 }

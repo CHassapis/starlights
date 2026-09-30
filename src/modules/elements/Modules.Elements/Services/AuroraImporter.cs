@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
@@ -19,7 +20,8 @@ public sealed record AuroraImporterOptions(string ContentPath);
 /// <summary>
 /// Maps Aurora XML elements onto Starlights elements: grant → include rule, stat → statistic rule,
 /// select → selection rule. Rules with a requirements expression (or an equipped condition) are
-/// skipped, because the character builder does not evaluate those yet and would apply them unconditionally.
+/// skipped, because the character builder does not evaluate those yet and would apply them unconditionally;
+/// the exception is "not as a multiclass", which always holds while there is no multiclassing.
 /// </summary>
 internal sealed class AuroraImporter : IAuroraImporter
 {
@@ -46,7 +48,7 @@ internal sealed class AuroraImporter : IAuroraImporter
         _options = options;
     }
 
-    public async Task<AuroraImportResult> ImportAsync(string indexPath, CancellationToken cancellationToken = default)
+    public async Task<AuroraImportResult> ImportAsync(string indexPath, bool replace = false, CancellationToken cancellationToken = default)
     {
         using var _ = ElementsInstrumentation.StartActivity();
 
@@ -62,33 +64,77 @@ internal sealed class AuroraImporter : IAuroraImporter
         var files = new List<string>();
         CollectIndexFiles(root, indexFile, files, []);
 
-        // the requested elements, then everything they grant (transitively) from anywhere in the repository
+        // the requested elements, then (transitively) everything they grant from anywhere in the repository,
+        // plus the options for choices that nothing in the import can satisfy (e.g. gaming sets for the Soldier)
         var toImport = new Dictionary<string, AuroraElement>(StringComparer.Ordinal);
+        var importByType = new Dictionary<string, List<AuroraElement>>(StringComparer.OrdinalIgnoreCase);
+        var catalogByType = byId.Values
+            .GroupBy(e => e.Type, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<AuroraElement>();
+
+        void Add(AuroraElement element)
+        {
+            if (toImport.TryAdd(element.Id, element))
+            {
+                importByType.TryAdd(element.Type, []);
+                importByType[element.Type].Add(element);
+                queue.Enqueue(element);
+            }
+        }
+
         foreach (var file in files)
         {
-            foreach (var element in byFile.GetValueOrDefault(file, []))
-            {
-                toImport.TryAdd(element.Id, element);
-            }
+            byFile.GetValueOrDefault(file, []).ForEach(Add);
         }
         var requestedCount = toImport.Count;
 
-        var queue = new Queue<AuroraElement>(toImport.Values);
         while (queue.TryDequeue(out var element))
         {
-            foreach (var grant in element.Rules.Where(r => r.Name.LocalName == "grant" && !IsConditional(r)))
+            foreach (var rule in element.Rules.Where(r => !IsConditional(r)))
             {
-                var id = (string?)grant.Attribute("id");
-                if (id is not null && !toImport.ContainsKey(id) && byId.TryGetValue(id, out var dependency))
+                if (rule.Name.LocalName == "grant")
                 {
-                    toImport.Add(id, dependency);
-                    queue.Enqueue(dependency);
+                    if ((string?)rule.Attribute("id") is { } id && byId.TryGetValue(id, out var dependency))
+                    {
+                        Add(dependency);
+                    }
+                }
+                else if (rule.Name.LocalName == "select")
+                {
+                    // dynamic ($(...)) expressions would match everything of the type, so those are left alone
+                    var type = (string?)rule.Attribute("type");
+                    var supports = (string?)rule.Attribute("supports");
+                    if (type is null || string.IsNullOrWhiteSpace(supports) || supports.Contains("$(", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var matches = SupportsExpression.Compile(supports);
+                    if (!importByType.GetValueOrDefault(type, []).Any(e => matches(e.Supports, e.Id)))
+                    {
+                        catalogByType.GetValueOrDefault(type, []).Where(e => matches(e.Supports, e.Id)).ToList().ForEach(Add);
+                    }
                 }
             }
         }
 
         var repository = _persistence.GetRepository<IElementsRepository>();
         var existing = (await repository.GetElementsAsync()).Select(e => e.Id.Value).ToHashSet();
+
+        var replaced = 0;
+        if (replace)
+        {
+            foreach (var aurora in toImport.Values)
+            {
+                var id = ToElementId(aurora.Id).Value;
+                if (existing.Remove(id) && await repository.DeleteElementAsync(id))
+                {
+                    replaced++;
+                }
+            }
+            await _persistence.SaveChangesAsync();
+        }
 
         int alreadyImported = 0, skippedConditional = 0, skippedUnresolved = 0;
         var importedByType = new SortedDictionary<string, int>();
@@ -115,12 +161,9 @@ internal sealed class AuroraImporter : IAuroraImporter
                 element.AddComponent(id => new DescriptionComponent(id, html));
             }
 
-            var supports = ((string?)aurora.Xml.Element("supports"))?
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToList();
-            if (supports is { Count: > 0 })
+            if (aurora.Supports.Count > 0)
             {
-                element.AddComponent(id => new SupportsComponent(id, supports));
+                element.AddComponent(id => new SupportsComponent(id, aurora.Supports));
             }
 
             foreach (var rule in aurora.Rules)
@@ -181,10 +224,10 @@ internal sealed class AuroraImporter : IAuroraImporter
 
         var imported = importedByType.Values.Sum();
         var dependencies = toImport.Count - requestedCount;
-        _logger.LogInformation("imported aurora index '{Index}': {Imported} new elements ({Dependencies} pulled in as grant dependencies), {Existing} already present, {Conditional} conditional rules and {Unresolved} unresolved grants skipped",
-            indexPath, imported, dependencies, alreadyImported, skippedConditional, skippedUnresolved);
+        _logger.LogInformation("imported aurora index '{Index}': {Imported} elements ({Replaced} replaced, {Dependencies} pulled in as grant dependencies), {Existing} already present, {Conditional} conditional rules and {Unresolved} unresolved grants skipped",
+            indexPath, imported, replaced, dependencies, alreadyImported, skippedConditional, skippedUnresolved);
 
-        return new AuroraImportResult(files.Count, imported, dependencies, alreadyImported, skippedConditional, skippedUnresolved, importedByType);
+        return new AuroraImportResult(files.Count, imported, replaced, dependencies, alreadyImported, skippedConditional, skippedUnresolved, importedByType);
     }
 
     private (Dictionary<string, AuroraElement> ById, Dictionary<string, List<AuroraElement>> ByFile) BuildCatalog(string root)
@@ -295,7 +338,14 @@ internal sealed class AuroraImporter : IAuroraImporter
         return Directory.EnumerateFiles(root, Path.GetFileName(name), SearchOption.AllDirectories).FirstOrDefault();
     }
 
-    private static bool IsConditional(XElement rule) => rule.Attribute("requirements") is not null || rule.Attribute("equipped") is not null;
+    // the builder has no multiclassing yet, so "not as a multiclass" (e.g. !ID_WOTC_PHB24_MULTICLASS_FIGHTER) always holds
+    private static readonly Regex NotMulticlass = new(@"^!ID_[A-Z0-9_]*MULTICLASS[A-Z0-9_]*$", RegexOptions.Compiled);
+
+    private static bool IsConditional(XElement rule)
+    {
+        var requirements = ((string?)rule.Attribute("requirements"))?.Trim();
+        return rule.Attribute("equipped") is not null || (requirements is not null && !NotMulticlass.IsMatch(requirements));
+    }
 
     private static int? ParseInt(XAttribute? attribute) => int.TryParse(attribute?.Value, out var value) ? value : null;
 
@@ -313,5 +363,9 @@ internal sealed class AuroraImporter : IAuroraImporter
     private sealed record AuroraElement(string Id, string Name, string Type, string? Source, string File, XElement Xml)
     {
         public IEnumerable<XElement> Rules => Xml.Element("rules")?.Elements() ?? [];
+
+        public List<string> Supports { get; } = ((string?)Xml.Element("supports"))?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList() ?? [];
     }
 }
