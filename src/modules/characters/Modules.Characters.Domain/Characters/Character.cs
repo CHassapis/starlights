@@ -43,6 +43,20 @@ public sealed class Character : AggregateRoot<CharacterId>
     /// </summary>
     public void AssignPlayer(string playerName) => PlayerName = playerName.Trim();
 
+    private List<string> _restrictedSources = [];
+
+    /// <summary>
+    /// Gets the source books switched off for this character (like Aurora's restricted sources); the builder
+    /// does not offer their content.
+    /// </summary>
+    public IReadOnlyCollection<string> RestrictedSources => _restrictedSources.AsReadOnly();
+
+    /// <summary>
+    /// Replaces the switched-off source books.
+    /// </summary>
+    public void RestrictSources(IEnumerable<string> sources) =>
+        _restrictedSources = sources.Select(s => s.Trim()).Where(s => s.Length > 0).Distinct().ToList();
+
     /// <summary>
     /// Creates a new instance of the <see cref="Character"/> class with the specified name.
     /// </summary>

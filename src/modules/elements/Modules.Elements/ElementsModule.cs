@@ -17,7 +17,9 @@ public sealed class ElementsModule : IPlatformModule
             IncludeSampleContent: !string.Equals(builder.Configuration["Elements:SampleContent"], "false", StringComparison.OrdinalIgnoreCase)));
 
         builder.Services.AddScoped<IAuroraImporter, AuroraImporter>();
-        builder.Services.AddSingleton(new AuroraImporterOptions(builder.Configuration["Aurora:ContentPath"] ?? "/data/aurora-elements"));
+        builder.Services.AddSingleton(new AuroraImporterOptions(
+            builder.Configuration["Aurora:ContentPath"] ?? "/data/aurora-elements",
+            builder.Configuration["Aurora:Exclude"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)));
 
         builder.Services.AddDomainEventHandlersFrom(typeof(ElementsModule).Assembly);
     }

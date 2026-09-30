@@ -40,6 +40,10 @@ public sealed class CreateCharacterEndpoint : Endpoint<CreateCharacterRequest, C
         {
             newCharacter.AssignPlayer(req.PlayerName);
         }
+        if (req.RestrictedSources is not null)
+        {
+            newCharacter.RestrictSources(req.RestrictedSources);
+        }
 
         // update appearance component if portrait url is provided
         if (req.PortraitUrl is not null)

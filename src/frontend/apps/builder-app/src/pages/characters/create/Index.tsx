@@ -1,6 +1,8 @@
 import { useCharacterCreationOptions, useCharacterPortraitOptions, useCreateCharacter, type CharacterPortraitOption } from "@/lib/api/characters/queries";
 import { CharacterCreationOptionsSelect } from "./character-creation-options-select";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { SourcesPicker } from "@/components/sources-picker";
+import { defaultRestrictedSources, useSources } from "@/lib/api/sources";
 import { CheckIcon, OctagonAlertIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -57,6 +59,11 @@ function CharacterCreation() {
   const navigate = useNavigate();
   const createMutation = useCreateCharacter();
   const { player } = usePlayer();
+  const { data: sourceData, isLoading: sourcesLoading } = useSources();
+  const [restricted, setRestricted] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (sourceData && restricted === null) setRestricted(defaultRestrictedSources(sourceData.sources));
+  }, [sourceData, restricted]);
 
   const {
     register,
@@ -74,11 +81,17 @@ function CharacterCreation() {
     },
   });
 
+  // with a single creation option there is nothing to choose
+  useEffect(() => {
+    if (options?.options.length === 1) setValue("CharacterCreationOptionId", options.options[0].id, { shouldValidate: true });
+  }, [options, setValue]);
+
   const selectedPortrait = watch("PortraitUrl");
   const canSubmit = useMemo(() => isValid && !createMutation.isPending && !isSubmitting, [isValid, createMutation.isPending, isSubmitting]);
 
   const onSubmit = handleSubmit(async (values) => {
-    const result = (await createMutation.mutateAsync({ ...values, PlayerName: player ?? undefined } as typeof values)) as { id?: string; Id?: string };
+    const payload = { ...values, PlayerName: player ?? undefined, RestrictedSources: restricted ?? [] };
+    const result = (await createMutation.mutateAsync(payload as typeof values)) as { id?: string; Id?: string };
     const newId = result?.id ?? result?.Id;
     if (newId) navigate(`/characters/${newId}`);
   });
@@ -89,6 +102,14 @@ function CharacterCreation() {
         {/* <FieldLegend>Character</FieldLegend>
         <FieldDescription>Fill in your character information. You can change all these fields later.</FieldDescription>
         <FieldSeparator /> */}
+        <Field>
+          <FieldContent>
+            <FieldLabel>Sources</FieldLabel>
+            <FieldDescription>Tick the books you're using. The builder only offers content from these; you can change this later.</FieldDescription>
+          </FieldContent>
+          <SourcesPicker sources={sourceData?.sources} restricted={restricted ?? []} onChange={setRestricted} loading={sourcesLoading} />
+        </Field>
+        <FieldSeparator />
         <FieldGroup>
           <Field orientation="responsive">
             <FieldContent>

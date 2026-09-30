@@ -17,6 +17,11 @@ public interface IAuroraImporter
     /// </param>
     /// <param name="update">Re-create only the elements whose Aurora XML changed since they were imported.</param>
     Task<AuroraImportResult> ImportAsync(string indexPath, bool replace = false, bool update = false, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the elements imported from Aurora files under a path, e.g. "unearthed-arcana/"; returns how many.
+    /// </summary>
+    Task<int> RemoveAsync(string pathPrefix, CancellationToken cancellationToken = default);
 }
 
 public record AuroraImportResult(

@@ -54,6 +54,16 @@ public interface IElementsRepository : IRepository
     /// The original Aurora XML of every imported element, by element id — to see which ones changed upstream.
     /// </summary>
     Task<Dictionary<Guid, string>> GetAuroraXmlAsync();
+
+    /// <summary>
+    /// The ids of the elements imported from Aurora files under a path (e.g. "unearthed-arcana/").
+    /// </summary>
+    Task<List<Guid>> GetElementIdsByAuroraPathAsync(string pathPrefix);
+
+    /// <summary>
+    /// Source book and file of every imported element, for the list of sources a character can tick.
+    /// </summary>
+    Task<List<(string? Source, string File)>> GetAuroraSourcesAsync();
 }
 
 public sealed record ElementSummary(Guid Id, string Name, string Type, string? Source);

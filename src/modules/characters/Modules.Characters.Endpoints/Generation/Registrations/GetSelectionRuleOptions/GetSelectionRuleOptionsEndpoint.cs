@@ -71,6 +71,7 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
         var options = elements
             .OrderByDescending(e => e.Id == current)
             .Where(e => e.Id == current || !owned.Contains(e.Id))
+            .Where(e => e.Id == current || !character.RestrictedSources.Contains(e.Source))
             .Where(e => seen.Add((e.Name, e.Source)))
             .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(e => e.Source)

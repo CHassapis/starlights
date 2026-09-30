@@ -64,3 +64,45 @@ public class ImportAuroraEndpoint : Endpoint<ImportAuroraRequest>
         }
     }
 }
+
+public sealed record RemoveAuroraRequest
+{
+    /// <summary>
+    /// Remove the elements imported from Aurora files under this path, e.g. "unearthed-arcana/".
+    /// </summary>
+    public string PathPrefix { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Removes imported Aurora content by folder: <c>POST /api/elements/remove-aurora {"pathPrefix": "unearthed-arcana/"}</c>.
+/// Pair it with Aurora:Exclude so later imports leave the folder out.
+/// </summary>
+public class RemoveAuroraEndpoint : Endpoint<RemoveAuroraRequest>
+{
+    private readonly IAuroraImporter _importer;
+
+    public RemoveAuroraEndpoint(IAuroraImporter importer)
+    {
+        _importer = importer;
+    }
+
+    public override void Configure()
+    {
+        Post("/remove-aurora");
+        AllowAnonymous();
+        Group<ElementsGroup>();
+    }
+
+    public override async Task HandleAsync(RemoveAuroraRequest req, CancellationToken ct)
+    {
+        if (req.PathPrefix.Trim().Length < 3)
+        {
+            AddError(r => r.PathPrefix, "Give the folder to remove, e.g. \"unearthed-arcana/\".");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+
+        var removed = await _importer.RemoveAsync(req.PathPrefix.Trim(), ct);
+        await Send.OkAsync(new { Removed = removed }, ct);
+    }
+}

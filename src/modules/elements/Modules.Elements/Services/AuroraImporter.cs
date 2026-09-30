@@ -13,9 +13,14 @@ using Starlights.Platform.Data;
 namespace Starlights.Modules.Elements.Services;
 
 /// <summary>
-/// Location of the local clone of the Aurora content repository.
+/// Location of the local clone of the Aurora content repository, and top-level folders of it to leave out
+/// entirely (e.g. "unearthed-arcana"): never imported, not even to fill a choice.
 /// </summary>
-public sealed record AuroraImporterOptions(string ContentPath);
+public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<string>? Exclude = null)
+{
+    public bool IsExcluded(string relativePath) =>
+        Exclude?.Any(folder => relativePath.StartsWith(folder.Trim('/') + "/", StringComparison.OrdinalIgnoreCase)) == true;
+}
 
 /// <summary>
 /// Maps Aurora XML elements onto Starlights elements: grant → include rule, stat → statistic rule,
@@ -257,6 +262,23 @@ internal sealed class AuroraImporter : IAuroraImporter
         return new AuroraImportResult(files.Count, imported, replaced, dependencies, alreadyImported, skippedConditional, skippedUnresolved, importedByType);
     }
 
+    public async Task<int> RemoveAsync(string pathPrefix, CancellationToken cancellationToken = default)
+    {
+        var repository = _persistence.GetRepository<IElementsRepository>();
+        var removed = 0;
+        foreach (var id in await repository.GetElementIdsByAuroraPathAsync(pathPrefix))
+        {
+            if (await repository.DeleteElementAsync(id))
+            {
+                removed++;
+            }
+        }
+        await _persistence.SaveChangesAsync();
+
+        _logger.LogInformation("removed {Removed} elements imported from '{PathPrefix}'", removed, pathPrefix);
+        return removed;
+    }
+
     private (Dictionary<string, AuroraElement> ById, Dictionary<string, List<AuroraElement>> ByFile) BuildCatalog(string root)
     {
         var byId = new Dictionary<string, AuroraElement>(StringComparer.Ordinal);
@@ -266,7 +288,7 @@ internal sealed class AuroraImporter : IAuroraImporter
         foreach (var path in Directory.EnumerateFiles(root, "*.xml", SearchOption.AllDirectories))
         {
             var file = Path.GetRelativePath(root, path).Replace('\\', '/');
-            if (file.StartsWith(".git/", StringComparison.Ordinal))
+            if (file.StartsWith(".git/", StringComparison.Ordinal) || _options.IsExcluded(file))
             {
                 continue;
             }
@@ -312,7 +334,7 @@ internal sealed class AuroraImporter : IAuroraImporter
     /// </summary>
     private void CollectIndexFiles(string root, string indexFile, List<string> files, HashSet<string> visited)
     {
-        if (!visited.Add(indexFile))
+        if (!visited.Add(indexFile) || _options.IsExcluded(Path.GetRelativePath(root, indexFile).Replace('\\', '/')))
         {
             return;
         }

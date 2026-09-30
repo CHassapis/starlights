@@ -22,6 +22,8 @@ import {
   type BuilderChoice,
 } from "@/lib/api/builder";
 import { usePlayer } from "@/lib/player";
+import { SourcesPicker } from "@/components/sources-picker";
+import { useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { cn } from "@/lib/utils";
 
 const SECTION_ORDER = ["Class", "Species", "Background", "Alignment"];
@@ -75,7 +77,12 @@ export function CharacterBuilderPage() {
       <Tabs defaultValue="build">
         <TabsList>
           <TabsTrigger value="build">Build</TabsTrigger>
+          <TabsTrigger value="sources">Sources</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="sources" className="mt-4 max-w-3xl">
+          <SourcesTab characterId={id} />
+        </TabsContent>
 
         <TabsContent value="build" className="mt-4">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_28rem]">
@@ -301,6 +308,28 @@ function ChoiceRow({
           )
         )}
       </div>
+    </div>
+  );
+}
+
+function SourcesTab({ characterId }: { characterId: string }) {
+  const { data: sourceData, isLoading } = useSources();
+  const { data: characterSources } = useCharacterSources(characterId);
+  const setSources = useSetCharacterSources(characterId);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Tick the books this character uses. The dropdowns only offer content from ticked books; picks you already made stay.
+      </p>
+      <SourcesPicker
+        sources={sourceData?.sources}
+        restricted={characterSources?.restricted ?? []}
+        loading={isLoading || !characterSources}
+        onChange={(restricted) =>
+          setSources.mutate(restricted, { onError: (e) => toast.error("Could not save the sources", { description: e.message }) })
+        }
+      />
     </div>
   );
 }
