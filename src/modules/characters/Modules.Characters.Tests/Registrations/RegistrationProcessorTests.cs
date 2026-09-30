@@ -179,6 +179,51 @@ public sealed class RegistrationProcessorTests
     }
 
     [TestMethod]
+    [DataRow(0, 2)]
+    [DataRow(1, 2)]
+    [DataRow(2, 2)]
+    [DataRow(0, 3)]
+    public async Task ProcessRegistration_ShouldCreateOneSelectionRulePerPick_WhenQuantityAboveOne(int alreadyApplied, int quantity)
+    {
+        // Arrange
+        var processor = CreateProcessor();
+
+        var characterId = CharacterId.New();
+        var baseElementId = Guid.NewGuid();
+        var registration = Registration.Create(characterId, new(baseElementId), "Fighter", "Class");
+        var registrationId = registration.Id;
+
+        var selectionRuleId = Guid.NewGuid();
+        for (var i = 0; i < alreadyApplied; i++)
+        {
+            registration.CreateSelectionRule(new(selectionRuleId), "Proficiency", "Skill Proficiency (Fighter)");
+        }
+
+        _registrations.Setup(r => r.GetRegistrationAsync(registrationId))
+                      .ReturnsAsync(registration);
+
+        var character = Character.Create("Test");
+        _characters.Setup(c => c.GetCharacterAsync(characterId.Value))
+                   .ReturnsAsync(character);
+
+        _elements.Setup(m => m.GetElementWithRules(baseElementId))
+                 .ReturnsAsync(new ElementDataModel
+                 {
+                     Id = baseElementId,
+                     Name = "Fighter",
+                     Type = "Class",
+                     SelectionRules = [new SelectionRuleDataModel(selectionRuleId, "Proficiency", "Skill Proficiency (Fighter)", 0, "Skill", quantity)]
+                 });
+
+        // Act
+        await processor.ProcessRegistration(registrationId);
+
+        // Assert
+        registration.SelectionRules.Should().HaveCount(quantity);
+        registration.SelectionRules.Should().OnlyContain(r => r.AssociatedSelectionRuleId.Value == selectionRuleId);
+    }
+
+    [TestMethod]
     public async Task ProcessRegistration_MarksRegistrationProcessed_WhenIncludeAddsRegistration()
     {
         // Arrange

@@ -52,4 +52,9 @@ public interface IElementsModuleQueries
     /// The elements of a type that satisfy a selection rule's supports expression (all of them when it is empty).
     /// </summary>
     Task<List<ElementDataModel>> GetSelectionOptions(string elementType, string? supports);
+
+    /// <summary>
+    /// Retrieves several elements with their rules in one go (e.g. everything a character has registered).
+    /// </summary>
+    Task<List<ElementDataModel>> GetElementsWithRules(IReadOnlyCollection<Guid> elementIds);
 }

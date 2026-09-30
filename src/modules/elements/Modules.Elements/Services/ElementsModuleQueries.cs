@@ -88,4 +88,16 @@ internal class ElementsModuleQueries : IElementsModuleQueries
 
         return elements.ConvertAll(e => e.AsElementDataModel());
     }
+
+    public async Task<List<ElementDataModel>> GetElementsWithRules(IReadOnlyCollection<Guid> elementIds)
+    {
+        if (elementIds.Count == 0)
+        {
+            return [];
+        }
+
+        var repository = _persistence.GetRepository<IElementsRepository>();
+        var elements = await repository.GetElementsByIdsAsync(elementIds);
+        return elements.ConvertAll(e => e.AsElementDataModel());
+    }
 }

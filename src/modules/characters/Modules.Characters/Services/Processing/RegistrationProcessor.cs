@@ -259,7 +259,9 @@ public class RegistrationProcessor : IRegistrationProcessor
 
         foreach (var rule in registrationElement.SelectionRules)
         {
-            if (context.Registration.HasAssociatedRule(rule.RuleId))
+            // one registration selection rule per pick, e.g. two for "choose 2 skills"
+            var applied = context.Registration.SelectionRules.Count(r => r.AssociatedSelectionRuleId.Value == rule.RuleId);
+            if (applied >= Math.Max(1, rule.Quantity))
             {
                 // rule applied, skip
                 continue;
@@ -275,11 +277,14 @@ public class RegistrationProcessor : IRegistrationProcessor
                 }
             }
 
-            // create the new registration selection rule, this is to keep track of the rules applied
-            var newSelectionRule = context.Registration.CreateSelectionRule(new(rule.RuleId), rule.ElementType, rule.Name);
+            for (var i = applied; i < Math.Max(1, rule.Quantity); i++)
+            {
+                // create the new registration selection rule, this is to keep track of the rules applied
+                var newSelectionRule = context.Registration.CreateSelectionRule(new(rule.RuleId), rule.ElementType, rule.Name);
 
-            _logger.LogInformation("created new selection rule '{RuleId}' on registration {ElementName} ({ElementType})",
-                newSelectionRule.Id.Value, context.Registration.AssociatedElementName, context.Registration.AssociatedElementType);
+                _logger.LogInformation("created new selection rule '{RuleId}' on registration {ElementName} ({ElementType})",
+                    newSelectionRule.Id.Value, context.Registration.AssociatedElementName, context.Registration.AssociatedElementType);
+            }
         }
 
         return Task.CompletedTask;

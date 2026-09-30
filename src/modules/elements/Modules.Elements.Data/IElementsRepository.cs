@@ -44,6 +44,11 @@ public interface IElementsRepository : IRepository
     /// without loading components — for lists over the whole content set.
     /// </summary>
     Task<List<ElementSummary>> GetElementSummariesAsync();
+
+    /// <summary>
+    /// Retrieves several elements (with components) in one query.
+    /// </summary>
+    Task<List<Element>> GetElementsByIdsAsync(IReadOnlyCollection<Guid> identifiers);
 }
 
 public sealed record ElementSummary(Guid Id, string Name, string Type, string? Source);

@@ -82,6 +82,16 @@ internal class ElementsRepository : RepositoryBase<Element>, IElementsRepository
         return elements.ConvertAll(e => new ElementSummary(e.Id, e.Name, e.Type, sources.GetValueOrDefault(e.Id)));
     }
 
+    public async Task<List<Element>> GetElementsByIdsAsync(IReadOnlyCollection<Guid> identifiers)
+    {
+        var ids = identifiers.Select(id => new ElementId(id)).ToList();
+
+        return await Entities
+            .Include(x => x.Components.OrderBy(c => c.OrderSequence))
+            .Where(element => ids.Contains(element.Id))
+            .ToListAsync();
+    }
+
     public async Task<List<Element>> GetElementsByTypesAsync(IEnumerable<string> types)
     {
         _logger.LogInformation("getting elements of types [{ElementTypes}]", string.Join(", ", types));

@@ -63,9 +63,22 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
 
         var elements = await _elements.GetSelectionOptions(selectionRule.ElementType, supports);
 
+        // like Aurora: leave out what the character already has (a skill it is proficient in, a feat it took),
+        // except this slot's own pick, and list repeatable copies of an element (the nine "Skilled") once
+        var owned = characterRegistrations.Select(r => r.AssociatedElementId.Value).ToHashSet();
+        var current = selectionRule.SelectedOption?.Value;
+        var seen = new HashSet<(string, string?)>();
+        var options = elements
+            .OrderByDescending(e => e.Id == current)
+            .Where(e => e.Id == current || !owned.Contains(e.Id))
+            .Where(e => seen.Add((e.Name, e.Source)))
+            .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.Source)
+            .ToList();
+
         var response = new GetSelectionRuleOptionsResponse
         {
-            Options = elements.ConvertAll(e => new SelectionRuleOptionModel { ElementId = e.Id, Name = e.Name, Source = e.Source == "Internal" ? null : e.Source })
+            Options = options.ConvertAll(e => new SelectionRuleOptionModel { ElementId = e.Id, Name = e.Name, Source = e.Source == "Internal" ? null : e.Source })
         };
 
         await Send.OkAsync(response, ct);
