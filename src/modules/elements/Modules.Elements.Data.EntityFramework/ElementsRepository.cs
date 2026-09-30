@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Starlights.Modules.Elements.Domain;
+using Starlights.Modules.Elements.Domain.Components;
 using Starlights.Platform.Components.Data.EntityFramework;
 
 namespace Starlights.Modules.Elements.Data.EntityFramework;
@@ -64,6 +65,21 @@ internal class ElementsRepository : RepositoryBase<Element>, IElementsRepository
             .Include(x => x.Components.OrderBy(c => c.OrderSequence))
             .Where(element => element.Type == type)
             .ToListAsync();
+    }
+
+    public async Task<List<ElementSummary>> GetElementSummariesAsync()
+    {
+        var elements = await Entities.AsNoTracking()
+            .Select(e => new { e.Id, e.Name, e.Type })
+            .ToListAsync();
+
+        var sources = (await Context.Set<AuroraSourceComponent>().AsNoTracking()
+                .Select(c => new { c.OwningElement, c.Source })
+                .ToListAsync())
+            .GroupBy(c => c.OwningElement)
+            .ToDictionary(g => g.Key, g => g.First().Source);
+
+        return elements.ConvertAll(e => new ElementSummary(e.Id, e.Name, e.Type, sources.GetValueOrDefault(e.Id)));
     }
 
     public async Task<List<Element>> GetElementsByTypesAsync(IEnumerable<string> types)

@@ -1,6 +1,5 @@
 using FastEndpoints;
 using Starlights.Modules.Elements.Data;
-using Starlights.Modules.Elements.Domain.Components;
 using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Elements.Endpoints.Compendium;
@@ -31,10 +30,10 @@ public sealed class GetCompendiumEndpoint : EndpointWithoutRequest<GetCompendium
     public override async Task HandleAsync(CancellationToken ct)
     {
         var repository = _persistence.GetRepository<IElementsRepository>();
-        var elements = await repository.GetElementsAsync();
+        var elements = await repository.GetElementSummariesAsync();
 
         var items = elements
-            .Select(e => new CompendiumListItem(e.Id, e.Name, e.Type, e.GetComponent<AuroraSourceComponent>()?.Source))
+            .Select(e => new CompendiumListItem(e.Id, e.Name, e.Type, e.Source))
             .OrderBy(x => x.Name)
             .ThenBy(x => x.Type)
             .ToList();

@@ -65,7 +65,7 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
 
         var response = new GetSelectionRuleOptionsResponse
         {
-            Options = elements.ConvertAll(e => new SelectionRuleOptionModel { ElementId = e.Id, Name = e.Name })
+            Options = elements.ConvertAll(e => new SelectionRuleOptionModel { ElementId = e.Id, Name = e.Name, Source = e.Source == "Internal" ? null : e.Source })
         };
 
         await Send.OkAsync(response, ct);

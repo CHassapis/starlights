@@ -11,6 +11,7 @@ export type SelectionRuleDataModel = {
 export type SelectionRuleOptionDataModel = {
   elementId: string;
   name: string;
+  source?: string | null;
 };
 
 // --- Registrations ---

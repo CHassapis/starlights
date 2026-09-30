@@ -120,7 +120,7 @@ internal sealed class AuroraImporter : IAuroraImporter
         }
 
         var repository = _persistence.GetRepository<IElementsRepository>();
-        var existing = (await repository.GetElementsAsync()).Select(e => e.Id.Value).ToHashSet();
+        var existing = (await repository.GetElementSummariesAsync()).Select(e => e.Id).ToHashSet();
 
         var replaced = 0;
         if (replace)

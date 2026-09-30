@@ -255,7 +255,8 @@ function SelectionRulesSectionOptionsComponent({
             <ul>
               {optionsData.options.map((option: SelectionRuleOptionDataModel) => (
                 <li key={option.elementId}>
-                  {option.name} | ID: {option.elementId} |{" "}
+                  {option.name}
+                  {option.source && <span className="text-muted-foreground"> ({option.source})</span>} | ID: {option.elementId} |{" "}
                   <Button
                     size="sm"
                     disabled={registerSelectionMutation.isPending}

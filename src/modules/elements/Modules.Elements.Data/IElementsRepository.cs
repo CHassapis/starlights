@@ -38,4 +38,12 @@ public interface IElementsRepository : IRepository
     /// Retrieves all elements of specified types.
     /// </summary>
     Task<List<Element>> GetElementsByTypesAsync(IEnumerable<string> types);
+
+    /// <summary>
+    /// Retrieves the id, name, type and (for imported content) source book of every element,
+    /// without loading components — for lists over the whole content set.
+    /// </summary>
+    Task<List<ElementSummary>> GetElementSummariesAsync();
 }
+
+public sealed record ElementSummary(Guid Id, string Name, string Type, string? Source);
