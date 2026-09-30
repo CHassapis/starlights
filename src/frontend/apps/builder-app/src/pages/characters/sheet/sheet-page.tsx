@@ -1,7 +1,6 @@
 import DOMPurify from "dompurify";
-import { toJpeg } from "html-to-image";
-import { jsPDF } from "jspdf";
-import { ArrowLeftIcon, DownloadIcon, PrinterIcon } from "lucide-react";
+import { buildAuroraSheet } from "@/lib/aurora-sheet";
+import { ArrowLeftIcon, DownloadIcon, FileTextIcon, PrinterIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -12,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 /*
  * The character sheet in the layout Aurora prints: main page, details, inventory, notes, spellcasting and spell
- * cards. Pages are US Letter at 96 dpi (816 × 1056 px); "Download PDF" renders them one by one into a PDF.
+ * cards. Pages are US Letter at 96 dpi (816 × 1056 px); "Download PDF" makes Aurora's own sheet (lib/aurora-sheet).
  */
 
 const PAGE = "sheet-page relative mx-auto mb-8 h-[1056px] w-[816px] overflow-hidden bg-white p-9 text-black shadow-lg print:mb-0 print:shadow-none";
@@ -486,20 +485,25 @@ export function CharacterSheetPage() {
   const { data, isLoading, error } = useSheetData(id);
   const [exporting, setExporting] = useState(false);
 
-  async function downloadPdf() {
+  // Aurora's own sheet templates, filled in (see lib/aurora-sheet); "view" opens it in the browser's PDF viewer
+  async function makePdf(view: boolean) {
     if (!data) return;
+    const tab = view ? window.open("", "_blank") : null;
     setExporting(true);
     try {
-      const pages = Array.from(document.querySelectorAll<HTMLElement>(".sheet-page"));
-      const pdf = new jsPDF({ unit: "pt", format: "letter" });
-      for (let i = 0; i < pages.length; i++) {
-        // JPEG keeps a page around 300 KB (PNG made a 70 MB file)
-        const image = await toJpeg(pages[i], { quality: 0.9, pixelRatio: 2, backgroundColor: "#ffffff", skipFonts: true, style: { margin: "0", boxShadow: "none" } });
-        if (i > 0) pdf.addPage();
-        pdf.addImage(image, "JPEG", 0, 0, 612, 792, undefined, "FAST");
+      const bytes = await buildAuroraSheet(data);
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
+      if (tab) {
+        tab.location.href = url;
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${data.name.replace(/[^\w\- ]+/g, "").trim() || "character"}.pdf`;
+        link.click();
       }
-      pdf.save(`${data.name.replace(/[^\w\- ]+/g, "").trim() || "character"}.pdf`);
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
+      tab?.close();
       toast.error("Could not make the PDF", { description: (e as Error).message });
     } finally {
       setExporting(false);
@@ -530,7 +534,10 @@ export function CharacterSheetPage() {
         <Button variant="secondary" onClick={() => window.print()}>
           <PrinterIcon /> Print
         </Button>
-        <Button onClick={downloadPdf} disabled={exporting}>
+        <Button variant="secondary" onClick={() => makePdf(true)} disabled={exporting}>
+          <FileTextIcon /> View PDF
+        </Button>
+        <Button onClick={() => makePdf(false)} disabled={exporting}>
           {exporting ? <Spinner /> : <DownloadIcon />} Download PDF
         </Button>
       </div>

@@ -84,6 +84,8 @@ export interface SheetData {
   background: string;
   alignment: string;
   deity: string;
+  /** the (first) subclass, e.g. "Death Domain" */
+  subclass: string;
   proficiencyBonus: number;
   abilities: AbilityScore[];
   saves: (Bonus & { proficiency: Proficiency })[];
@@ -104,6 +106,8 @@ export interface SheetData {
   otherSpells: SheetSpell[];
   story: Record<string, string>;
 }
+
+const ABILITY_NAMES = ["Strength", "Dexterity", "Constitution", "Intelligence", "Wisdom", "Charisma"];
 
 const FEATURE_TYPES = new Set(["Class Feature", "Archetype Feature", "Feat", "Feat Feature"]);
 
@@ -262,6 +266,11 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
     for (let a = r.parentRegistrationId ? byRegistration.get(r.parentRegistrationId) : undefined; a && !owner; a = a.parentRegistrationId ? byRegistration.get(a.parentRegistrationId) : undefined) {
       owner = casters.find((c) => c.registrationId === a!.registrationId) ?? (a.type === "Class" || a.type === "SubClass" ? casters.find((c) => isUnder(c.registrationId, a!.registrationId)) : undefined);
     }
+    // where it comes from, the way Aurora labels it: "Level 1: Spellcasting (Cleric)", "Wisdom (High Elf)"
+    const parent = r.parentRegistrationId ? byRegistration.get(r.parentRegistrationId) : undefined;
+    const grandparent = parent?.parentRegistrationId ? byRegistration.get(parent.parentRegistrationId) : undefined;
+    if (owner && s.origin && !s.origin.includes(owner.casting.name)) s.origin = `${s.origin} (${owner.casting.name})`;
+    else if (!owner && grandparent && ABILITY_NAMES.includes(s.origin)) s.origin = `${s.origin} (${grandparent.name})`;
     (owner ? owner.casting.spells : otherSpells).push(s);
   }
   function isUnder(registrationId: string, ancestorId: string): boolean {
@@ -307,6 +316,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       background: top("Background"),
       alignment: top("Alignment"),
       deity: top("Deity"),
+      subclass: subclass ?? "",
       proficiencyBonus,
       abilities: abilities.data.abilityScores,
       saves: saves.data.savingThrows.map((s) => ({ ...s, proficiency: proficiencyOf(s, proficiencyBonus) })),
