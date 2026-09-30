@@ -287,7 +287,7 @@ function SelectionRulesSectionComponent({
   type,
 }: {
   characterId: string;
-  type: "Class" | "Species" | "Background" | "SubClass" | "Proficiency" | "Language" | "Alignment";
+  type: string; // an element type, e.g. "Class", "SubClass", "Species Feature", "Feat"
 }) {
   const { data: selectionRulesData, isLoading, error } = useSelectionRuleDataModels(characterId, type);
 
@@ -528,18 +528,31 @@ export default function CharactersDetailsPage() {
                     <TabsTrigger value="tab-selection-rules-class">Character Class</TabsTrigger>
                     <TabsTrigger value="tab-selection-rules-race">Character Origin</TabsTrigger>
                     {/* <TabsTrigger value="tab-selection-rules-background">Background</TabsTrigger> */}
+                    <TabsTrigger value="tab-selection-rules-feats">Feats</TabsTrigger>
                     <TabsTrigger value="tab-selection-rules-proficiency">Proficiency</TabsTrigger>
                     <TabsTrigger value="tab-selection-rules-language">Language</TabsTrigger>
+                    <TabsTrigger value="tab-selection-rules-spells">Spells</TabsTrigger>
                     <TabsTrigger value="tab-selection-rules-alignment">Alignment</TabsTrigger>
                   </TabsList>
                   <TabsContent value="tab-selection-rules-class">
                     <SelectionRulesSectionComponent characterId={id} type="Class" />
                     <SelectionRulesSectionComponent characterId={id} type="SubClass" />
+                    <SelectionRulesSectionComponent characterId={id} type="Class Feature" />
+                    <SelectionRulesSectionComponent characterId={id} type="Archetype Feature" />
                     {/* <SelectionRulesSectionComponent characterId={id} type="Proficiency" /> */}
                   </TabsContent>
                   <TabsContent value="tab-selection-rules-race">
                     <SelectionRulesSectionComponent characterId={id} type="Species" />
+                    <SelectionRulesSectionComponent characterId={id} type="Species Feature" />
                     <SelectionRulesSectionComponent characterId={id} type="Background" />
+                  </TabsContent>
+                  <TabsContent value="tab-selection-rules-feats">
+                    <SelectionRulesSectionComponent characterId={id} type="Feat" />
+                    <SelectionRulesSectionComponent characterId={id} type="Feat Feature" />
+                    <SelectionRulesSectionComponent characterId={id} type="Ability Score Improvement" />
+                  </TabsContent>
+                  <TabsContent value="tab-selection-rules-spells">
+                    <SelectionRulesSectionComponent characterId={id} type="Spell" />
                   </TabsContent>
                   {/* <TabsContent value="tab-selection-rules-background"></TabsContent> */}
                   <TabsContent value="tab-selection-rules-proficiency">
