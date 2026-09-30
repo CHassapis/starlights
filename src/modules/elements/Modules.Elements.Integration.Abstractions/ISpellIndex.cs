@@ -22,7 +22,48 @@ public interface ISpellIndex
     /// number is a spell level.
     /// </summary>
     Task<List<SpellInfo>> GetSpellOptionsAsync(string supports, IReadOnlyCollection<string> lists, IReadOnlyCollection<int> slotLevels, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What the given elements say about magic: their spellcasting, how they count for multiclass spell slots, the
+    /// spells they grant or let you choose (with Aurora's spellcasting and prepared attributes, which the rules
+    /// engine does not keep) and their spellcasting statistics by level.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, ElementMagic>> GetElementMagicAsync(IReadOnlyCollection<Guid> elementIds, CancellationToken cancellationToken = default);
 }
+
+/// <summary>The magic an element's Aurora XML describes; see <see cref="ISpellIndex.GetElementMagicAsync"/>.</summary>
+public sealed record ElementMagic(
+    Guid ElementId,
+    string Name,
+    string? Source,
+    SpellcastingDefinition? Spellcasting,
+    MulticlassSlots? Multiclass,
+    IReadOnlyList<SpellGrant> Grants,
+    IReadOnlyList<SpellSelect> Selects,
+    IReadOnlyList<SpellcastingStat> Stats);
+
+/// <summary>
+/// How a spellcasting class's levels count toward the shared multiclass spell slots (Aurora's
+/// ID_INTERNAL_GRANT_MULTICLASS_SPELLCASTING_SLOTS_*): all of them, half, half rounded up (artificer), a third, or
+/// not at all (Solo: warlock pact magic keeps its own slots).
+/// </summary>
+public enum MulticlassSlots
+{
+    Full,
+    Half,
+    HalfUp,
+    Third,
+    Solo,
+}
+
+/// <summary>A &lt;grant type="Spell"&gt;: the spell's Aurora id, the spellcasting it counts for, whether it is always prepared.</summary>
+public sealed record SpellGrant(string AuroraId, string? Spellcasting, bool Prepared, int? Level);
+
+/// <summary>A &lt;select type="Spell"&gt;: its name, the spellcasting it counts for, whether picks are always prepared.</summary>
+public sealed record SpellSelect(string Name, string? Spellcasting, bool Prepared, int? Level, int Number);
+
+/// <summary>A &lt;stat&gt; about spellcasting ("cleric:spellcasting:prepare"), with the class level it applies from.</summary>
+public sealed record SpellcastingStat(string Name, string Value, int? Level);
 
 public sealed record SpellIndexSnapshot(long Version, IReadOnlyList<SpellInfo> Spells)
 {

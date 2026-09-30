@@ -105,17 +105,86 @@ internal sealed class SpellIndex : ISpellIndex
         return xml.Select(pair => ReadSpellcasting(pair.Key, pair.Value)).OfType<SpellcastingDefinition>().ToList();
     }
 
-    public static SpellcastingDefinition? ReadSpellcasting(Guid elementId, string rawXml)
+    public async Task<IReadOnlyDictionary<Guid, ElementMagic>> GetElementMagicAsync(IReadOnlyCollection<Guid> elementIds, CancellationToken cancellationToken = default)
     {
-        XElement? spellcasting;
+        using var scope = _scopes.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IPersistence>().GetRepository<IElementsRepository>();
+        var xml = await repository.GetAuroraXmlByIdsAsync(elementIds);
+        var magic = new Dictionary<Guid, ElementMagic>();
+        foreach (var (id, raw) in xml)
+        {
+            if (ReadMagic(id, raw) is { } m)
+            {
+                magic[id] = m;
+            }
+        }
+        return magic;
+    }
+
+    /// <summary>The magic in one element's XML; null when it has none (no spellcasting, spell grants or selects).</summary>
+    public static ElementMagic? ReadMagic(Guid elementId, string rawXml)
+    {
+        XElement xml;
         try
         {
-            spellcasting = XElement.Parse(rawXml).Element("spellcasting");
+            xml = XElement.Parse(rawXml);
         }
         catch (XmlException)
         {
             return null;
         }
+
+        static bool True(XAttribute? a) => string.Equals((string?)a, "true", StringComparison.OrdinalIgnoreCase);
+        static int? Int(XAttribute? a) => int.TryParse((string?)a, out var n) ? n : null;
+        static bool IsSpell(XElement e) => string.Equals((string?)e.Attribute("type"), "Spell", StringComparison.OrdinalIgnoreCase);
+
+        var rules = xml.Element("rules")?.Elements().ToList() ?? [];
+        var grants = rules.Where(r => r.Name == "grant" && IsSpell(r) && r.Attribute("id") is not null)
+            .Select(r => new SpellGrant((string)r.Attribute("id")!, (string?)r.Attribute("spellcasting"), True(r.Attribute("prepared")), Int(r.Attribute("level"))))
+            .ToList();
+        var selects = rules.Where(r => r.Name == "select" && IsSpell(r) && r.Attribute("name") is not null)
+            .Select(r => new SpellSelect((string)r.Attribute("name")!, (string?)r.Attribute("spellcasting"), True(r.Attribute("prepared")), Int(r.Attribute("level")), Int(r.Attribute("number")) ?? 1))
+            .ToList();
+        var stats = rules.Where(r => r.Name == "stat" && ((string?)r.Attribute("name"))?.Contains("spellcasting", StringComparison.OrdinalIgnoreCase) == true)
+            .Select(r => new SpellcastingStat((string)r.Attribute("name")!, (string?)r.Attribute("value") ?? string.Empty, Int(r.Attribute("level"))))
+            .ToList();
+        // FULL, HALF, THIRD and SOLO are not elements (Aurora works them out itself), so read the grant, not a registration
+        var multiclass = rules.Where(r => r.Name == "grant")
+            .Select(r => (string?)r.Attribute("id"))
+            .Select(id => id switch
+            {
+                "ID_INTERNAL_GRANT_MULTICLASS_SPELLCASTING_SLOTS_FULL" => MulticlassSlots.Full,
+                "ID_INTERNAL_GRANT_MULTICLASS_SPELLCASTING_SLOTS_HALF" => MulticlassSlots.Half,
+                "ID_INTERNAL_GRANT_MULTICLASS_SPELLCASTING_SLOTS_HALF_UP" => MulticlassSlots.HalfUp,
+                "ID_INTERNAL_GRANT_MULTICLASS_SPELLCASTING_SLOTS_THIRD" => MulticlassSlots.Third,
+                "ID_INTERNAL_GRANT_MULTICLASS_SPELLCASTING_SLOTS_SOLO" => MulticlassSlots.Solo,
+                _ => (MulticlassSlots?)null,
+            })
+            .FirstOrDefault(k => k is not null);
+        var spellcasting = ReadSpellcasting(elementId, xml);
+
+        if (spellcasting is null && grants.Count == 0 && selects.Count == 0 && stats.Count == 0)
+        {
+            return null;
+        }
+        return new ElementMagic(elementId, (string?)xml.Attribute("name") ?? string.Empty, (string?)xml.Attribute("source"), spellcasting, multiclass, grants, selects, stats);
+    }
+
+    public static SpellcastingDefinition? ReadSpellcasting(Guid elementId, string rawXml)
+    {
+        try
+        {
+            return ReadSpellcasting(elementId, XElement.Parse(rawXml));
+        }
+        catch (XmlException)
+        {
+            return null;
+        }
+    }
+
+    private static SpellcastingDefinition? ReadSpellcasting(Guid elementId, XElement element)
+    {
+        var spellcasting = element.Element("spellcasting");
         if (spellcasting?.Attribute("name") is not { } name)
         {
             return null;

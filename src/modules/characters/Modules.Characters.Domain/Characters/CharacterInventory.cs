@@ -176,4 +176,21 @@ public sealed record CharacterMagic
 
     /// <summary>Spent pact magic slots (warlock).</summary>
     public int ExpendedPactSlots { get; init; }
+
+    /// <summary>
+    /// What is wrong with the magic, or null when it is fine. Prepared spells that no longer fit the rules (a level
+    /// lost, a book switched off) are kept, like a builder pick: the Magic tab shows them for the player to change.
+    /// </summary>
+    public string? Validate()
+    {
+        if (Prepared.Count > 20 || Prepared.Any(p => p.Key.Length is 0 or > 100 || p.Value.Count > 500))
+        {
+            return "At most 20 spellcastings with 500 prepared spells each.";
+        }
+        if (ExpendedSlots.Any(s => s.Key is < 1 or > 9 || s.Value is < 0 or > 99) || ExpendedPactSlots is < 0 or > 99)
+        {
+            return "Spent slots are for spell levels 1 to 9, from 0 to 99 each.";
+        }
+        return null;
+    }
 }
