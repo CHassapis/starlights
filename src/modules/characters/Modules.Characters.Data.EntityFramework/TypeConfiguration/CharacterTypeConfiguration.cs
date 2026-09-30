@@ -54,10 +54,35 @@ public class CharacterTypeConfiguration : IEntityTypeConfiguration<Character>
                     v => new Dictionary<string, string>(v)));
         builder.Ignore(e => e.Story);
 
+        // inventory, extras and magic are JSON documents; a missing property reads as its default, so their shape
+        // can grow without migrations (each carries a version for when it has to change)
+        JsonColumn<CharacterInventory>(builder, "_inventory", "inventory", "{}", () => new CharacterInventory());
+        builder.Ignore(e => e.Inventory);
+        JsonColumn<List<CharacterExtra>>(builder, "_extras", "extras", "[]", () => []);
+        builder.Ignore(e => e.Extras);
+        JsonColumn<CharacterMagic>(builder, "_magic", "magic", "{}", () => new CharacterMagic());
+        builder.Ignore(e => e.Magic);
+
         builder.HasMany(x => x.Components)
             .WithOne()
             .HasForeignKey(x => x.ParentCharacter)
             .OnDelete(DeleteBehavior.Cascade)
             .IsRequired(false);
+    }
+
+    private static void JsonColumn<T>(EntityTypeBuilder<Character> builder, string field, string column, string defaultJson, Func<T> empty)
+        where T : class
+    {
+        builder.Property<T>(field)
+            .HasColumnName(column)
+            .HasColumnType("nvarchar(max)")
+            .HasDefaultValueSql($"N'{defaultJson}'")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<T>(v, (JsonSerializerOptions?)null) ?? empty(),
+                new ValueComparer<T>(
+                    (a, b) => JsonSerializer.Serialize(a, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(b, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null).GetHashCode(),
+                    v => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(v, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
     }
 }

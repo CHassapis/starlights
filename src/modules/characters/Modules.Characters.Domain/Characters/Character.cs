@@ -66,6 +66,42 @@ public sealed class Character : AggregateRoot<CharacterId>
         _story = fields.Where(f => !string.IsNullOrWhiteSpace(f.Key) && !string.IsNullOrWhiteSpace(f.Value))
             .ToDictionary(f => f.Key.Trim(), f => f.Value);
 
+    private CharacterInventory _inventory = new();
+
+    /// <summary>
+    /// Gets what the character carries: items (equipped, attuned), coins, treasure and quest items.
+    /// </summary>
+    public CharacterInventory Inventory => _inventory;
+
+    /// <summary>
+    /// Replaces the inventory.
+    /// </summary>
+    public void UpdateInventory(CharacterInventory inventory) => _inventory = inventory;
+
+    private List<CharacterExtra> _extras = [];
+
+    /// <summary>
+    /// Gets the build options added on top of the normal build (an extra feat, language, optional class feature, …).
+    /// </summary>
+    public IReadOnlyList<CharacterExtra> Extras => _extras.AsReadOnly();
+
+    /// <summary>
+    /// Replaces the extras.
+    /// </summary>
+    public void UpdateExtras(IEnumerable<CharacterExtra> extras) => _extras = extras.ToList();
+
+    private CharacterMagic _magic = new();
+
+    /// <summary>
+    /// Gets the prepared spells and spent spell slots.
+    /// </summary>
+    public CharacterMagic Magic => _magic;
+
+    /// <summary>
+    /// Replaces the prepared spells and spent slots.
+    /// </summary>
+    public void UpdateMagic(CharacterMagic magic) => _magic = magic;
+
     /// <summary>
     /// Replaces the switched-off source books.
     /// </summary>
