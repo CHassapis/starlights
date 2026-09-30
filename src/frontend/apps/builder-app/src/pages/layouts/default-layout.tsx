@@ -185,12 +185,12 @@ export function MainNavigation() {
                       </li>
                       <li>
                         <NavigationMenuLink asChild>
-                          <div className="opacity-50 pointer-events-none">
+                          <div>
                             <Link to="/campaigns" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
                               <MapIcon size={16} className=" size-9 rounded-sm p-2 stroke-starlights-indigo-600" />
                               <div>
-                                <div className="font-medium mt-0.5">Campaigns</div>
-                                <div className="text-muted-foreground text-xs ">Manage your character's adventures.</div>
+                                <div className="font-medium mt-0.5">Campaign Ledger</div>
+                                <div className="text-muted-foreground text-xs ">Campaign notes, trackers and documents.</div>
                               </div>
                             </Link>
                           </div>
@@ -214,12 +214,12 @@ export function MainNavigation() {
                       </li>
                       <li>
                         <NavigationMenuLink asChild>
-                          <div className="opacity-50 pointer-events-none">
-                            <Link to="/homebrew" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
+                          <div>
+                            <Link to="/lore" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
                               <Icon iconNode={cauldron} size={16} className=" size-9 rounded-sm p-2 stroke-starlights-purple-600"></Icon>
                               <div>
-                                <div className="font-medium mt-0.5">Homebrew Content</div>
-                                <div className="text-muted-foreground text-xs ">Create and manage your custom content.</div>
+                                <div className="font-medium mt-0.5">Compendium of Lore</div>
+                                <div className="text-muted-foreground text-xs ">Books, adventures, monsters and lore.</div>
                               </div>
                             </Link>
                           </div>

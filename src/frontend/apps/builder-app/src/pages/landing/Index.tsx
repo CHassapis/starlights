@@ -74,11 +74,11 @@ function LandingTile({
 
 const tiles = [
   {
-    title: "Character Builder | SRD 5.2",
-    description: "A web-based character builder to craft and chronicle your adventurers — fast, and battle-ready.",
+    title: "Character Builder",
+    description: "Craft and chronicle your adventurers with every Aurora book, 2014 and 2024 rules side by side.",
     url: "/characters",
     image: "/images/spiritdragon_olivierbernard_full.jpg",
-    tag: "In Development",
+    tag: undefined,
     enabled: true,
   },
   {
@@ -86,16 +86,16 @@ const tiles = [
     description: "Maintain the campaign ledger: plan quests, track NPCs and sessions, and steer your party through every chapter of the story.",
     url: "/campaigns",
     image: "/images/drow.jpg",
-    tag: "Planned",
-    enabled: false,
+    tag: undefined,
+    enabled: true,
   },
   {
     title: "Compendium of Lore",
     description: "A searchable archive of spells, items, lore, and beasts — a quick reference for everything in your adventure.",
-    url: "/compendium",
+    url: "/lore",
     image: "/images/compendium.jpeg",
-    tag: "Planned",
-    enabled: false,
+    tag: undefined,
+    enabled: true,
   },
 ];
 
