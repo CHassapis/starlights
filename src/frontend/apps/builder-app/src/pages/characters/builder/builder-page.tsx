@@ -26,6 +26,7 @@ import {
 import { usePlayer } from "@/lib/player";
 import { shrinkImage } from "@/lib/image";
 import { SourcesPicker } from "@/components/sources-picker";
+import { StoryTab } from "./story-tab";
 import { useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { cn } from "@/lib/utils";
 
@@ -85,8 +86,13 @@ export function CharacterBuilderPage() {
       <Tabs defaultValue="build">
         <TabsList>
           <TabsTrigger value="build">Build</TabsTrigger>
+          <TabsTrigger value="story">Story</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="story" className="mt-4">
+          <StoryTab characterId={id} />
+        </TabsContent>
 
         <TabsContent value="sources" className="mt-4 max-w-3xl">
           <SourcesTab characterId={id} />

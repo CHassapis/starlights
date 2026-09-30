@@ -51,6 +51,21 @@ public sealed class Character : AggregateRoot<CharacterId>
     /// </summary>
     public IReadOnlyCollection<string> RestrictedSources => _restrictedSources.AsReadOnly();
 
+    private Dictionary<string, string> _story = [];
+
+    /// <summary>
+    /// Gets the character's story: backstory, personality, appearance and notes, as named text fields
+    /// (e.g. "backstory", "traits", "age"); the app decides which fields there are.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Story => _story.AsReadOnly();
+
+    /// <summary>
+    /// Replaces the story fields; empty ones are dropped.
+    /// </summary>
+    public void UpdateStory(IEnumerable<KeyValuePair<string, string>> fields) =>
+        _story = fields.Where(f => !string.IsNullOrWhiteSpace(f.Key) && !string.IsNullOrWhiteSpace(f.Value))
+            .ToDictionary(f => f.Key.Trim(), f => f.Value);
+
     /// <summary>
     /// Replaces the switched-off source books.
     /// </summary>

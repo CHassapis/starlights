@@ -185,6 +185,36 @@ export async function importAuroraCharacter(
   }
   report.unmatched = open.filter((p) => p.parent !== null).map((p) => `${p.name} (${p.registered})`);
 
+  // backstory, personality and appearance, under the Story tab's field names
+  const story: Record<string, string> = {};
+  const storyFields: [string, string][] = [
+    ["input > gender", "gender"],
+    ["input > backstory", "backstory"],
+    ["input > background-traits", "traits"],
+    ["input > background-ideals", "ideals"],
+    ["input > background-bonds", "bonds"],
+    ["input > background-flaws", "flaws"],
+    ["input > background-trinket", "trinket"],
+    ["input > background", "background"],
+    ["input > organization", "allies"],
+    ["input > additional-features", "features"],
+    ["input > quest", "quests"],
+    ["input > notes", "notes"],
+    ["appearance > age", "age"],
+    ["appearance > height", "height"],
+    ["appearance > weight", "weight"],
+    ["appearance > eyes", "eyes"],
+    ["appearance > skin", "skin"],
+    ["appearance > hair", "hair"],
+  ];
+  for (const [selector, key] of storyFields) {
+    const value = text(build, `:scope > ${selector}`);
+    if (value) story[key] = value;
+  }
+  if (Object.keys(story).length > 0) {
+    await apiClient.put(`/api/characters/${characterId}/story`, { fields: story });
+  }
+
   onProgress?.(`${name}: ability scores…`);
   const scores = await apiClient.get<{ abilityScores: { abilityScoreId: string; name: string }[] }>(`/api/characters/${characterId}/ability-scores`);
   for (const ability of ABILITIES) {

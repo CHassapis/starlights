@@ -41,6 +41,19 @@ public class CharacterTypeConfiguration : IEntityTypeConfiguration<Character>
                 new ValueComparer<List<string>>((a, b) => a!.SequenceEqual(b!), v => v.Aggregate(0, (h, s) => HashCode.Combine(h, s.GetHashCode())), v => v.ToList()));
         builder.Ignore(e => e.RestrictedSources);
 
+        builder.Property<Dictionary<string, string>>("_story")
+            .HasColumnName("story")
+            .HasColumnType("nvarchar(max)")
+            .HasDefaultValue(new Dictionary<string, string>())
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, string>(),
+                new ValueComparer<Dictionary<string, string>>(
+                    (a, b) => a!.Count == b!.Count && !a.Except(b).Any(),
+                    v => v.Aggregate(0, (h, kv) => HashCode.Combine(h, kv.Key.GetHashCode(), kv.Value.GetHashCode())),
+                    v => new Dictionary<string, string>(v)));
+        builder.Ignore(e => e.Story);
+
         builder.HasMany(x => x.Components)
             .WithOne()
             .HasForeignKey(x => x.ParentCharacter)
