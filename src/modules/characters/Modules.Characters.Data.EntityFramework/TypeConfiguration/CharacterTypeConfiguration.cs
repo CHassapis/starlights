@@ -21,6 +21,14 @@ public class CharacterTypeConfiguration : IEntityTypeConfiguration<Character>
             .HasColumnName("name")
             .IsRequired();
 
+        builder.Property(e => e.PlayerName)
+            .HasColumnName("player_name")
+            .HasMaxLength(64)
+            .HasDefaultValue(string.Empty)
+            .IsRequired();
+
+        builder.HasIndex(e => e.PlayerName);
+
         builder.HasMany(x => x.Components)
             .WithOne()
             .HasForeignKey(x => x.ParentCharacter)

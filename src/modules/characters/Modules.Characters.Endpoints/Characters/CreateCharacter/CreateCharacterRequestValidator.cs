@@ -16,5 +16,8 @@ public sealed class CreateCharacterRequestValidator : Validator<CreateCharacterR
 
         RuleFor(x => x.PortraitUrl)
             .MaximumLength(2048).WithMessage("Portrait URL cannot exceed 2048 characters.");
+
+        RuleFor(x => x.PlayerName)
+            .MaximumLength(64).WithMessage("Player name cannot exceed 64 characters.");
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using FastEndpoints;
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain;
@@ -9,7 +9,16 @@ using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Characters.Endpoints.Characters.GetCharacters;
 
-sealed class GetCharactersEndpoint : EndpointWithoutRequest<GetCharactersResponse>
+public sealed record GetCharactersRequest
+{
+    /// <summary>
+    /// Only the characters of this player; all characters when omitted.
+    /// </summary>
+    [QueryParam]
+    public string? Player { get; init; }
+}
+
+sealed class GetCharactersEndpoint : Endpoint<GetCharactersRequest, GetCharactersResponse>
 {
     private readonly IPersistence _persistence;
 
@@ -25,13 +34,17 @@ sealed class GetCharactersEndpoint : EndpointWithoutRequest<GetCharactersRespons
         AllowAnonymous();
     }
 
-    public override async Task HandleAsync(CancellationToken ct)
+    public override async Task HandleAsync(GetCharactersRequest req, CancellationToken ct)
     {
         using var _ = CharactersInstrumentation.StartActivity(nameof(GetCharactersEndpoint));
 
         var repository = _persistence.GetRepository<ICharactersRepository>();
 
         var characters = await repository.GetCharactersAsync();
+        if (req.Player is not null)
+        {
+            characters = characters.Where(c => string.Equals(c.PlayerName, req.Player.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        }
 
         var models = new List<CharacterDetailsDataModel>();
 
@@ -58,7 +71,8 @@ sealed class GetCharactersEndpoint : EndpointWithoutRequest<GetCharactersRespons
                 Name = character.Name,
                 PortraitUrl = appearance.PortraitUrl,
                 Level = progression.CharacterLevel,
-                Build = build.ToString()
+                Build = build.ToString(),
+                PlayerName = character.PlayerName
             });
         }
 

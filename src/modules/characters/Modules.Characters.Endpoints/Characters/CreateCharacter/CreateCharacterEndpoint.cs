@@ -36,6 +36,10 @@ public sealed class CreateCharacterEndpoint : Endpoint<CreateCharacterRequest, C
 
         // character entity
         var newCharacter = _characterCreationService.Create(req.Name);
+        if (!string.IsNullOrWhiteSpace(req.PlayerName))
+        {
+            newCharacter.AssignPlayer(req.PlayerName);
+        }
 
         // update appearance component if portrait url is provided
         if (req.PortraitUrl is not null)

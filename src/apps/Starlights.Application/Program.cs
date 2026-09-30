@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Scalar.AspNetCore;
 using Starlights.Modules.Characters.Data.EntityFramework;
 using Starlights.Modules.Characters.Data.EntityFramework.EventProcessing;
@@ -81,6 +83,27 @@ public sealed class Program
                     .WithDefaultHttpClient(ScalarTarget.JavaScript, ScalarClient.Fetch);
             });
         }
+
+        // content administration (initialize, the Aurora import, creating/editing/deleting elements) needs the
+        // admin key; players only ever read elements. There are no accounts, so without this any player could
+        // wipe the content. With no key configured these requests are refused.
+        var adminKey = Encoding.UTF8.GetBytes(app.Configuration["Admin:Key"] ?? string.Empty);
+        app.Use(async (context, next) =>
+        {
+            var path = context.Request.Path;
+            var needsAdmin = path.StartsWithSegments("/api/elements") &&
+                (!HttpMethods.IsGet(context.Request.Method) || path.StartsWithSegments("/api/elements/initialize"));
+
+            var given = Encoding.UTF8.GetBytes(context.Request.Headers["X-Admin-Key"].ToString());
+            if (needsAdmin && (adminKey.Length == 0 || !CryptographicOperations.FixedTimeEquals(given, adminKey)))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsync("This needs the admin key (X-Admin-Key header).");
+                return;
+            }
+
+            await next();
+        });
 
         // configure the platform and its modules
         app.UseStarlightsPlatform();

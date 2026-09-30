@@ -33,6 +33,17 @@ public sealed class Character : AggregateRoot<CharacterId>
     public string Name { get; } = string.Empty;
 
     /// <summary>
+    /// Gets the name of the player the character belongs to (empty when unassigned). Players pick their name
+    /// in the app; there are no accounts.
+    /// </summary>
+    public string PlayerName { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Assigns the character to a player.
+    /// </summary>
+    public void AssignPlayer(string playerName) => PlayerName = playerName.Trim();
+
+    /// <summary>
     /// Creates a new instance of the <see cref="Character"/> class with the specified name.
     /// </summary>
     public static Character Create(string name)
