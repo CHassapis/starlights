@@ -28,6 +28,7 @@ import { SourcesPicker } from "@/components/sources-picker";
 import { StoryTab } from "./story-tab";
 import { AbilitiesTab } from "./abilities-tab";
 import { EquipmentTab } from "./equipment-tab";
+import { MagicTab } from "./magic-tab";
 import { ExtrasCard } from "./extras-card";
 import { editionOf, restrictedForEdition, useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { EditionPicker } from "@/components/edition-picker";
@@ -88,9 +89,10 @@ export function CharacterBuilderPage() {
       <BuilderHeader characterId={id} choices={choicesData?.choices ?? []} pending={choicesData?.pending ?? false} />
 
       <Tabs defaultValue="build">
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="build">Build</TabsTrigger>
           <TabsTrigger value="abilities">Abilities</TabsTrigger>
+          <TabsTrigger value="magic">Magic</TabsTrigger>
           <TabsTrigger value="equipment">Equipment</TabsTrigger>
           <TabsTrigger value="story">Story</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
@@ -98,6 +100,10 @@ export function CharacterBuilderPage() {
 
         <TabsContent value="abilities" className="mt-4">
           <AbilitiesTab characterId={id} />
+        </TabsContent>
+
+        <TabsContent value="magic" className="mt-4">
+          <MagicTab characterId={id} />
         </TabsContent>
 
         <TabsContent value="equipment" className="mt-4">

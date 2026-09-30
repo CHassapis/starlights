@@ -206,15 +206,15 @@ export function expendSlot(state: MagicState, level: number, total: number): Mag
 export function restoreSlot(state: MagicState, level: number): MagicState {
   const used = expended(state, level);
   if (used <= 0) return state;
-  const expendedSlots = { ...state.expendedSlots, [level]: used - 1 };
+  const expendedSlots: Record<string, number> = { ...state.expendedSlots, [level]: used - 1 };
   if (expendedSlots[level] === 0) delete expendedSlots[level];
   return { ...state, expendedSlots };
 }
 
-/** Clicking the n-th pip (1-based) of a row: spends up to it, or gets it back when it is the last spent one. */
+/** Sets how many slots of a level are spent (ticking the third box of a row spends three). */
 export function setSpent(state: MagicState, level: number, spent: number, total: number): MagicState {
   const n = Math.max(0, Math.min(total, spent));
-  const expendedSlots = { ...state.expendedSlots, [level]: n };
+  const expendedSlots: Record<string, number> = { ...state.expendedSlots, [level]: n };
   if (n === 0) delete expendedSlots[level];
   return { ...state, expendedSlots };
 }
