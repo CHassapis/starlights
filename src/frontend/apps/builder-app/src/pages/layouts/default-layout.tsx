@@ -196,8 +196,8 @@ export function MainNavigation() {
                       </li>
                       <li>
                         <NavigationMenuLink asChild>
-                          <div className="opacity-50 pointer-events-none">
-                            <Link to="/campaigns" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
+                          <div>
+                            <Link to="/compendium" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
                               <LibraryBigIcon size={16} className=" size-9 rounded-sm p-2 stroke-starlights-indigo-600" />
                               <div>
                                 <div className="font-medium mt-0.5">Compendium</div>

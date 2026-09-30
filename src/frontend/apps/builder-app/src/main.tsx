@@ -9,6 +9,7 @@ import AboutPage from "./pages/about/Index.tsx";
 import CharactersPage from "./pages/characters/Index.tsx";
 import CharactersCreatePage from "./pages/characters/create/Index.tsx";
 import CharactersDetailsPage from "./pages/characters/details/Index.tsx";
+import { CompendiumPage } from "./pages/compendium/Index.tsx";
 import { LandingPage2 } from "./pages/landing/Index.tsx";
 // import "./styles/typography.css";
 import App, { AppWide } from "./App.tsx";
@@ -48,6 +49,7 @@ const router = createBrowserRouter([
       { path: "about", element: <AboutPage /> },
       { path: "development", element: <DevelopmentPage /> },
       { path: "lib", element: <LibraryDevelopmentPage /> },
+      { path: "compendium", element: <CompendiumPage /> },
     ],
   },
   {
