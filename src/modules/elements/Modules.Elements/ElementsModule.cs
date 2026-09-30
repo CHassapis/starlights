@@ -24,6 +24,7 @@ public sealed class ElementsModule : IPlatformModule
             builder.Configuration["Aurora:HomebrewPath"] ?? "/data/homebrew"));
 
         builder.Services.AddSingleton<IItemCatalog, Services.Items.ItemCatalog>();
+        builder.Services.AddSingleton<ISpellIndex, Services.Spells.SpellIndex>();
 
         builder.Services.AddSingleton(new FiveEToolsOptions(builder.Configuration["FiveETools:Path"] ?? "/data/5etools"));
         builder.Services.AddSingleton<FiveEToolsData>();

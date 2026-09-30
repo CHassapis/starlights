@@ -93,6 +93,17 @@ internal class ElementsRepository : RepositoryBase<Element>, IElementsRepository
         return rows.ConvertAll(r => new AuroraElementXml(r.Id.Value, r.Name, r.AuroraId, r.AuroraType, r.Source, r.RawXml));
     }
 
+    public async Task<Dictionary<Guid, string>> GetAuroraXmlByIdsAsync(IReadOnlyCollection<Guid> elementIds)
+    {
+        var ids = elementIds.Select(id => new ElementId(id)).Distinct().ToList();
+        var rows = await Context.Set<AuroraSourceComponent>().AsNoTracking()
+            .Where(c => ids.Contains(c.OwningElement))
+            .Select(c => new { c.OwningElement, c.RawXml })
+            .ToListAsync();
+
+        return rows.GroupBy(r => r.OwningElement.Value).ToDictionary(g => g.Key, g => g.First().RawXml);
+    }
+
     public async Task<Dictionary<string, string>> GetAuroraNamesAsync()
     {
         var rows = await Context.Set<AuroraSourceComponent>().AsNoTracking()

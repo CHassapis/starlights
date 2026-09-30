@@ -21,7 +21,13 @@ internal sealed class SupportsExpression
         _tokens = tokens;
     }
 
-    public static Func<IReadOnlyCollection<string>, string?, bool> Compile(string expression)
+    public static Func<IReadOnlyCollection<string>, string?, bool> Compile(string expression) => Compile(expression, numbersAreTerms: false);
+
+    /// <summary>
+    /// With <paramref name="numbersAreTerms"/>, a number is an ordinary term (a spell selection passes the spell's
+    /// level among its supports) instead of matching everything.
+    /// </summary>
+    public static Func<IReadOnlyCollection<string>, string?, bool> Compile(string expression, bool numbersAreTerms)
     {
         var parser = new SupportsExpression(Tokenize(expression));
         return (supports, auroraId) =>
@@ -29,11 +35,23 @@ internal sealed class SupportsExpression
             parser._position = 0;
             parser._isMatch = term =>
                 term.StartsWith("$(", StringComparison.Ordinal) ||
-                int.TryParse(term, out _) ||
+                (!numbersAreTerms && int.TryParse(term, out _)) ||
                 string.Equals(term, auroraId, StringComparison.Ordinal) ||
                 supports.Contains(term, StringComparer.OrdinalIgnoreCase);
             return parser.ParseOr();
         };
+    }
+
+    /// <summary>
+    /// Fills in a spell selection's placeholders: $(spellcasting:list) with the lists (A|B), $(spellcasting:slots)
+    /// with the levels (1|2|3). A placeholder with nothing to fill in matches nothing.
+    /// </summary>
+    public static string FillSpellPlaceholders(string expression, IReadOnlyCollection<string> lists, IReadOnlyCollection<int> slotLevels)
+    {
+        static string Group(IEnumerable<string> terms) => terms.Any() ? $"({string.Join("|", terms)})" : "ID_NOTHING_MATCHES";
+        return expression
+            .Replace("$(spellcasting:list)", Group(lists), StringComparison.OrdinalIgnoreCase)
+            .Replace("$(spellcasting:slots)", Group(slotLevels.Select(l => l.ToString(System.Globalization.CultureInfo.InvariantCulture))), StringComparison.OrdinalIgnoreCase);
     }
 
     private bool ParseOr()

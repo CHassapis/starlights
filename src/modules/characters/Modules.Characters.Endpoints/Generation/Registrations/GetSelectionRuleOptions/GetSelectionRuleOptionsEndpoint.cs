@@ -5,6 +5,8 @@ using Starlights.Modules.Characters.Domain.Characters;
 using Starlights.Modules.Characters.Domain.Registrations;
 using Starlights.Modules.Characters.Endpoints.Models;
 using Starlights.Modules.Elements.Integration;
+using Starlights.Modules.Elements.Integration.Models;
+using Starlights.Modules.Characters.Services.Statistics;
 using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Characters.Endpoints.Generation.Registrations.GetSelectionRuleOptions;
@@ -13,11 +15,15 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
 {
     private readonly IPersistence _persistence;
     private readonly IElementsModuleQueries _elements;
+    private readonly ISpellIndex _spells;
+    private readonly StatisticsCalculator _statistics;
 
-    public GetSelectionRuleOptionsEndpoint(IPersistence persistence, IElementsModuleQueries elements)
+    public GetSelectionRuleOptionsEndpoint(IPersistence persistence, IElementsModuleQueries elements, ISpellIndex spells, StatisticsCalculator statistics)
     {
         _persistence = persistence;
         _elements = elements;
+        _spells = spells;
+        _statistics = statistics;
     }
 
     public override void Configure()
@@ -61,7 +67,8 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
         var ownerElement = await _elements.GetElementWithRules(owner.AssociatedElementId);
         var supports = ownerElement?.SelectionRules.SingleOrDefault(x => x.RuleId == selectionRule.AssociatedSelectionRuleId.Value)?.Supports;
 
-        var elements = await _elements.GetSelectionOptions(selectionRule.ElementType, supports);
+        var elements = await SpellOptionsAsync(character, characterRegistrations, owner, selectionRule, supports, ct)
+            ?? await _elements.GetSelectionOptions(selectionRule.ElementType, supports);
 
         // like Aurora: leave out what the character already has (a skill it is proficient in, a feat it took),
         // except this slot's own pick, and list repeatable copies of an element (the nine "Skilled") once
@@ -90,5 +97,75 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
         };
 
         await Send.OkAsync(response, ct);
+    }
+
+    /// <summary>
+    /// A spell selection like Aurora's "$(spellcasting:list), $(spellcasting:slots)": the spells on this character's
+    /// lists for that spellcasting (with lists added by features such as Magical Secrets) of the levels it has slots
+    /// for; a number is a spell level ("…, 0" is cantrips). Null when it is not such a selection or cannot be worked
+    /// out, so the plain supports filter applies instead.
+    /// </summary>
+    private async Task<List<ElementDataModel>?> SpellOptionsAsync(
+        Character character,
+        IReadOnlyCollection<Registration> registrations,
+        Registration owner,
+        RegistrationSelectionRule selectionRule,
+        string? supports,
+        CancellationToken ct)
+    {
+        if (!string.Equals(selectionRule.ElementType, "Spell", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(supports))
+        {
+            return null;
+        }
+
+        // without placeholders only the numbers need reading as spell levels ("0,Cleric": a cleric cantrip)
+        if (!supports.Contains("$(spellcasting:", StringComparison.OrdinalIgnoreCase))
+        {
+            return await Keep(await _spells.GetSpellOptionsAsync(supports, [], [], ct));
+        }
+
+        var definitions = await _spells.GetSpellcastingAsync(registrations.Select(r => r.AssociatedElementId.Value).Distinct().ToList(), ct);
+        var spellcasting = await _spells.GetSelectSpellcastingAsync(owner.AssociatedElementId.Value, selectionRule.Name, ct);
+        var own = definitions.Where(d => spellcasting is null ? !d.Extend : string.Equals(d.Name, spellcasting, StringComparison.OrdinalIgnoreCase)).ToList();
+        var lists = own.Where(d => !d.Extend).SelectMany(d => d.Lists).Concat(own.Where(d => d.Extend).SelectMany(d => d.Extends)).Distinct().ToList();
+        if (lists.Count == 0 && supports.Contains("$(spellcasting:list)", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        // the spell levels this spellcasting has slots for (its own table; pact magic: up to the pact slot level)
+        var statistics = _statistics.Calculate(character, [.. registrations]).Statistics;
+        var names = (spellcasting is null ? own.Select(d => d.Name) : [spellcasting]).Select(n => n.ToLowerInvariant().Replace(' ', '-')).Distinct().ToList();
+        var levels = new SortedSet<int>();
+        foreach (var name in names)
+        {
+            for (var level = 1; level <= 9; level++)
+            {
+                if (statistics.TryGetGroup($"{name}:spellcasting:slots:{level}", out var group) && group.IsCompleted && group.Sum() > 0)
+                {
+                    levels.Add(level);
+                }
+            }
+            if (statistics.TryGetGroup($"{name}:spellcasting:slot", out var pact) && pact.IsCompleted)
+            {
+                for (var level = 1; level <= pact.Sum(); level++)
+                {
+                    levels.Add(level);
+                }
+            }
+        }
+
+        return await Keep(await _spells.GetSpellOptionsAsync(supports, lists, levels, ct));
+
+        async Task<List<ElementDataModel>> Keep(List<SpellInfo> spells)
+        {
+            var ids = spells.Select(s => s.Id).ToHashSet();
+            if (selectionRule.SelectedOption?.Value is { } picked)
+            {
+                // an earlier pick stays offered even if it no longer fits (a changed level, an updated book)
+                ids.Add(picked);
+            }
+            return (await _elements.GetSelectionOptions(selectionRule.ElementType, null)).Where(e => ids.Contains(e.Id)).ToList();
+        }
     }
 }

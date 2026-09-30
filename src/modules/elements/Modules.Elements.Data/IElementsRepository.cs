@@ -48,6 +48,9 @@ public interface IElementsRepository : IRepository
     /// <summary>The imported elements of the given Aurora types (as written in the XML), with their XML.</summary>
     Task<List<AuroraElementXml>> GetAuroraElementsAsync(IReadOnlyCollection<string> auroraTypes);
 
+    /// <summary>The original Aurora XML of the given elements (those imported from Aurora).</summary>
+    Task<Dictionary<Guid, string>> GetAuroraXmlByIdsAsync(IReadOnlyCollection<Guid> elementIds);
+
     /// <summary>Every imported element's name by its Aurora id.</summary>
     Task<Dictionary<string, string>> GetAuroraNamesAsync();
 
