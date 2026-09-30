@@ -261,6 +261,9 @@ export async function importAuroraCharacter(
     }
   }
 
+  onProgress?.(`${name}: prepared spells…`);
+  await importAuroraPreparedSpells(characterId, doc);
+
   onProgress?.(`${name}: ability scores…`);
   const scores = await apiClient.get<{ abilityScores: { abilityScoreId: string; name: string }[] }>(`/api/characters/${characterId}/ability-scores`);
   for (const ability of ABILITIES) {
@@ -272,4 +275,42 @@ export async function importAuroraCharacter(
   }
 
   return report;
+}
+
+/**
+ * The spells prepared in an Aurora file's <magic> section, per spellcasting ("Cleric"), saved as the character's
+ * prepared spells. Aurora's always-prepared spells (domain spells, a wizard's whole spellbook) are left out: the
+ * rules know those. Prepared spells already saved for a spellcasting are kept. Returns how many were added.
+ */
+export async function importAuroraPreparedSpells(characterId: string, doc: Document): Promise<number> {
+  const wanted: Record<string, string[]> = {};
+  for (const casting of Array.from(doc.querySelectorAll("magic > spellcasting"))) {
+    const name = casting.getAttribute("name");
+    const prepared = Array.from(casting.querySelectorAll(":scope > spells > spell"))
+      .filter((s) => s.getAttribute("prepared") === "true" && s.getAttribute("always-prepared") !== "true")
+      .map((s) => s.getAttribute("id") ?? "")
+      .filter(Boolean);
+    if (name && prepared.length > 0) wanted[name] = prepared;
+  }
+  const auroraIds = [...new Set(Object.values(wanted).flat())];
+  if (auroraIds.length === 0) return 0;
+
+  const { elements: ids } = await apiClient.post<{ ids: string[] }, { elements: Record<string, string> }>("/api/elements/aurora-lookup", { ids: auroraIds });
+  const magic = await apiClient.get<{ version: number; prepared: Record<string, string[]>; expendedSlots: Record<string, number>; expendedPactSlots: number }>(
+    `/api/characters/${characterId}/magic`,
+  );
+  let added = 0;
+  const prepared = { ...magic.prepared };
+  for (const [name, list] of Object.entries(wanted)) {
+    const current = new Set(prepared[name] ?? []);
+    for (const id of list.map((a) => ids[a]).filter(Boolean)) {
+      if (!current.has(id)) {
+        current.add(id);
+        added++;
+      }
+    }
+    prepared[name] = [...current];
+  }
+  if (added > 0) await apiClient.put(`/api/characters/${characterId}/magic`, { ...magic, prepared });
+  return added;
 }
