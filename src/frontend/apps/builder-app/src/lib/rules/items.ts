@@ -411,3 +411,51 @@ export function attunementMax(c: Pick<CharacterFacts, "stat">): number {
   const max = c.stat("attunement:max");
   return max && max > 0 ? max : 3;
 }
+
+// ---- how the inventory is shown
+
+export interface ContainerGroup {
+  container: Resolved;
+  items: Resolved[];
+  /** pounds inside (weightless containers still show what they hold) */
+  contents: number;
+  capacity: number | null;
+  /** its contents are not on the character: a mount, a vehicle, or a stored container */
+  away: boolean;
+}
+
+export interface InventoryGroups {
+  equipped: Resolved[];
+  carried: Resolved[];
+  containers: ContainerGroup[];
+  stored: Resolved[];
+}
+
+/**
+ * The inventory as the Equipment tab shows it: equipped items, what is carried loose, one group per container
+ * (with what it holds and whether that is on the character at all), and what is stored elsewhere.
+ */
+export function groupInventory(inventory: Inventory, catalog: Catalog): InventoryGroups {
+  const entries = new Map(inventory.items.map((e) => [e.id, resolve(e, catalog)]));
+  const groups: InventoryGroups = { equipped: [], carried: [], containers: [], stored: [] };
+  const byContainer = new Map<string, Resolved[]>();
+  for (const r of entries.values()) {
+    const container = r.entry.containerId ? entries.get(r.entry.containerId) : undefined;
+    if (container) byContainer.set(container.entry.id, [...(byContainer.get(container.entry.id) ?? []), r]);
+    else if (r.entry.stored) groups.stored.push(r);
+    else if (r.entry.equipped) groups.equipped.push(r);
+    else groups.carried.push(r);
+  }
+  for (const r of entries.values()) {
+    if (!r.container && !byContainer.has(r.entry.id)) continue;
+    const items = byContainer.get(r.entry.id) ?? [];
+    groups.containers.push({
+      container: r,
+      items,
+      contents: round(items.reduce((n, i) => n + i.weight * i.entry.quantity, 0)),
+      capacity: r.container?.capacity ?? null,
+      away: !isCarried(r.entry, entries) || !!r.container?.detached,
+    });
+  }
+  return groups;
+}

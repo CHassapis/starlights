@@ -27,6 +27,7 @@ import { firstImage, usePictureDrop, usePortraitUpload } from "@/lib/picture-dro
 import { SourcesPicker } from "@/components/sources-picker";
 import { StoryTab } from "./story-tab";
 import { AbilitiesTab } from "./abilities-tab";
+import { EquipmentTab } from "./equipment-tab";
 import { editionOf, restrictedForEdition, useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { EditionPicker } from "@/components/edition-picker";
 import { cn } from "@/lib/utils";
@@ -89,12 +90,17 @@ export function CharacterBuilderPage() {
         <TabsList>
           <TabsTrigger value="build">Build</TabsTrigger>
           <TabsTrigger value="abilities">Abilities</TabsTrigger>
+          <TabsTrigger value="equipment">Equipment</TabsTrigger>
           <TabsTrigger value="story">Story</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
         </TabsList>
 
         <TabsContent value="abilities" className="mt-4">
           <AbilitiesTab characterId={id} />
+        </TabsContent>
+
+        <TabsContent value="equipment" className="mt-4">
+          <EquipmentTab characterId={id} />
         </TabsContent>
 
         <TabsContent value="story" className="mt-4">

@@ -36,6 +36,8 @@ export interface CompendiumEntry {
   description: string;
   supports: string[];
   rules: CompendiumRule[];
+  /** Aurora's setters (a spell's level, school, time, range, …; attributes as "name@attribute") */
+  setters?: Record<string, string>;
 }
 
 export function useCompendium(): UseQueryResult<{ items: CompendiumListItem[] }, Error> {

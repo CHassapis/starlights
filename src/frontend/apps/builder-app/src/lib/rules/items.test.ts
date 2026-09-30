@@ -6,6 +6,7 @@ import {
   displayName,
   equipProblems,
   equipSlots,
+  groupInventory,
   isActive,
   resolve,
   weight,
@@ -228,5 +229,29 @@ describe("attacks", () => {
   it("lists equipped weapons first and leaves out stored ones", () => {
     const list = attacks(inv(entry("a", "dagger"), entry("b", "longsword", { equipped: "Main Hand" }), entry("c", "rapier", { stored: true })), catalog, facts({}));
     expect(list.map((a) => a.name)).toEqual(["Longsword", "Dagger"]);
+  });
+});
+
+describe("grouping for the Equipment tab", () => {
+  it("puts things where they are, containers with their contents and whether those are with the character", () => {
+    const g = groupInventory(
+      inv(
+        entry("s", "longsword", { equipped: "Main Hand" }),
+        entry("p", "backpack"),
+        entry("r", "rope", { containerId: "p", quantity: 2 }),
+        entry("c", "cart"),
+        entry("i", "ingot", { containerId: "c", quantity: 10 }),
+        entry("b", "bag", { stored: true }),
+        entry("d", "dagger", { stored: true }),
+      ),
+      catalog,
+    );
+    expect(g.equipped.map((r) => r.entry.id)).toEqual(["s"]);
+    expect(g.carried.map((r) => r.entry.id)).toEqual(["p", "c"]);
+    expect(g.stored.map((r) => r.entry.id)).toEqual(["b", "d"]);
+    const byId = new Map(g.containers.map((c) => [c.container.entry.id, c]));
+    expect(byId.get("p")).toMatchObject({ contents: 10, capacity: 30, away: false });
+    expect(byId.get("c")).toMatchObject({ contents: 10, away: true });
+    expect(byId.get("b")).toMatchObject({ contents: 0, capacity: 500, away: true });
   });
 });
