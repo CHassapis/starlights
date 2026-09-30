@@ -195,7 +195,7 @@ internal sealed class AuroraImporter : IAuroraImporter
                         {
                             break;
                         }
-                        var stat = element.AddComponent(id => new StatisticRuleComponent(id, statName, statValue, level));
+                        var stat = element.AddComponent(id => new StatisticRuleComponent(id, ToStatisticName(statName), ToStatisticName(statValue), level));
                         stat.UpdateStackingBonus((string?)rule.Attribute("bonus"));
                         stat.UpdateDisplayName((string?)rule.Attribute("alt"));
                         break;
@@ -348,6 +348,19 @@ internal sealed class AuroraImporter : IAuroraImporter
     }
 
     private static int? ParseInt(XAttribute? attribute) => int.TryParse(attribute?.Value, out var value) ? value : null;
+
+    private static readonly Regex AuroraSave = new(@"^(strength|dexterity|constitution|intelligence|wisdom|charisma):save\b", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Aurora statistic names to the Starlights convention (lowercase, spaces as hyphens, saves named after the
+    /// saving throw element): "animal handling:proficiency" → "animal-handling:proficiency",
+    /// "strength:save:proficiency" → "strength-saving-throw:proficiency". Numbers pass through.
+    /// </summary>
+    private static string ToStatisticName(string auroraName)
+    {
+        var name = auroraName.Trim().ToLowerInvariant();
+        return AuroraSave.Replace(name, "$1-saving-throw").Replace(' ', '-');
+    }
 
     private static string MapType(string auroraType) => TypeMap.GetValueOrDefault(auroraType.Trim(), auroraType.Trim());
 
