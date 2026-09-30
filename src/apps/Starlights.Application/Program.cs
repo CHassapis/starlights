@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -71,6 +72,12 @@ public sealed partial class Program
         var app = builder.Build();
 
         app.MapDefaultEndpoints();
+        if (!app.Environment.IsDevelopment())
+        {
+            // liveness for the container healthcheck: answers while the process serves requests and reports nothing
+            // else (the full /health report stays development-only); outside /api, so nginx never exposes it
+            app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = r => r.Tags.Contains("live") });
+        }
 
         if (app.Environment.IsDevelopment())
         {
