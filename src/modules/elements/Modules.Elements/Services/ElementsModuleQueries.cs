@@ -89,6 +89,27 @@ internal class ElementsModuleQueries : IElementsModuleQueries
         return elements.ConvertAll(e => e.AsElementDataModel());
     }
 
+    // rebuilt every few minutes: it only changes when content is imported
+    private static (DateTime Loaded, IReadOnlySet<Guid> Ids)? s_referenced;
+
+    public async Task<IReadOnlySet<Guid>> GetElementsReferencedByRequirements()
+    {
+        if (s_referenced is { } cached && DateTime.UtcNow - cached.Loaded < TimeSpan.FromMinutes(5))
+        {
+            return cached.Ids;
+        }
+
+        var requirements = await _persistence.GetRepository<IElementsRepository>().GetRuleRequirementsAsync();
+        var ids = requirements
+            .SelectMany(r => r.Split([',', '|', '!', '(', ')', ' '], StringSplitOptions.RemoveEmptyEntries))
+            .Select(term => Guid.TryParse(term, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .ToHashSet();
+
+        s_referenced = (DateTime.UtcNow, ids);
+        return ids;
+    }
+
     public async Task<List<ElementDataModel>> GetElementsWithRules(IReadOnlyCollection<Guid> elementIds)
     {
         if (elementIds.Count == 0)

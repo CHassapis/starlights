@@ -39,19 +39,19 @@ public static class DataModelMappingExtensions
     public static IncludeRuleDataModel AsIncludeRuleDataModel(this IncludeRuleComponent rule)
     {
         ArgumentNullException.ThrowIfNull(rule, nameof(rule));
-        return new IncludeRuleDataModel(rule.Id, rule.IncludeElement, rule.LevelRequirement);
+        return new IncludeRuleDataModel(rule.Id, rule.IncludeElement, rule.LevelRequirement, rule.Requirements);
     }
 
     public static StatisticRuleDataModel AsStatisticRuleDataModel(this StatisticRuleComponent rule)
     {
         ArgumentNullException.ThrowIfNull(rule, nameof(rule));
-        return new StatisticRuleDataModel(rule.Id, rule.Name, rule.Value, rule.StackingBonus, rule.LevelRequirement);
+        return new StatisticRuleDataModel(rule.Id, rule.Name, rule.Value, rule.StackingBonus, rule.LevelRequirement, rule.Requirements);
     }
 
     public static SelectionRuleDataModel AsSelectionRuleDataModel(this SelectionRuleComponent rule)
     {
         ArgumentNullException.ThrowIfNull(rule, nameof(rule));
-        return new SelectionRuleDataModel(rule.Id, rule.ElementType, rule.Name, rule.LevelRequirement, rule.Supports, rule.Quantity);
+        return new SelectionRuleDataModel(rule.Id, rule.ElementType, rule.Name, rule.LevelRequirement, rule.Supports, rule.Quantity, rule.Requirements);
     }
 
     public static AbilityDataModel AsAbilityDataModel(this Element element)

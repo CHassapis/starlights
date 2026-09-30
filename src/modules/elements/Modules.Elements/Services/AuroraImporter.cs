@@ -96,7 +96,7 @@ internal sealed class AuroraImporter : IAuroraImporter
 
         while (queue.TryDequeue(out var element))
         {
-            foreach (var rule in element.Rules.Where(r => !IsConditional(r)))
+            foreach (var rule in element.Rules.Where(r => !IsSkipped(r)))
             {
                 if (rule.Name.LocalName == "grant")
                 {
@@ -200,11 +200,13 @@ internal sealed class AuroraImporter : IAuroraImporter
 
             foreach (var rule in aurora.Rules)
             {
-                if (IsConditional(rule))
+                if (IsSkipped(rule))
                 {
                     skippedConditional++;
                     continue;
                 }
+
+                var requirements = RequirementsOf(rule, byId);
 
                 var level = Math.Max(0, ParseInt(rule.Attribute("level")) ?? 0);
 
@@ -217,7 +219,7 @@ internal sealed class AuroraImporter : IAuroraImporter
                             skippedUnresolved++;
                             break;
                         }
-                        Attach($"grant:{grantId}:{level}", id => new IncludeRuleComponent(id, ToElementId(grantId), level));
+                        Attach($"grant:{grantId}:{level}", id => new IncludeRuleComponent(id, ToElementId(grantId), level)).UpdateRequirements(requirements);
                         break;
 
                     case "stat":
@@ -230,6 +232,7 @@ internal sealed class AuroraImporter : IAuroraImporter
                         var stat = Attach($"stat:{statName}:{statValue}:{level}", id => new StatisticRuleComponent(id, ToStatisticName(statName), ToStatisticName(statValue), level));
                         stat.UpdateStackingBonus((string?)rule.Attribute("bonus"));
                         stat.UpdateDisplayName((string?)rule.Attribute("alt"));
+                        stat.UpdateRequirements(requirements);
                         break;
 
                     case "select":
@@ -243,6 +246,7 @@ internal sealed class AuroraImporter : IAuroraImporter
                         select.UpdateSupports(rule.Elements("item").Any() ? ListKey(aurora, selectName) : (string?)rule.Attribute("supports"));
                         select.UpdateQuantity(Math.Max(1, ParseInt(rule.Attribute("number")) ?? 1));
                         select.UpdateIsOptional(string.Equals((string?)rule.Attribute("optional"), "true", StringComparison.OrdinalIgnoreCase));
+                        select.UpdateRequirements(requirements);
                         break;
                 }
             }
@@ -395,10 +399,25 @@ internal sealed class AuroraImporter : IAuroraImporter
         @"^!(ID_[A-Z0-9_]*MULTICLASS[A-Z0-9_]*|ID_WOTC_TCOE_OPTION_CUSTOMIZED_[A-Z_]+|ID_INTERNAL_PHB24_FEATURE_REPLACEMENT_[A-Z0-9_]+|ID_INTERNAL_GRANT_OPTIONAL_BACKGROUND_FEATURE)$",
         RegexOptions.Compiled);
 
-    private static bool IsConditional(XElement rule)
+    // rules that only apply while something is equipped: there is no equipment yet
+    private static bool IsSkipped(XElement rule) => rule.Attribute("equipped") is not null;
+
+    private static readonly Regex AuroraId = new(@"ID_[A-Za-z0-9_]+", RegexOptions.Compiled);
+
+    /// <summary>
+    /// The rule's requirements for the character processor, with the Aurora ids of imported elements replaced by
+    /// their element ids (others stay as they are and count as "not registered"); null when there are none or
+    /// they always hold (see AlwaysMet).
+    /// </summary>
+    private static string? RequirementsOf(XElement rule, Dictionary<string, AuroraElement> catalog)
     {
         var requirements = ((string?)rule.Attribute("requirements"))?.Trim();
-        return rule.Attribute("equipped") is not null || (requirements is not null && !AlwaysMet.IsMatch(requirements));
+        if (string.IsNullOrEmpty(requirements) || AlwaysMet.IsMatch(requirements))
+        {
+            return null;
+        }
+
+        return AuroraId.Replace(requirements, m => catalog.ContainsKey(m.Value) ? ToGuid(m.Value).ToString() : m.Value);
     }
 
     private static int? ParseInt(XAttribute? attribute) => int.TryParse(attribute?.Value, out var value) ? value : null;
@@ -433,7 +452,7 @@ internal sealed class AuroraImporter : IAuroraImporter
     /// </summary>
     private static IEnumerable<AuroraElement> ListItems(AuroraElement owner)
     {
-        foreach (var select in owner.Rules.Where(r => r.Name.LocalName == "select" && !IsConditional(r)))
+        foreach (var select in owner.Rules.Where(r => r.Name.LocalName == "select" && !IsSkipped(r)))
         {
             var selectName = (string?)select.Attribute("name");
             if (string.IsNullOrWhiteSpace(selectName))

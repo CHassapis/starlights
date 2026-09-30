@@ -2,6 +2,7 @@
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain;
 using Starlights.Modules.Characters.Domain.Characters;
+using Starlights.Modules.Characters.Domain.Progression;
 using Starlights.Modules.Characters.Domain.Registrations;
 using Starlights.Modules.Characters.Services.Statistics;
 using Starlights.Modules.Elements.Integration;
@@ -75,6 +76,9 @@ public class RegistrationProcessor : IRegistrationProcessor
 
         _logger.LogInformation("found {RegistrationCount} registrations for character '{CharacterName}'", registrations.Count, character.Name);
 
+        // one lookup of what the character has, shared by every registration's requirement checks
+        var registered = registrations.Select(r => r.AssociatedElementId.Value).ToHashSet();
+
         foreach (var registration in registrations)
         {
             // temp to fix tests, use init context method later
@@ -84,6 +88,7 @@ public class RegistrationProcessor : IRegistrationProcessor
 
             var context = new ProcessingContext(registration, character, _persistence);
             context.SetAssociatedElement(associatedElement);
+            context.Items[RegisteredElementsKey] = registered;
 
             // TODO: check if the registration itself still meets its requirements
 
@@ -149,6 +154,19 @@ public class RegistrationProcessor : IRegistrationProcessor
                     }
                 }
             }
+
+            if (context.Registration.IncludeRules.Contains(existingRule) && !await RequirementsMet(context, ruleDefinition.Requirements))
+            {
+                _logger.LogInformation("removing include rule '{RuleId}' from registration {ElementName} ({ElementType}): requirements no longer met",
+                    existingRule.Id, context.Registration.AssociatedElementName, context.Registration.AssociatedElementType);
+
+                context.Registration.RemoveIncludeRule(existingRule);
+                var includedRegistation = await registrationRepository.GetRegistrationByOriginatingRuleAsync(existingRule.Id);
+                if (includedRegistation is not null)
+                {
+                    await _registrationManager.Unregister(includedRegistation);
+                }
+            }
         }
     }
 
@@ -172,6 +190,11 @@ public class RegistrationProcessor : IRegistrationProcessor
                     // level requirement not met, skip
                     continue;
                 }
+            }
+
+            if (!await RequirementsMet(context, ruleDefinition.Requirements))
+            {
+                continue;
             }
 
             // get the element to be included according to the rule
@@ -250,10 +273,26 @@ public class RegistrationProcessor : IRegistrationProcessor
                     }
                 }
             }
+
+            if (context.Registration.SelectionRules.Contains(existingRule) && !await RequirementsMet(context, ruleDefinition.Requirements))
+            {
+                _logger.LogInformation("removing selection rule '{RuleId}' from registration {ElementName} ({ElementType}): requirements no longer met",
+                    existingRule.Id, context.Registration.AssociatedElementName, context.Registration.AssociatedElementType);
+
+                context.Registration.RemoveSelectionRule(existingRule);
+                if (existingRule.HasCurrentSelection())
+                {
+                    var selectedRegistation = await registrationRepository.GetRegistrationByOriginatingRuleAsync(existingRule.Id);
+                    if (selectedRegistation is not null)
+                    {
+                        await _registrationManager.Unregister(selectedRegistation);
+                    }
+                }
+            }
         }
     }
 
-    private Task ProcessElementSelectionRules(ProcessingContext context)
+    private async Task ProcessElementSelectionRules(ProcessingContext context)
     {
         var registrationElement = context.GetAssociatedElement();
 
@@ -277,6 +316,11 @@ public class RegistrationProcessor : IRegistrationProcessor
                 }
             }
 
+            if (!await RequirementsMet(context, rule.Requirements))
+            {
+                continue;
+            }
+
             for (var i = applied; i < Math.Max(1, rule.Quantity); i++)
             {
                 // create the new registration selection rule, this is to keep track of the rules applied
@@ -286,8 +330,6 @@ public class RegistrationProcessor : IRegistrationProcessor
                     newSelectionRule.Id.Value, context.Registration.AssociatedElementName, context.Registration.AssociatedElementType);
             }
         }
-
-        return Task.CompletedTask;
     }
 
     #endregion
@@ -305,11 +347,11 @@ public class RegistrationProcessor : IRegistrationProcessor
         await ProcessElementStatisticRules(context);
     }
 
-    private Task ProcessExistingStatisticRules(ProcessingContext context)
+    private async Task ProcessExistingStatisticRules(ProcessingContext context)
     {
         if (!context.Registration.HasStatisticRules())
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var associatedElement = context.GetAssociatedElement();
@@ -332,12 +374,17 @@ public class RegistrationProcessor : IRegistrationProcessor
                     context.Registration.RemoveStatisticRule(existingRule);
                 }
             }
-        }
 
-        return Task.CompletedTask;
+            if (context.Registration.StatisticRules.Contains(existingRule) && !await RequirementsMet(context, ruleDefinition.Requirements))
+            {
+                _logger.LogInformation("removing statistic rule '{RuleId}' from registration {ElementName} ({ElementType}): requirements no longer met",
+                    existingRule.Id, context.Registration.AssociatedElementName, context.Registration.AssociatedElementType);
+                context.Registration.RemoveStatisticRule(existingRule);
+            }
+        }
     }
 
-    private Task ProcessElementStatisticRules(ProcessingContext context)
+    private async Task ProcessElementStatisticRules(ProcessingContext context)
     {
         var associatedElement = context.GetAssociatedElement();
         var currentRegistration = context.Registration;
@@ -359,6 +406,11 @@ public class RegistrationProcessor : IRegistrationProcessor
                 }
             }
 
+            if (!await RequirementsMet(context, rule.Requirements))
+            {
+                continue;
+            }
+
             // create the new registration statistic rule, this is to keep track of the rules applied
             var newStatisticRule = currentRegistration.CreateStatisticRule(new(rule.RuleId), rule.Name, rule.Value);
 
@@ -376,11 +428,33 @@ public class RegistrationProcessor : IRegistrationProcessor
                 newStatisticRule.Id.Value, context.Registration.AssociatedElementName, context.Registration.AssociatedElementType,
                 newStatisticRule.Name, newStatisticRule.Value);
         }
-
-        return Task.CompletedTask;
     }
 
     #endregion
+
+    /// <summary>
+    /// Whether a rule's requirements hold for the character: against the elements it has registered and its
+    /// level (see <see cref="RequirementsExpression"/>). Rules without requirements always apply.
+    /// </summary>
+    private async Task<bool> RequirementsMet(ProcessingContext context, string? requirements)
+    {
+        if (string.IsNullOrWhiteSpace(requirements))
+        {
+            return true;
+        }
+
+        if (context.Items.TryGetValue(RegisteredElementsKey, out var cached) is false || cached is not HashSet<Guid> registered)
+        {
+            var registrations = await _persistence.GetRepository<IRegistrationRepository>().GetRegistrationsAsync(context.Character.Id);
+            registered = registrations.Select(r => r.AssociatedElementId.Value).ToHashSet();
+            context.Items[RegisteredElementsKey] = registered;
+        }
+
+        var level = context.Character.GetRequiredComponent<ProgressionComponent>().CharacterLevel;
+        return RequirementsExpression.Evaluate(requirements, registered.Contains, level);
+    }
+
+    private const string RegisteredElementsKey = "RegisteredElements";
 
     /// <summary>
     /// Initializes a new processing context for the specified registration by retrieving all required domain entities.

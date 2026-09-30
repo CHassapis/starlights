@@ -3,4 +3,5 @@
 /// <summary>
 /// The DTO model for a statistic rule.
 /// </summary>
-public record StatisticRuleDataModel(Guid RuleId, string Name, string Value, string? StackingBonus, int LevelRequirement);
+/// <param name="Requirements">Optional condition (Aurora requirements with element ids), see the character processor.</param>
+public record StatisticRuleDataModel(Guid RuleId, string Name, string Value, string? StackingBonus, int LevelRequirement, string? Requirements = null);

@@ -69,6 +69,11 @@ public interface IElementsRepository : IRepository
     /// Element ids by Aurora id, for the given Aurora ids that were imported.
     /// </summary>
     Task<Dictionary<string, Guid>> GetElementIdsByAuroraIdsAsync(IReadOnlyCollection<string> auroraIds);
+
+    /// <summary>
+    /// The requirement expressions of all include, statistic and selection rules that have one.
+    /// </summary>
+    Task<List<string>> GetRuleRequirementsAsync();
 }
 
 public sealed record ElementSummary(Guid Id, string Name, string Type, string? Source);

@@ -82,6 +82,14 @@ internal class ElementsRepository : RepositoryBase<Element>, IElementsRepository
         return elements.ConvertAll(e => new ElementSummary(e.Id, e.Name, e.Type, sources.GetValueOrDefault(e.Id)));
     }
 
+    public async Task<List<string>> GetRuleRequirementsAsync()
+    {
+        var includes = await Context.Set<IncludeRuleComponent>().AsNoTracking().Where(r => r.Requirements != null).Select(r => r.Requirements!).ToListAsync();
+        var stats = await Context.Set<StatisticRuleComponent>().AsNoTracking().Where(r => r.Requirements != null).Select(r => r.Requirements!).ToListAsync();
+        var selects = await Context.Set<SelectionRuleComponent>().AsNoTracking().Where(r => r.Requirements != null).Select(r => r.Requirements!).ToListAsync();
+        return [.. includes, .. stats, .. selects];
+    }
+
     public async Task<Dictionary<string, Guid>> GetElementIdsByAuroraIdsAsync(IReadOnlyCollection<string> auroraIds)
     {
         var ids = auroraIds.Distinct().ToList();

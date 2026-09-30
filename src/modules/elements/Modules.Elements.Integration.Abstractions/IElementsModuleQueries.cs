@@ -57,4 +57,10 @@ public interface IElementsModuleQueries
     /// Retrieves several elements with their rules in one go (e.g. everything a character has registered).
     /// </summary>
     Task<List<ElementDataModel>> GetElementsWithRules(IReadOnlyCollection<Guid> elementIds);
+
+    /// <summary>
+    /// The elements some rule's requirements refer to: when a character gains or loses one of these, its other
+    /// rules have to be looked at again.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> GetElementsReferencedByRequirements();
 }
