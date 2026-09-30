@@ -138,9 +138,6 @@ public sealed class GetCompendiumEntryEndpoint : Endpoint<GetCompendiumEntryRequ
         }, ct);
     }
 
-    /// <summary>
-    /// The &lt;setters&gt; of the original Aurora XML; repeated names are joined with a comma.
-    /// </summary>
     internal static CompendiumSpellcasting? ParseSpellcasting(string rawXml)
     {
         try
@@ -156,15 +153,29 @@ public sealed class GetCompendiumEntryEndpoint : Endpoint<GetCompendiumEntryRequ
         }
     }
 
+    /// <summary>
+    /// The &lt;setters&gt; of the original Aurora XML; repeated names are joined with a comma. A setter's other
+    /// attributes come as "name@attribute" (weight@lb = 6, damage@type = slashing, cost@currency = gp).
+    /// </summary>
     internal static Dictionary<string, string> ParseSetters(string rawXml)
     {
         try
         {
-            return XElement.Parse(rawXml).Element("setters")?.Elements("set")
-                .Where(s => s.Attribute("name") is not null && !string.IsNullOrWhiteSpace(s.Value))
+            var setters = XElement.Parse(rawXml).Element("setters")?.Elements("set")
+                .Where(s => s.Attribute("name") is not null)
+                .ToList() ?? [];
+            var result = setters
+                .Where(s => !string.IsNullOrWhiteSpace(s.Value))
                 .GroupBy(s => (string)s.Attribute("name")!)
-                .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(s => s.Value.Trim())))
-                ?? [];
+                .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(s => s.Value.Trim())));
+            foreach (var setter in setters)
+            {
+                foreach (var attribute in setter.Attributes().Where(a => a.Name.LocalName != "name"))
+                {
+                    result.TryAdd($"{(string)setter.Attribute("name")!}@{attribute.Name.LocalName}", attribute.Value.Trim());
+                }
+            }
+            return result;
         }
         catch (System.Xml.XmlException)
         {

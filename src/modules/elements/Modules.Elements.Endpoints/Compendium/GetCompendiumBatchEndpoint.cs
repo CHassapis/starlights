@@ -27,11 +27,26 @@ public sealed record CompendiumBatchEntry
     public required string Name { get; init; }
     public required string Type { get; init; }
     public string? Source { get; init; }
+
+    /// <summary>The element's Aurora id (ID_…), to match Aurora references such as a weapon's proficiency.</summary>
+    public string? AuroraId { get; init; }
+
+    /// <summary>Aurora's &lt;supports&gt; tags (weapon category, properties, damage type, …).</summary>
+    public List<string> Supports { get; init; } = [];
+
+    /// <summary>
+    /// The element's &lt;stat&gt; rules as Aurora wrote them (for items: what they add while equipped or attuned,
+    /// such as ac:misc for a Cloak of Protection).
+    /// </summary>
+    public List<CompendiumStat> Stats { get; init; } = [];
+
     public string Description { get; init; } = string.Empty;
     public Dictionary<string, string> Setters { get; init; } = [];
     public CompendiumSpellcasting? Spellcasting { get; init; }
     public SheetInfo? Sheet { get; init; }
 }
+
+public sealed record CompendiumStat(string Name, string Value, string? Bonus, string? Equipped, string? Requirements);
 
 public sealed record GetCompendiumBatchResponse(List<CompendiumBatchEntry> Entries);
 
@@ -74,6 +89,9 @@ public sealed class GetCompendiumBatchEndpoint : Endpoint<GetCompendiumBatchRequ
                 Name = element.Name,
                 Type = element.Type,
                 Source = aurora?.Source,
+                AuroraId = aurora?.AuroraId,
+                Supports = aurora is null ? [] : ParseSupports(aurora.RawXml),
+                Stats = aurora is null || !ItemTypes.Contains(element.Type) ? [] : ParseStats(aurora.RawXml),
                 Description = element.GetComponent<DescriptionComponent>()?.Content ?? string.Empty,
                 Setters = aurora is null ? [] : GetCompendiumEntryEndpoint.ParseSetters(aurora.RawXml),
                 Spellcasting = aurora is null ? null : GetCompendiumEntryEndpoint.ParseSpellcasting(aurora.RawXml),
@@ -82,6 +100,43 @@ public sealed class GetCompendiumBatchEndpoint : Endpoint<GetCompendiumBatchRequ
         });
 
         await Send.OkAsync(new GetCompendiumBatchResponse(entries), ct);
+    }
+
+    // stat rules are only sent for items: for everything else the character's statistics already hold them
+    private static readonly HashSet<string> ItemTypes = ["Item", "Weapon", "Armor", "Magic Item"];
+
+    private static List<CompendiumStat> ParseStats(string rawXml)
+    {
+        try
+        {
+            return XElement.Parse(rawXml).Element("rules")?.Elements("stat")
+                .Where(s => s.Attribute("name") is not null && s.Attribute("value") is not null)
+                .Select(s => new CompendiumStat(
+                    (string)s.Attribute("name")!,
+                    (string)s.Attribute("value")!,
+                    (string?)s.Attribute("bonus"),
+                    (string?)s.Attribute("equipped"),
+                    (string?)s.Attribute("requirements")))
+                .ToList() ?? [];
+        }
+        catch (System.Xml.XmlException)
+        {
+            return [];
+        }
+    }
+
+    private static List<string> ParseSupports(string rawXml)
+    {
+        try
+        {
+            return (XElement.Parse(rawXml).Element("supports")?.Value ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+        }
+        catch (System.Xml.XmlException)
+        {
+            return [];
+        }
     }
 
     private static SheetInfo? ParseSheet(string rawXml)

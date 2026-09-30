@@ -82,6 +82,26 @@ internal class ElementsRepository : RepositoryBase<Element>, IElementsRepository
         return elements.ConvertAll(e => new ElementSummary(e.Id, e.Name, e.Type, sources.GetValueOrDefault(e.Id)));
     }
 
+    public async Task<List<AuroraElementXml>> GetAuroraElementsAsync(IReadOnlyCollection<string> auroraTypes)
+    {
+        var types = auroraTypes.ToList();
+        var rows = await Context.Set<AuroraSourceComponent>().AsNoTracking()
+            .Where(c => types.Contains(c.AuroraType))
+            .Join(Entities.AsNoTracking(), c => c.OwningElement, e => e.Id, (c, e) => new { e.Id, e.Name, c.AuroraId, c.AuroraType, c.Source, c.RawXml })
+            .ToListAsync();
+
+        return rows.ConvertAll(r => new AuroraElementXml(r.Id.Value, r.Name, r.AuroraId, r.AuroraType, r.Source, r.RawXml));
+    }
+
+    public async Task<Dictionary<string, string>> GetAuroraNamesAsync()
+    {
+        var rows = await Context.Set<AuroraSourceComponent>().AsNoTracking()
+            .Join(Entities.AsNoTracking(), c => c.OwningElement, e => e.Id, (c, e) => new { c.AuroraId, e.Name })
+            .ToListAsync();
+
+        return rows.GroupBy(r => r.AuroraId).ToDictionary(g => g.Key, g => g.First().Name);
+    }
+
     public async Task<List<string>> GetRuleRequirementsAsync()
     {
         var includes = await Context.Set<IncludeRuleComponent>().AsNoTracking().Where(r => r.Requirements != null).Select(r => r.Requirements!).ToListAsync();

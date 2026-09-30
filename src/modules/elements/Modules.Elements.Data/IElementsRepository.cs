@@ -45,6 +45,12 @@ public interface IElementsRepository : IRepository
     /// </summary>
     Task<List<ElementSummary>> GetElementSummariesAsync();
 
+    /// <summary>The imported elements of the given Aurora types (as written in the XML), with their XML.</summary>
+    Task<List<AuroraElementXml>> GetAuroraElementsAsync(IReadOnlyCollection<string> auroraTypes);
+
+    /// <summary>Every imported element's name by its Aurora id.</summary>
+    Task<Dictionary<string, string>> GetAuroraNamesAsync();
+
     /// <summary>
     /// Retrieves several elements (with components) in one query.
     /// </summary>
@@ -77,3 +83,6 @@ public interface IElementsRepository : IRepository
 }
 
 public sealed record ElementSummary(Guid Id, string Name, string Type, string? Source);
+
+/// <summary>An imported element with its original Aurora XML.</summary>
+public sealed record AuroraElementXml(Guid Id, string Name, string AuroraId, string AuroraType, string? Source, string RawXml);
