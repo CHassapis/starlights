@@ -13,6 +13,11 @@ public sealed class ElementsModule : IPlatformModule
     {
         builder.Services.AddScoped<IElementsModuleQueries, ElementsModuleQueries>();
         builder.Services.AddScoped<IElementsModuleInitializer, ElementsModuleInitializer>();
+        builder.Services.AddSingleton(new ElementsInitializerOptions(
+            IncludeSampleContent: !string.Equals(builder.Configuration["Elements:SampleContent"], "false", StringComparison.OrdinalIgnoreCase)));
+
+        builder.Services.AddScoped<IAuroraImporter, AuroraImporter>();
+        builder.Services.AddSingleton(new AuroraImporterOptions(builder.Configuration["Aurora:ContentPath"] ?? "/data/aurora-elements"));
 
         builder.Services.AddDomainEventHandlersFrom(typeof(ElementsModule).Assembly);
     }

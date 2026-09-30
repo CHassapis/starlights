@@ -8,16 +8,24 @@ using Starlights.Platform.Data;
 
 namespace Starlights.Modules.Elements.Services;
 
+/// <summary>
+/// Set <c>IncludeSampleContent</c> to false (config <c>Elements:SampleContent=false</c>) when the classes,
+/// species and backgrounds come from an import instead of the placeholder samples.
+/// </summary>
+public sealed record ElementsInitializerOptions(bool IncludeSampleContent = true);
+
 // TODO: this should be in another 'extension' project that deals with the specifics of the game system
 internal class ElementsModuleInitializer : IElementsModuleInitializer
 {
     private readonly ILogger<ElementsModuleInitializer> _logger;
     private readonly IPersistence _persistence;
+    private readonly ElementsInitializerOptions _options;
 
-    public ElementsModuleInitializer(ILogger<ElementsModuleInitializer> logger, IPersistence persistence)
+    public ElementsModuleInitializer(ILogger<ElementsModuleInitializer> logger, IPersistence persistence, ElementsInitializerOptions? options = null)
     {
         _logger = logger;
         _persistence = persistence;
+        _options = options ?? new ElementsInitializerOptions();
     }
 
     public async Task<InitializationResult> InitializeAsync()
@@ -27,9 +35,12 @@ internal class ElementsModuleInitializer : IElementsModuleInitializer
         var repository = _persistence.GetRepository<IElementsRepository>();
 
         CreateDefaultCharacterCreationOption(repository);
-        CreateClasses(repository);
-        CreateSpecies(repository);
-        CreateBackgrounds(repository);
+        if (_options.IncludeSampleContent)
+        {
+            CreateClasses(repository);
+            CreateSpecies(repository);
+            CreateBackgrounds(repository);
+        }
         CreateAlignments(repository);
 
         var rows = await _persistence.SaveChangesAsync();
