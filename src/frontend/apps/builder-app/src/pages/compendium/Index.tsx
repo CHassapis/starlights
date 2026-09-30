@@ -149,7 +149,8 @@ export function CompendiumPage() {
 
 function EntryDetail({ id, onBack, onOpen }: { id: string | null; onBack: () => void; onOpen: (id: string) => void }) {
   const { data, isLoading, error } = useCompendiumEntry(id);
-  const html = useMemo(() => (data ? DOMPurify.sanitize(data.description) : ""), [data]);
+  // inline styles are tuned for Aurora's own viewer (negative margins etc.) and clash with the prose styles
+  const html = useMemo(() => (data ? DOMPurify.sanitize(data.description, { FORBID_ATTR: ["style"] }) : ""), [data]);
 
   if (!id) {
     return (
@@ -185,7 +186,7 @@ function EntryDetail({ id, onBack, onOpen }: { id: string | null; onBack: () => 
       </div>
 
       {html && (
-        <DescriptionProseSection className="prose-sm [&_table]:block [&_table]:overflow-x-auto">
+        <DescriptionProseSection className="prose-sm [&_table]:block [&_table]:overflow-x-auto [&_td]:pr-3 [&_thead_td]:font-semibold">
           <div dangerouslySetInnerHTML={{ __html: html }} />
         </DescriptionProseSection>
       )}
