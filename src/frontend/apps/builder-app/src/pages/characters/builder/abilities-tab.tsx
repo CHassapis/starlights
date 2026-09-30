@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { apiClient } from "@/lib/api-client";
 import { refreshCharacter } from "@/lib/api/builder";
 import { cn } from "@/lib/utils";
+import { ProficienciesCard } from "./proficiencies-card";
 
 interface AbilityScore {
   abilityScoreId: string;
@@ -171,6 +172,8 @@ export function AbilitiesTab({ characterId }: { characterId: string }) {
         })}
       </div>
       <p className="text-xs text-muted-foreground">Bonuses come from your species, background, feats and ability score improvements in the Build tab.</p>
+
+      <ProficienciesCard characterId={characterId} />
     </div>
   );
 }
