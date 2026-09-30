@@ -37,7 +37,7 @@ public sealed class GetSourcesEndpoint : EndpointWithoutRequest<GetSourcesRespon
         static int Rank(string group) => Array.IndexOf(GroupOrder, group) is var i && i >= 0 ? i : GroupOrder.Length;
 
         var sources = rows
-            .Where(r => !string.IsNullOrWhiteSpace(r.Source) && r.Source != "Internal")
+            .Where(r => !string.IsNullOrWhiteSpace(r.Source) && r.Source is not ("Internal" or "Starlights"))
             .GroupBy(r => r.Source!)
             .Select(g => new SourceModel(
                 g.Key,

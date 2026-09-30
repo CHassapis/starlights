@@ -25,6 +25,9 @@ public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<str
     /// <summary>The index name that imports what is generated from the 5etools data (deities Aurora lacks).</summary>
     public const string FiveEToolsIndex = "5etools";
 
+    /// <summary>The index name that imports Starlights' own content (the generic extras).</summary>
+    public const string BuiltInIndex = "starlights";
+
     public bool IsExcluded(string relativePath) =>
         Exclude?.Any(folder => relativePath.StartsWith(folder.Trim('/') + "/", StringComparison.OrdinalIgnoreCase)) == true;
 }
@@ -79,6 +82,10 @@ internal sealed class AuroraImporter : IAuroraImporter
         else if (string.Equals(indexPath, AuroraImporterOptions.FiveEToolsIndex, StringComparison.OrdinalIgnoreCase))
         {
             files.AddRange(byFile.Keys.Where(f => f.StartsWith(FiveEToolsData.Prefix, StringComparison.Ordinal)));
+        }
+        else if (string.Equals(indexPath, AuroraImporterOptions.BuiltInIndex, StringComparison.OrdinalIgnoreCase))
+        {
+            files.AddRange(byFile.Keys.Where(f => f.StartsWith(BuiltIn.BuiltInContent.Prefix, StringComparison.Ordinal)));
         }
         else
         {
@@ -370,6 +377,9 @@ internal sealed class AuroraImporter : IAuroraImporter
 
             AddDocument(file, document);
         }
+
+        // Starlights' own extras (an additional feat, language, proficiency, spell)
+        AddDocument(BuiltIn.BuiltInContent.Prefix + "extras.xml", BuiltIn.BuiltInContent.ExtrasDocument());
 
         // the deities Aurora has no entry for, generated from the 5etools data
         if (_fiveETools.Available)

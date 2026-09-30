@@ -28,6 +28,7 @@ import { SourcesPicker } from "@/components/sources-picker";
 import { StoryTab } from "./story-tab";
 import { AbilitiesTab } from "./abilities-tab";
 import { EquipmentTab } from "./equipment-tab";
+import { ExtrasCard } from "./extras-card";
 import { editionOf, restrictedForEdition, useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { EditionPicker } from "@/components/edition-picker";
 import { cn } from "@/lib/utils";
@@ -113,23 +114,43 @@ export function CharacterBuilderPage() {
 
         <TabsContent value="build" className="mt-4">
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_28rem]">
-            <div className="space-y-4">
+            {/* min-w-0: a long pick must not stretch the column past a phone's screen */}
+            <div className="min-w-0 space-y-4">
               {isLoading && <Spinner className="mx-auto my-12 size-6" />}
-              {sections.map(([section, choices]) => (
-                <SectionCard key={section} section={section} choices={choices}>
-                  {choices.map((choice) => (
+              {sections
+                .filter(([section]) => section !== "Extras")
+                .map(([section, choices]) => (
+                  <SectionCard key={section} section={section} choices={choices}>
+                    {choices.map((choice) => (
+                      <ChoiceRow
+                        key={choice.ruleId}
+                        characterId={id}
+                        choice={choice}
+                        hideLabel={choice.depth === 0 && choice.name === section}
+                        onHighlight={setPreview}
+                        onPicked={setFocus}
+                        onInspect={inspect}
+                      />
+                    ))}
+                  </SectionCard>
+                ))}
+              {!isLoading && (
+                <ExtrasCard
+                  characterId={id}
+                  choices={sections.find(([section]) => section === "Extras")?.[1] ?? []}
+                  renderChoice={(choice) => (
                     <ChoiceRow
                       key={choice.ruleId}
                       characterId={id}
                       choice={choice}
-                      hideLabel={choice.depth === 0 && choice.name === section}
+                      hideLabel={false}
                       onHighlight={setPreview}
                       onPicked={setFocus}
                       onInspect={inspect}
                     />
-                  ))}
-                </SectionCard>
-              ))}
+                  )}
+                />
+              )}
             </div>
 
             <aside className="hidden lg:block">

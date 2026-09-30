@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain;
 using Starlights.Modules.Characters.Domain.Characters;
@@ -31,7 +32,46 @@ public class RegistrationProcessor : IRegistrationProcessor
         _statisticsCalculator = statisticsCalculator;
     }
 
+    // one character is processed by one caller at a time: a request that recalculates at once (an item equipped,
+    // an extra added) and the background processing of the same registration would otherwise both see it without
+    // rules and both apply them (a +10 fly speed counted twice). The API hosts both, so an in-process lock is enough.
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> CharacterLocks = new();
+
+    private static async Task<IDisposable> LockAsync(CharacterId characterId)
+    {
+        var gate = CharacterLocks.GetOrAdd(characterId.Value, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync();
+        return new Release(gate);
+    }
+
+    private sealed class Release(SemaphoreSlim gate) : IDisposable
+    {
+        private int _released;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _released, 1) == 0)
+            {
+                gate.Release();
+            }
+        }
+    }
+
     public async Task<ProcessRegistrationResult> ProcessRegistration(RegistrationId registrationId)
+    {
+        var registration = await _persistence.GetRepository<IRegistrationRepository>().GetRegistrationAsync(registrationId)
+            ?? throw new RegistrationProcessingException($"The registration with ID '{registrationId}' not found.");
+        using var gate = await LockAsync(registration.CharacterId);
+        return await ProcessRegistrationLocked(registrationId);
+    }
+
+    public async Task<ProcessRegistrationResult> ReproccessRegistrations(CharacterId characterId)
+    {
+        using var gate = await LockAsync(characterId);
+        return await ReproccessRegistrationsLocked(characterId);
+    }
+
+    private async Task<ProcessRegistrationResult> ProcessRegistrationLocked(RegistrationId registrationId)
     {
         using var _ = CharactersInstrumentation.StartActivity();
 
@@ -57,7 +97,7 @@ public class RegistrationProcessor : IRegistrationProcessor
         return ProcessRegistrationResult.Success(affectedRows);
     }
 
-    public async Task<ProcessRegistrationResult> ReproccessRegistrations(CharacterId characterId)
+    private async Task<ProcessRegistrationResult> ReproccessRegistrationsLocked(CharacterId characterId)
     {
         using var _ = CharactersInstrumentation.StartActivity();
 

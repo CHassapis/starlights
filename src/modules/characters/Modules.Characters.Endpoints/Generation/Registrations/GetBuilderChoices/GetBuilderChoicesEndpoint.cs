@@ -162,9 +162,14 @@ public sealed class GetBuilderChoicesEndpoint : EndpointWithoutRequest<GetBuilde
             }
         }
 
+        // registrations attached outside the build: extras, and active items with choices (a magic item that lets
+        // you pick a spell); their choices get sections of their own
+        var extras = character.Extras.Select(e => e.RegistrationId).OfType<Guid>().ToHashSet();
+        var equipment = character.Inventory.Items.Select(i => i.RegistrationId).OfType<Guid>().ToHashSet();
         foreach (var root in roots.OrderBy(r => r.Id.Value))
         {
-            Walk(root, 0, null);
+            var section = extras.Contains(root.Id.Value) ? "Extras" : equipment.Contains(root.Id.Value) ? "Equipment" : null;
+            Walk(root, 0, section);
         }
 
         await Send.OkAsync(new GetBuilderChoicesResponse(choices, registrations.Any(r => !r.IsProcessed)), ct);
