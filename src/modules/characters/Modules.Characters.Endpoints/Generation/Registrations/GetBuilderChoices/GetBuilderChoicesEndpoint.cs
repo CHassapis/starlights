@@ -31,6 +31,7 @@ public sealed record BuilderChoice
     public required string Name { get; init; }
     public required string Type { get; init; }
     public required string ParentName { get; init; }
+    public required Guid ParentElementId { get; init; }
     public required string ParentType { get; init; }
     public int Level { get; init; }
     public int Slot { get; init; } = 1;
@@ -131,6 +132,7 @@ public sealed class GetBuilderChoicesEndpoint : EndpointWithoutRequest<GetBuilde
                         Name = slot.Name,
                         Type = slot.ElementType,
                         ParentName = registration.AssociatedElementName,
+                        ParentElementId = registration.AssociatedElementId.Value,
                         ParentType = registration.AssociatedElementType,
                         Level = definition?.LevelRequirement ?? 0,
                         Slot = i + 1,

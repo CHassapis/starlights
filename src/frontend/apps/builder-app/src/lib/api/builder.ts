@@ -22,6 +22,7 @@ export interface BuilderChoice {
   type: string;
   parentName: string;
   parentType: string;
+  parentElementId: string;
   level: number;
   slot: number;
   slots: number;

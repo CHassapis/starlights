@@ -26,7 +26,7 @@ public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<str
 /// Maps Aurora XML elements onto Starlights elements: grant → include rule, stat → statistic rule,
 /// select → selection rule. Rules with a requirements expression (or an equipped condition) are
 /// skipped, because the character builder does not evaluate those yet and would apply them unconditionally;
-/// the exception is "not as a multiclass", which always holds while there is no multiclassing.
+/// the exceptions are conditions that always hold while the builder lacks the feature (see AlwaysMet).
 /// </summary>
 internal sealed class AuroraImporter : IAuroraImporter
 {
@@ -387,13 +387,18 @@ internal sealed class AuroraImporter : IAuroraImporter
         return Directory.EnumerateFiles(root, Path.GetFileName(name), SearchOption.AllDirectories).FirstOrDefault();
     }
 
-    // the builder has no multiclassing yet, so "not as a multiclass" (e.g. !ID_WOTC_PHB24_MULTICLASS_FIGHTER) always holds
-    private static readonly Regex NotMulticlass = new(@"^!ID_[A-Z0-9_]*MULTICLASS[A-Z0-9_]*$", RegexOptions.Compiled);
+    // "unless the character has X" where X is something the builder does not offer yet, so it always holds:
+    // multiclassing (!ID_WOTC_PHB24_MULTICLASS_FIGHTER), Tasha's customized origin options, optional
+    // feature replacements and optional background features. Not "!ID_INTERNAL_GRANTS_BACKGROUND_ASI": whether
+    // a background grants the ability score increase really differs between the 2014 and 2024 rules
+    private static readonly Regex AlwaysMet = new(
+        @"^!(ID_[A-Z0-9_]*MULTICLASS[A-Z0-9_]*|ID_WOTC_TCOE_OPTION_CUSTOMIZED_[A-Z_]+|ID_INTERNAL_PHB24_FEATURE_REPLACEMENT_[A-Z0-9_]+|ID_INTERNAL_GRANT_OPTIONAL_BACKGROUND_FEATURE)$",
+        RegexOptions.Compiled);
 
     private static bool IsConditional(XElement rule)
     {
         var requirements = ((string?)rule.Attribute("requirements"))?.Trim();
-        return rule.Attribute("equipped") is not null || (requirements is not null && !NotMulticlass.IsMatch(requirements));
+        return rule.Attribute("equipped") is not null || (requirements is not null && !AlwaysMet.IsMatch(requirements));
     }
 
     private static int? ParseInt(XAttribute? attribute) => int.TryParse(attribute?.Value, out var value) ? value : null;

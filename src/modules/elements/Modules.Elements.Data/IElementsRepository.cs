@@ -64,6 +64,11 @@ public interface IElementsRepository : IRepository
     /// Source book and file of every imported element, for the list of sources a character can tick.
     /// </summary>
     Task<List<(string? Source, string File)>> GetAuroraSourcesAsync();
+
+    /// <summary>
+    /// Element ids by Aurora id, for the given Aurora ids that were imported.
+    /// </summary>
+    Task<Dictionary<string, Guid>> GetElementIdsByAuroraIdsAsync(IReadOnlyCollection<string> auroraIds);
 }
 
 public sealed record ElementSummary(Guid Id, string Name, string Type, string? Source);

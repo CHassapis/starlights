@@ -3,6 +3,7 @@ import { useCharacterList } from "@/lib/api/builder";
 import { usePlayer } from "@/lib/player";
 import { PlayerGate } from "./player-picker";
 import { PlayerPasswordDialog } from "./player-password-dialog";
+import { AuroraImportDialog } from "./aurora-import-dialog";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -333,6 +334,7 @@ function CharactersPageContent() {
               </CardDescription>
               <CardAction>
                 <ButtonGroup>
+                  {player && <AuroraImportDialog player={player} />}
                   <Button variant="outline">
                     <Link to="/characters/create" className="flex items-center gap-2">
                       <PlusIcon size={16} />

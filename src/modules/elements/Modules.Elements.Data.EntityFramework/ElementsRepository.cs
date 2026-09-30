@@ -82,6 +82,17 @@ internal class ElementsRepository : RepositoryBase<Element>, IElementsRepository
         return elements.ConvertAll(e => new ElementSummary(e.Id, e.Name, e.Type, sources.GetValueOrDefault(e.Id)));
     }
 
+    public async Task<Dictionary<string, Guid>> GetElementIdsByAuroraIdsAsync(IReadOnlyCollection<string> auroraIds)
+    {
+        var ids = auroraIds.Distinct().ToList();
+        var rows = await Context.Set<AuroraSourceComponent>().AsNoTracking()
+            .Where(c => ids.Contains(c.AuroraId))
+            .Select(c => new { c.AuroraId, c.OwningElement })
+            .ToListAsync();
+
+        return rows.GroupBy(r => r.AuroraId).ToDictionary(g => g.Key, g => g.First().OwningElement.Value);
+    }
+
     public async Task<List<(string? Source, string File)>> GetAuroraSourcesAsync()
     {
         var rows = await Context.Set<AuroraSourceComponent>().AsNoTracking()

@@ -97,7 +97,8 @@ public sealed partial class Program
         {
             var path = context.Request.Path;
             var needsAdmin = path.StartsWithSegments("/api/elements") &&
-                (!HttpMethods.IsGet(context.Request.Method) || path.StartsWithSegments("/api/elements/initialize"));
+                (!HttpMethods.IsGet(context.Request.Method) || path.StartsWithSegments("/api/elements/initialize")) &&
+                !path.StartsWithSegments("/api/elements/aurora-lookup"); // read-only, POST only for the id list
 
             var given = Encoding.UTF8.GetBytes(context.Request.Headers["X-Admin-Key"].ToString());
             if (needsAdmin && (adminKey.Length == 0 || !CryptographicOperations.FixedTimeEquals(given, adminKey)))
