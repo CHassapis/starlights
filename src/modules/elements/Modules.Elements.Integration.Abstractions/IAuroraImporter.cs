@@ -13,9 +13,10 @@ public interface IAuroraImporter
     /// <param name="indexPath">Path of the .index file, relative to the content repository root.</param>
     /// <param name="replace">
     /// Delete and re-create elements that were imported before (to pick up content or importer changes).
-    /// Rule components get new ids, so characters built on the old elements need to be recreated.
+    /// Component ids are derived from the content, so characters keep working unless a rule they use was removed.
     /// </param>
-    Task<AuroraImportResult> ImportAsync(string indexPath, bool replace = false, CancellationToken cancellationToken = default);
+    /// <param name="update">Re-create only the elements whose Aurora XML changed since they were imported.</param>
+    Task<AuroraImportResult> ImportAsync(string indexPath, bool replace = false, bool update = false, CancellationToken cancellationToken = default);
 }
 
 public record AuroraImportResult(

@@ -52,6 +52,8 @@ export function useCompendiumEntry(id: string | null): UseQueryResult<Compendium
     queryKey: ["compendium", id],
     queryFn: () => apiClient.get<CompendiumEntry>(`/api/elements/compendium/${encodeURIComponent(id!)}`),
     enabled: !!id,
+    // keep showing the previous entry while the next one loads (no flicker when browsing a list)
+    placeholderData: (previous) => previous,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });

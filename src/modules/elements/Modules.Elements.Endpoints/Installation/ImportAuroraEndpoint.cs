@@ -13,9 +13,14 @@ public sealed record ImportAuroraRequest
     public string Index { get; init; } = "core/players-handbook-2024.index";
 
     /// <summary>
-    /// Re-create elements that were imported before; characters built on them need to be recreated.
+    /// Re-create all elements that were imported before (e.g. after an importer change).
     /// </summary>
     public bool Replace { get; init; }
+
+    /// <summary>
+    /// Re-create only the elements whose Aurora XML changed upstream (what the nightly update uses).
+    /// </summary>
+    public bool Update { get; init; }
 }
 
 /// <summary>
@@ -49,7 +54,7 @@ public class ImportAuroraEndpoint : Endpoint<ImportAuroraRequest>
 
         try
         {
-            var result = await _importer.ImportAsync(req.Index, req.Replace, ct);
+            var result = await _importer.ImportAsync(req.Index, req.Replace, req.Update, ct);
             await Send.OkAsync(result, ct);
         }
         catch (FileNotFoundException ex)

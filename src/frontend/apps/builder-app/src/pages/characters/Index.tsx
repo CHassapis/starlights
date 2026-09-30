@@ -1,4 +1,8 @@
-import { useCharacterCards, useDeleteCharacter, type CharacterCard } from "@/lib/api/characters/queries";
+import { useDeleteCharacter, type CharacterCard } from "@/lib/api/characters/queries";
+import { useCharacterList } from "@/lib/api/builder";
+import { usePlayer } from "@/lib/player";
+import { PlayerGate } from "./player-picker";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -185,8 +189,10 @@ function CharacterDetailsDrawer({ card }: { card: CharacterCard }) {
   );
 }
 
-function CharactersCollection() {
-  const { data: characterCards } = useCharacterCards();
+function CharactersCollection({ showAll }: { showAll: boolean }) {
+  const { player } = usePlayer();
+  const { data: list } = useCharacterList(showAll ? null : player);
+  const characterCards = list as unknown as { characters: (CharacterCard & { playerName: string })[] } | undefined;
   const deleteCharacter = useDeleteCharacter();
   const isMobile = useIsMobile();
 
@@ -211,9 +217,25 @@ function CharactersCollection() {
         </div>
       )}
 
-      {characterCards && (
+      {characterCards && characterCards.characters.length === 0 && (
+        <Empty className="border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <SwordsIcon className="stroke-secondary" />
+            </EmptyMedia>
+            <EmptyTitle>No characters yet</EmptyTitle>
+            <EmptyDescription>
+              <Link to="/characters/create" className="underline">
+                Create your first character
+              </Link>
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
+
+      {characterCards && characterCards.characters.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4">
-          {characterCards.characters.map((card: CharacterCard) => (
+          {characterCards.characters.map((card) => (
             <div key={card.characterId} className="group relative">
               <CharacterItem
                 key={card.characterId}
@@ -222,6 +244,7 @@ function CharactersCollection() {
                 url={`/characters/${card.characterId}`}
                 image={card.portraitUrl}
                 size="sm"
+                tag={showAll ? card.playerName || "No player" : undefined}
               />
 
               {isMobile && (
@@ -275,13 +298,37 @@ function CharactersCollection() {
 
 export default function CharactersPage() {
   return (
+    <PlayerGate>
+      <CharactersPageContent />
+    </PlayerGate>
+  );
+}
+
+function CharactersPageContent() {
+  const { player, setPlayer } = usePlayer();
+  const [showAll, setShowAll] = useState(false);
+
+  return (
     <>
       <div className="container mx-auto px-4 mt-12">
         <CardWrapper>
           <Card className="rounded-lg shadow-none">
             <CardHeader className="border-b">
-              <CardTitle className="mb-3">Character Collection</CardTitle>
-              <CardDescription>Organize your band of heroes — manage their appearance, progress, and epic deeds.</CardDescription>
+              <CardTitle className="mb-3">{showAll ? "Everyone's Characters" : `${player}'s Characters`}</CardTitle>
+              <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span>Playing as {player}.</span>
+                <button type="button" className="underline" onClick={() => setPlayer(null)}>
+                  Switch player
+                </button>
+                <ButtonGroup>
+                  <Button size="sm" variant={showAll ? "outline" : "secondary"} onClick={() => setShowAll(false)}>
+                    Mine
+                  </Button>
+                  <Button size="sm" variant={showAll ? "secondary" : "outline"} onClick={() => setShowAll(true)}>
+                    Everyone's
+                  </Button>
+                </ButtonGroup>
+              </CardDescription>
               <CardAction>
                 <ButtonGroup>
                   <Button variant="outline">
@@ -310,7 +357,7 @@ export default function CharactersPage() {
               </CardAction>
             </CardHeader>
             <CardContent>
-              <CharactersCollection />
+              <CharactersCollection showAll={showAll} />
             </CardContent>
           </Card>
         </CardWrapper>

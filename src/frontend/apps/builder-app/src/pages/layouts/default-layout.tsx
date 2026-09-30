@@ -14,6 +14,7 @@ import {
   PencilRulerIcon,
   RouteIcon,
   SwordIcon,
+  UserIcon,
   WandIcon,
 } from "lucide-react";
 import { cauldron } from "@lucide/lab";
@@ -30,6 +31,7 @@ import {
 import { Outlet } from "react-router-dom";
 import { ModeToggle } from "@/components/mode-toggle";
 import { GitHubIconButton } from "@/components/navigation/github-icon-button";
+import { usePlayer } from "@/lib/player";
 
 export function LandingBackground() {
   return (
@@ -237,8 +239,8 @@ export function MainNavigation() {
                             <Link to="/characters" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
                               <RouteIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
                               <div>
-                                <div className="font-medium mt-0.5">Start Page</div>
-                                <div className="text-muted-foreground text-xs">Your journey starts here.</div>
+                                <div className="font-medium mt-0.5">My Characters</div>
+                                <div className="text-muted-foreground text-xs">Pick up where you left off.</div>
                               </div>
                             </Link>
                           </div>
@@ -247,11 +249,11 @@ export function MainNavigation() {
                       <li>
                         <NavigationMenuLink asChild>
                           <div className=" ">
-                            <Link to="/characters/12345/builder/class-options" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
+                            <Link to="/characters/create" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
                               <AnvilIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
                               <div>
-                                <div className="font-medium mt-0.5">Build Options</div>
-                                <div className="text-muted-foreground text-xs ">Choose your build options.</div>
+                                <div className="font-medium mt-0.5">New Character</div>
+                                <div className="text-muted-foreground text-xs ">Build a new hero from scratch.</div>
                               </div>
                             </Link>
                           </div>
@@ -259,12 +261,12 @@ export function MainNavigation() {
                       </li>
                       <li>
                         <NavigationMenuLink asChild>
-                          <div className="opacity-50 pointer-events-none">
-                            <Link to="/characters/12345/builder/spellcasting" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
+                          <div>
+                            <Link to="/compendium?type=Spell" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
                               <WandIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
                               <div>
-                                <div className="font-medium mt-0.5 upper">Spellcasting Options</div>
-                                <div className="text-muted-foreground text-xs ">Choose your spellcasting options.</div>
+                                <div className="font-medium mt-0.5 upper">Spells</div>
+                                <div className="text-muted-foreground text-xs ">Browse every spell.</div>
                               </div>
                             </Link>
                           </div>
@@ -272,12 +274,12 @@ export function MainNavigation() {
                       </li>
                       <li>
                         <NavigationMenuLink asChild>
-                          <div className="opacity-50 pointer-events-none">
-                            <Link to="/characters/12345/builder/equipment" className="flex flex-row items-center gap-3 font-overpass leading-snug">
+                          <div>
+                            <Link to="/compendium?type=Magic+Item" className="flex flex-row items-center gap-3 font-overpass leading-snug">
                               <SwordIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
                               <div>
-                                <div className="font-medium mt-0.5">Equipment</div>
-                                <div className="text-muted-foreground text-xs ">Choose your equipment.</div>
+                                <div className="font-medium mt-0.5">Magic Items</div>
+                                <div className="text-muted-foreground text-xs ">Browse magic items.</div>
                               </div>
                             </Link>
                           </div>
@@ -286,11 +288,11 @@ export function MainNavigation() {
                       <li>
                         <NavigationMenuLink asChild>
                           <div className=" ">
-                            <Link to="/characters/12345/builder/manage" className="flex flex-row items-center gap-3 font-overpass leading-snug">
+                            <Link to="/compendium" className="flex flex-row items-center gap-3 font-overpass leading-snug">
                               <PencilRulerIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
                               <div>
-                                <div className="font-medium mt-0.5">Manage Character</div>
-                                <div className="text-muted-foreground text-xs ">Manage your character details.</div>
+                                <div className="font-medium mt-0.5">Compendium</div>
+                                <div className="text-muted-foreground text-xs ">Species, classes, feats and more.</div>
                               </div>
                             </Link>
                           </div>
@@ -300,6 +302,8 @@ export function MainNavigation() {
                   </NavigationMenuContent>
                 </NavigationMenuItem>
 
+                {/* upstream's developer and demo pages: only in development builds */}
+                {import.meta.env.DEV && (
                 <NavigationMenuItem className="hidden lg:block ">
                   <NavigationMenuTrigger className={cn(navigationMenuTriggerStyle(), "bg-transparent")}>Developer</NavigationMenuTrigger>
                   <NavigationMenuContent>
@@ -349,19 +353,34 @@ export function MainNavigation() {
                     </ul>
                   </NavigationMenuContent>
                 </NavigationMenuItem>
+                )}
               </NavigationMenuList>
             </NavigationMenu>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2">
+          {/* phones get no dropdown menus, so the two main pages are one tap away */}
+          <div className="flex items-center gap-1 md:hidden">
+            <Link to="/characters" aria-label="Characters" className="rounded-md p-2 hover:bg-muted">
+              <CrownIcon className="size-5" />
+            </Link>
+            <Link to="/compendium" aria-label="Compendium" className="rounded-md p-2 hover:bg-muted">
+              <LibraryBigIcon className="size-5" />
+            </Link>
+          </div>
+          <PlayerChip />
           <div className="flex items-center justify-end gap-2">
             <ModeToggle />
             <GitHubIconButton />
           </div>
 
-          <Separator orientation="vertical" className="min-h-5" />
-          <SizeIndicatorBadge className="ms-2" />
+          {import.meta.env.DEV && (
+            <>
+              <Separator orientation="vertical" className="min-h-5" />
+              <SizeIndicatorBadge className="ms-2" />
+            </>
+          )}
 
           {/* <div className="flex items-center justify-end gap-2">
             <AppMenuComponent />
@@ -369,6 +388,17 @@ export function MainNavigation() {
         </div>
       </nav>
     </>
+  );
+}
+
+function PlayerChip() {
+  const { player } = usePlayer();
+  if (!player) return null;
+  return (
+    <Link to="/characters" title="Your characters" className="hidden items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted sm:flex">
+      <UserIcon className="size-3.5" />
+      {player}
+    </Link>
   );
 }
 

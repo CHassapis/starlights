@@ -49,6 +49,11 @@ public interface IElementsRepository : IRepository
     /// Retrieves several elements (with components) in one query.
     /// </summary>
     Task<List<Element>> GetElementsByIdsAsync(IReadOnlyCollection<Guid> identifiers);
+
+    /// <summary>
+    /// The original Aurora XML of every imported element, by element id — to see which ones changed upstream.
+    /// </summary>
+    Task<Dictionary<Guid, string>> GetAuroraXmlAsync();
 }
 
 public sealed record ElementSummary(Guid Id, string Name, string Type, string? Source);

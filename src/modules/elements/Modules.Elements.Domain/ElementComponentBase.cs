@@ -23,4 +23,18 @@ public abstract class ElementComponentBase : EntityBase<ElementComponentId>
     /// Used to ensure deterministic ordering and support manual reordering.
     /// </summary>
     public int OrderSequence { get; internal set; }
+
+    /// <summary>
+    /// Sets the ID of the component. Used when importing, so a re-imported element keeps the component ids that
+    /// characters' registrations refer to; set it before the component is added to its element.
+    /// </summary>
+    public void SetComponentId(ElementComponentId newId)
+    {
+        if (newId == default)
+        {
+            throw new ArgumentException("New ID cannot be default.", nameof(newId));
+        }
+
+        Id = newId;
+    }
 }

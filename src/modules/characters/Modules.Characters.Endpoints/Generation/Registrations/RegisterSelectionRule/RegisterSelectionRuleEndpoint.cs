@@ -70,6 +70,17 @@ public class RegisterSelectionRuleEndpoint : Endpoint<RegisterSelectionRuleReque
             return;
         }
 
+        // picking another option replaces the current pick, and everything that pick brought with it
+        if (selectionRule.HasCurrentSelection())
+        {
+            var currentRegistration = await registrations.GetRegistrationAsync(selectionRule.SelectionRegistrationId!.Value);
+            if (currentRegistration is not null)
+            {
+                await _registrationManager.Unregister(currentRegistration);
+            }
+            selectionRule.ClearCurrentSelection();
+        }
+
         // create a new registration for the selected element
         var newRegistration = Registration.Create(character.Id, new(element.Id), element.Name, element.Type);
         newRegistration.SetParentRegistration(parentRegistration);

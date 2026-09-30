@@ -83,7 +83,7 @@ export function useCreateCharacter(): UseMutationResult<CreateCharacterResponse,
   return useMutation<CreateCharacterResponse, Error, CreateCharacterRequest>({
     mutationFn: (payload) => createCharacter(apiClient, payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: characterQueryKeys.list() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ["characters"] }).catch(() => {}); // upstream list + per-player lists
     },
   });
 }
@@ -93,7 +93,7 @@ export function useDeleteCharacter(): UseMutationResult<void, Error, string> {
   return useMutation<void, Error, string>({
     mutationFn: (id) => deleteCharacter(apiClient, id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: characterQueryKeys.list() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ["characters"] }).catch(() => {}); // upstream list + per-player lists
     },
   });
 }

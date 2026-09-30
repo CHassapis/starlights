@@ -10,6 +10,8 @@ import CharactersPage from "./pages/characters/Index.tsx";
 import CharactersCreatePage from "./pages/characters/create/Index.tsx";
 import CharactersDetailsPage from "./pages/characters/details/Index.tsx";
 import { CompendiumPage } from "./pages/compendium/Index.tsx";
+import { CharacterBuilderPage } from "./pages/characters/builder/builder-page.tsx";
+import { PlayerProvider } from "./lib/player.tsx";
 import { LandingPage2 } from "./pages/landing/Index.tsx";
 // import "./styles/typography.css";
 import App, { AppWide } from "./App.tsx";
@@ -57,7 +59,9 @@ const router = createBrowserRouter([
     element: <AppWide />,
     children: [
       { index: true, element: <CharactersPage /> },
-      { path: ":id", element: <CharactersDetailsPage /> },
+      { path: ":id", element: <CharacterBuilderPage /> },
+      // the upstream test page, still handy for looking at raw registrations and statistics
+      { path: ":id/debug", element: <CharactersDetailsPage /> },
       { path: "create", element: <CharactersCreatePage /> },
     ],
   },
@@ -72,7 +76,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="dark" storageKey="starlights-ui-theme">
-        <RouterProvider router={router} />
+        <PlayerProvider>
+          <RouterProvider router={router} />
+        </PlayerProvider>
         {/* <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" /> */}
         <Toaster />
       </ThemeProvider>

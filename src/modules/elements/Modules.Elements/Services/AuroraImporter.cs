@@ -48,7 +48,7 @@ internal sealed class AuroraImporter : IAuroraImporter
         _options = options;
     }
 
-    public async Task<AuroraImportResult> ImportAsync(string indexPath, bool replace = false, CancellationToken cancellationToken = default)
+    public async Task<AuroraImportResult> ImportAsync(string indexPath, bool replace = false, bool update = false, CancellationToken cancellationToken = default)
     {
         using var _ = ElementsInstrumentation.StartActivity();
 
@@ -119,17 +119,32 @@ internal sealed class AuroraImporter : IAuroraImporter
             }
         }
 
+        // choices written as a list of <item>s inside the select (personality traits, ideals, …) become
+        // elements of their own, so the builder can offer them like any other option
+        foreach (var element in toImport.Values.ToList())
+        {
+            foreach (var item in ListItems(element))
+            {
+                toImport.TryAdd(item.Id, item);
+            }
+        }
+
         var repository = _persistence.GetRepository<IElementsRepository>();
         var existing = (await repository.GetElementSummariesAsync()).Select(e => e.Id).ToHashSet();
 
+        // replace: re-create everything imported before; update: only what changed upstream. Component ids are
+        // derived from the content, so characters built on a re-created element keep working
         var replaced = 0;
-        if (replace)
+        if (replace || update)
         {
+            var stored = update && !replace ? await repository.GetAuroraXmlAsync() : null;
             foreach (var aurora in toImport.Values)
             {
                 var id = ToElementId(aurora.Id).Value;
-                if (existing.Remove(id) && await repository.DeleteElementAsync(id))
+                var changed = stored is null || !stored.TryGetValue(id, out var xml) || xml != aurora.Xml.ToString();
+                if (changed && existing.Contains(id) && await repository.DeleteElementAsync(id))
                 {
+                    existing.Remove(id);
                     replaced++;
                 }
             }
@@ -152,18 +167,30 @@ internal sealed class AuroraImporter : IAuroraImporter
             var element = Element.Create(aurora.Name, type);
             element.SetElementId(elementId);
 
-            element.AddComponent(id => new AuroraSourceComponent(id, aurora.Id, aurora.Type, aurora.Source, aurora.File, aurora.Xml.ToString()));
+            // component ids from the element's Aurora id plus what the component is (not its position), so
+            // registrations keep pointing at the same rule when upstream adds or reorders rules
+            var occurrences = new Dictionary<string, int>();
+            T Attach<T>(string key, Func<ElementId, T> create) where T : ElementComponentBase =>
+                element.AddComponent(id =>
+                {
+                    var component = create(id);
+                    var n = occurrences[key] = occurrences.GetValueOrDefault(key) + 1;
+                    component.SetComponentId(new ElementComponentId(ToGuid($"{aurora.Id}#{key}#{n}")));
+                    return component;
+                });
+
+            Attach("source", id => new AuroraSourceComponent(id, aurora.Id, aurora.Type, aurora.Source, aurora.File, aurora.Xml.ToString()));
 
             var description = aurora.Xml.Element("description");
             if (description is not null && description.Nodes().Any())
             {
                 var html = string.Concat(description.Nodes().Select(n => n.ToString(SaveOptions.DisableFormatting)));
-                element.AddComponent(id => new DescriptionComponent(id, html));
+                Attach("description", id => new DescriptionComponent(id, html));
             }
 
             if (aurora.Supports.Count > 0)
             {
-                element.AddComponent(id => new SupportsComponent(id, aurora.Supports));
+                Attach("supports", id => new SupportsComponent(id, aurora.Supports));
             }
 
             foreach (var rule in aurora.Rules)
@@ -185,7 +212,7 @@ internal sealed class AuroraImporter : IAuroraImporter
                             skippedUnresolved++;
                             break;
                         }
-                        element.AddComponent(id => new IncludeRuleComponent(id, ToElementId(grantId), level));
+                        Attach($"grant:{grantId}:{level}", id => new IncludeRuleComponent(id, ToElementId(grantId), level));
                         break;
 
                     case "stat":
@@ -195,7 +222,7 @@ internal sealed class AuroraImporter : IAuroraImporter
                         {
                             break;
                         }
-                        var stat = element.AddComponent(id => new StatisticRuleComponent(id, ToStatisticName(statName), ToStatisticName(statValue), level));
+                        var stat = Attach($"stat:{statName}:{statValue}:{level}", id => new StatisticRuleComponent(id, ToStatisticName(statName), ToStatisticName(statValue), level));
                         stat.UpdateStackingBonus((string?)rule.Attribute("bonus"));
                         stat.UpdateDisplayName((string?)rule.Attribute("alt"));
                         break;
@@ -207,8 +234,8 @@ internal sealed class AuroraImporter : IAuroraImporter
                         {
                             break;
                         }
-                        var select = element.AddComponent(id => new SelectionRuleComponent(id, MapType(selectType), selectName, level));
-                        select.UpdateSupports((string?)rule.Attribute("supports"));
+                        var select = Attach($"select:{selectType}:{selectName}:{level}", id => new SelectionRuleComponent(id, MapType(selectType), selectName, level));
+                        select.UpdateSupports(rule.Elements("item").Any() ? ListKey(aurora, selectName) : (string?)rule.Attribute("supports"));
                         select.UpdateQuantity(Math.Max(1, ParseInt(rule.Attribute("number")) ?? 1));
                         select.UpdateIsOptional(string.Equals((string?)rule.Attribute("optional"), "true", StringComparison.OrdinalIgnoreCase));
                         break;
@@ -367,20 +394,58 @@ internal sealed class AuroraImporter : IAuroraImporter
 
     private static string MapType(string auroraType) => TypeMap.GetValueOrDefault(auroraType.Trim(), auroraType.Trim());
 
-    internal static ElementId ToElementId(string auroraId)
+    /// <summary>
+    /// The supports key tying a list select to its items. Letters, digits and dashes only: the supports parser
+    /// reads , | ! ( ) as operators.
+    /// </summary>
+    private static string ListKey(AuroraElement owner, string selectName) =>
+        $"list:{owner.Id}:{Regex.Replace(selectName, "[^A-Za-z0-9]+", "-").Trim('-')}";
+
+    /// <summary>
+    /// The items of an element's list selects (e.g. a background's personality traits) as elements of type "List".
+    /// </summary>
+    private static IEnumerable<AuroraElement> ListItems(AuroraElement owner)
     {
-        byte[] input = [.. IdNamespace.ToByteArray(bigEndian: true), .. Encoding.UTF8.GetBytes(auroraId)];
+        foreach (var select in owner.Rules.Where(r => r.Name.LocalName == "select" && !IsConditional(r)))
+        {
+            var selectName = (string?)select.Attribute("name");
+            if (string.IsNullOrWhiteSpace(selectName))
+            {
+                continue;
+            }
+
+            var key = ListKey(owner, selectName);
+            var index = 0;
+            foreach (var item in select.Elements("item"))
+            {
+                index++;
+                var text = item.Value.Trim();
+                if (text.Length > 0)
+                {
+                    // the item's own id when it has one, so upstream inserting an item does not shift existing picks
+                    var itemId = (string?)item.Attribute("id") ?? index.ToString();
+                    yield return new AuroraElement($"{key}:{itemId}", text, "List", owner.Source, owner.File, item) { Supports = [key] };
+                }
+            }
+        }
+    }
+
+    internal static ElementId ToElementId(string auroraId) => new(ToGuid(auroraId));
+
+    private static Guid ToGuid(string name)
+    {
+        byte[] input = [.. IdNamespace.ToByteArray(bigEndian: true), .. Encoding.UTF8.GetBytes(name)];
         var hash = SHA1.HashData(input);
         hash[6] = (byte)((hash[6] & 0x0F) | 0x50); // version 5
         hash[8] = (byte)((hash[8] & 0x3F) | 0x80); // RFC 4122 variant
-        return new ElementId(new Guid(hash.AsSpan(0, 16), bigEndian: true));
+        return new Guid(hash.AsSpan(0, 16), bigEndian: true);
     }
 
     private sealed record AuroraElement(string Id, string Name, string Type, string? Source, string File, XElement Xml)
     {
         public IEnumerable<XElement> Rules => Xml.Element("rules")?.Elements() ?? [];
 
-        public List<string> Supports { get; } = ((string?)Xml.Element("supports"))?
+        public List<string> Supports { get; init; } = ((string?)Xml.Element("supports"))?
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList() ?? [];
     }

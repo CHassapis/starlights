@@ -76,8 +76,8 @@ internal class ElementsModuleInitializer : IElementsModuleInitializer
             .Build();
 
         // default character creation option
-        var defaultCharacter = ElementBuilder.Create(ElementTypeConstants.CharacterCreation, "Default Character")
-            .WithShortDescription("This is a default character for testing purposes.")
+        var defaultCharacter = ElementBuilder.Create(ElementTypeConstants.CharacterCreation, "Standard Character")
+            .WithShortDescription("Ability scores, skills, class, species, background and alignment.")
             .WithIncludeRule(proficiencyRule.Id)
             .WithIncludeRule(abilitiesRule.Id)
             .WithIncludeRule(skillsRule.Id)

@@ -15,6 +15,8 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from "@/components/u
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CardWrapper } from "../components/card-wrapper";
+import { usePlayer } from "@/lib/player";
+import { PlayerGate } from "../player-picker";
 
 function PortraitsLoading() {
   return (
@@ -54,6 +56,7 @@ function CharacterCreation() {
   const { data: portraits, isLoading: portraitsLoading, isError: portraitsIsError, error: portraitsError } = useCharacterPortraitOptions();
   const navigate = useNavigate();
   const createMutation = useCreateCharacter();
+  const { player } = usePlayer();
 
   const {
     register,
@@ -75,9 +78,9 @@ function CharacterCreation() {
   const canSubmit = useMemo(() => isValid && !createMutation.isPending && !isSubmitting, [isValid, createMutation.isPending, isSubmitting]);
 
   const onSubmit = handleSubmit(async (values) => {
-    const result = await createMutation.mutateAsync(values);
-    console.log(result);
-    if (result?.Id) navigate(`/characters/${result.Id}`);
+    const result = (await createMutation.mutateAsync({ ...values, PlayerName: player ?? undefined } as typeof values)) as { id?: string; Id?: string };
+    const newId = result?.id ?? result?.Id;
+    if (newId) navigate(`/characters/${newId}`);
   });
 
   return (
@@ -180,7 +183,9 @@ export default function CharactersCreatePage() {
               <CardDescription>Fill in your character information. You can change all these fields later.</CardDescription>
             </CardHeader>
             <CardContent>
-              <CharacterCreation />
+              <PlayerGate>
+                <CharacterCreation />
+              </PlayerGate>
             </CardContent>
           </Card>
         </CardWrapper>

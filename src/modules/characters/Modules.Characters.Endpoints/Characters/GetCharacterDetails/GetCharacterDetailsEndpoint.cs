@@ -65,6 +65,7 @@ sealed class GetCharacterDetailsEndpoint : EndpointWithoutRequest<GetCharacterDe
             PortraitUrl = appearance.PortraitUrl,
             Level = progression.CharacterLevel,
             Build = build.ToString().TrimEnd('/').Trim(),
+            PlayerName = character.PlayerName,
         };
 
         var response = new GetCharacterDetailsResponse { Character = model };
