@@ -10,7 +10,7 @@ namespace Starlights.Modules.Elements.Services;
 
 /// <summary>
 /// Set <c>IncludeSampleContent</c> to false (config <c>Elements:SampleContent=false</c>) when the classes,
-/// species and backgrounds come from an import instead of the placeholder samples.
+/// species, backgrounds and alignments come from an import instead of the placeholder samples.
 /// </summary>
 public sealed record ElementsInitializerOptions(bool IncludeSampleContent = true);
 
@@ -40,8 +40,8 @@ internal class ElementsModuleInitializer : IElementsModuleInitializer
             CreateClasses(repository);
             CreateSpecies(repository);
             CreateBackgrounds(repository);
+            CreateAlignments(repository);
         }
-        CreateAlignments(repository);
 
         var rows = await _persistence.SaveChangesAsync();
 

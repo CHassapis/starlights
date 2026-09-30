@@ -350,16 +350,19 @@ internal sealed class AuroraImporter : IAuroraImporter
     private static int? ParseInt(XAttribute? attribute) => int.TryParse(attribute?.Value, out var value) ? value : null;
 
     private static readonly Regex AuroraSave = new(@"^(strength|dexterity|constitution|intelligence|wisdom|charisma):save\b", RegexOptions.Compiled);
+    private static readonly Regex AuroraClassLevel = new(@"^level:(?!half\b)([a-z][a-z-]*)(:.*)?$", RegexOptions.Compiled);
 
     /// <summary>
     /// Aurora statistic names to the Starlights convention (lowercase, spaces as hyphens, saves named after the
-    /// saving throw element): "animal handling:proficiency" → "animal-handling:proficiency",
-    /// "strength:save:proficiency" → "strength-saving-throw:proficiency". Numbers pass through.
+    /// saving throw element, class level as "&lt;class&gt;:level"): "animal handling:proficiency" →
+    /// "animal-handling:proficiency", "strength:save:proficiency" → "strength-saving-throw:proficiency",
+    /// "level:wizard:half" → "wizard:level:half". Numbers pass through.
     /// </summary>
     private static string ToStatisticName(string auroraName)
     {
         var name = auroraName.Trim().ToLowerInvariant();
-        return AuroraSave.Replace(name, "$1-saving-throw").Replace(' ', '-');
+        name = AuroraSave.Replace(name, "$1-saving-throw").Replace(' ', '-');
+        return AuroraClassLevel.Replace(name, "$1:level$2");
     }
 
     private static string MapType(string auroraType) => TypeMap.GetValueOrDefault(auroraType.Trim(), auroraType.Trim());
