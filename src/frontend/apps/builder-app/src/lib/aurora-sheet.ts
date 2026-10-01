@@ -470,7 +470,8 @@ async function detailsPage(b: SheetBuilder, data: SheetData) {
   if (proficiencies) {
     const line = (title: string, list: { name: string }[]): Paragraph | null =>
       list.length ? [{ text: `${title}.`, font: "boldItalic" }, { text: ` ${list.map((e) => e.name).join(", ")}`, font: "regular" }] : null;
-    const p = data.proficiencySummary;
+    // in the order the character gained them, as Aurora lists them ("Common, Elvish, Draconic")
+    const p = data.proficienciesInOrder;
     const paragraphs = [
       line("Armor Proficiencies", p.armor),
       line("Weapon Proficiencies", p.weapons),
@@ -758,7 +759,7 @@ async function itemCards(b: SheetBuilder, data: SheetData) {
     // positions inside the card from Aurora's generic card page (title box 8,224 168x14; subtitle 11,212 160x9)
     centered(clean(item.title), b.fonts.regular, 10, 227.5, 160);
     centered(clean(item.subtitle), b.fonts.italic, 6, 214.5, 156);
-    drawParagraphs(p, { x: x0 + 4, y: y0 + 20, w: 172, h: 186 }, htmlParagraphs(item.html), b.fonts, { size: 6, minSize: 3.5, paragraphGap: 0, lineHeight: 1.0 });
+    drawParagraphs(p, { x: x0 + 4, y: y0 + 20, w: 172, h: 186 }, htmlParagraphs(item.html), b.fonts, { size: 7, minSize: 3.5, paragraphGap: 0, lineHeight: 1.1 });
     p.drawText(clean(item.weight), { x: x0 + 6, y: y0 + 6.4, size: 6, font: b.fonts.regular });
     const source = clean(item.source);
     p.drawText(source, { x: x0 + 174 - widthOf(source, b.fonts.regular, 6), y: y0 + 6.4, size: 6, font: b.fonts.regular });

@@ -4,7 +4,7 @@ import { summarizeProficiencies, type ProficiencyRegistration } from "./proficie
 let n = 0;
 function reg(name: string, type: string, parent?: ProficiencyRegistration): ProficiencyRegistration {
   n++;
-  return { registrationId: `r${n}`, name, type, associatedElementId: `e-${name}`, parentRegistrationId: parent?.registrationId ?? null };
+  return { registrationId: `r${String(n).padStart(4, "0")}`, name, type, associatedElementId: `e-${name}`, parentRegistrationId: parent?.registrationId ?? null };
 }
 
 /** Elorin's shape: an elf rogue with the criminal background, and a Phantom's feature. */
@@ -59,6 +59,12 @@ describe("proficiencies and languages", () => {
     expect(p.skills.find((s) => s.name === "Survival")?.sources).toEqual(["Elf (Keen Senses)"]);
     expect(p.skills.find((s) => s.name === "Persuasion")?.sources).toEqual(["Rogue (Phantom)"]);
     expect(p.savingThrows.map((s) => s.name)).toEqual(["Dexterity"]);
+  });
+
+  it("keeps the order they were gained in (time-ordered registration ids), for Aurora's sheet", () => {
+    const regs = elorin().map((r) => (r.name === "Common" ? { ...r, registrationId: "r00" } : r));
+    const p = summarizeProficiencies(regs, "gained");
+    expect(p.languages.map((l) => l.name)).toEqual(["Common", "Elvish", "Thieves’ Cant"]);
   });
 
   it("marks expertise on the skill", () => {

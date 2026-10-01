@@ -128,6 +128,8 @@ export interface SheetData {
   /** the character's own spells for the spell cards (not the whole class list) */
   cardSpells: SheetSpell[];
   proficiencySummary: Proficiencies;
+  /** the same in the order the character gained them, for the sheet's box */
+  proficienciesInOrder: Proficiencies;
   /** attacks in one Attack action: 2 with Extra Attack, more for a high-level fighter */
   attacksPerAction: number;
   /** damage resistances, immunities and vulnerabilities, for the sheet's box */
@@ -493,6 +495,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       spellPages,
       cardSpells,
       proficiencySummary: owned,
+      proficienciesInOrder: summarizeProficiencies(registrations.data?.registrations ?? [], "gained"),
       attacksPerAction: Math.max(
         1,
         ...all.map((r) => {

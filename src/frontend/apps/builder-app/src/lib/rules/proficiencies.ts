@@ -87,20 +87,25 @@ export function sourceOf(registration: ProficiencyRegistration, byId: Map<string
   return detail ? `${levelless(owner.name)} (${levelless(detail.name)})` : levelless(owner.name);
 }
 
-export function summarizeProficiencies(registrations: ProficiencyRegistration[]): Proficiencies {
+/** By name (the builder's card), or in the order the character gained them (Aurora's sheet). */
+export function summarizeProficiencies(registrations: ProficiencyRegistration[], order: "name" | "gained" = "name"): Proficiencies {
   const all = flattenRegistrations(registrations);
   const byId = new Map(all.map((r) => [r.registrationId, r]));
   const groups: Proficiencies = { savingThrows: [], skills: [], armor: [], weapons: [], tools: [], languages: [], other: [] };
 
+  const firstSeen = new Map<ProficiencyEntry, string>();
   function add(list: ProficiencyEntry[], name: string, r: ProficiencyRegistration, expertise = false) {
     const source = sourceOf(r, byId);
     const existing = list.find((e) => e.name.toLowerCase() === name.toLowerCase());
     if (existing) {
+      if (r.registrationId < (firstSeen.get(existing) ?? "\uffff")) firstSeen.set(existing, r.registrationId);
       if (source && !existing.sources.includes(source)) existing.sources.push(source);
       if (expertise) existing.expertise = true;
       return;
     }
-    list.push({ name, elementId: r.associatedElementId, sources: source ? [source] : [], ...(expertise ? { expertise: true } : {}) });
+    const entry: ProficiencyEntry = { name, elementId: r.associatedElementId, sources: source ? [source] : [], ...(expertise ? { expertise: true } : {}) };
+    firstSeen.set(entry, r.registrationId);
+    list.push(entry);
   }
 
   for (const r of all) {
@@ -123,6 +128,12 @@ export function summarizeProficiencies(registrations: ProficiencyRegistration[])
     else add(groups.other, inner(name), r);
   }
 
+  if (order === "gained") {
+    // registration ids are time-ordered (UUIDv7): the first registration of each entry says when it was gained
+    const gained = (a: ProficiencyEntry, b: ProficiencyEntry) => (firstSeen.get(a) ?? "").localeCompare(firstSeen.get(b) ?? "");
+    for (const list of Object.values(groups)) list.sort(gained);
+    return groups;
+  }
   const byName = (a: ProficiencyEntry, b: ProficiencyEntry) => a.name.localeCompare(b.name);
   for (const list of Object.values(groups)) list.sort(byName);
   // Common first, as on Aurora's sheet
