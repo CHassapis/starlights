@@ -71,6 +71,16 @@ const router = createBrowserRouter([
     ],
   },
   {
+    // the Compendium of Lore: its own bundle, loaded when first opened
+    path: "/lore",
+    element: <AppWide />,
+    children: [
+      { index: true, lazy: () => import("./pages/lore/lore-home.tsx").then((m) => ({ Component: m.LoreHome })) },
+      { path: ":category", lazy: () => import("./pages/lore/category-page.tsx").then((m) => ({ Component: m.CategoryPage })) },
+      { path: ":category/:key", lazy: () => import("./pages/lore/category-page.tsx").then((m) => ({ Component: m.CategoryPage })) },
+    ],
+  },
+  {
     path: "/campaigns",
     element: <AppWide />,
     children: [
