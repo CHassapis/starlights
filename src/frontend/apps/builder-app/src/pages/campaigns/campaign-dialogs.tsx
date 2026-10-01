@@ -50,15 +50,28 @@ export function Prose({ text, className }: { text: string; className?: string })
   return <div className={cn("whitespace-pre-wrap text-sm leading-relaxed", className)}>{text}</div>;
 }
 
-/** The DM's notes, set apart so they are never mistaken for what the players see. */
+/** Notes longer than this start folded, so a whole prep document does not bury the page. */
+const FOLD_AT = 1200;
+
+/** The DM's notes, set apart so they are never mistaken for what the players see. Long notes start folded. */
 export function DmNotes({ text }: { text?: string | null }) {
+  const [open, setOpen] = useState(false);
   if (!text?.trim()) return null;
+  const long = text.length > FOLD_AT;
   return (
     <div className="mt-2 rounded-md border border-amber-500/50 bg-amber-500/5 p-3">
       <p className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
         <EyeOffIcon className="size-3.5" /> DM only
       </p>
-      <Prose text={text} />
+      <div className={cn(long && !open && "relative max-h-48 overflow-hidden")}>
+        <Prose text={text} />
+        {long && !open && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />}
+      </div>
+      {long && (
+        <Button size="sm" variant="ghost" className="mt-1 h-7 px-2 text-amber-700 dark:text-amber-400" onClick={() => setOpen(!open)} aria-expanded={open}>
+          {open ? "Fold the notes" : `Show all the notes (${Math.max(1, Math.round(text.split(/\s+/).length / 230))} min read)`}
+        </Button>
+      )}
     </div>
   );
 }
