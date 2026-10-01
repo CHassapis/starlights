@@ -26,6 +26,8 @@ export interface WeaponInfo {
   ranged?: boolean;
   proficiencyId?: string | null;
   ammunitionId?: string | null;
+  /** the 2024 weapon mastery ("Vex"), shown with the properties as on Aurora's sheet */
+  mastery?: string | null;
 }
 
 export interface ArmorInfo {
@@ -87,6 +89,8 @@ export interface InventoryEntry {
   attuned?: boolean;
   chargesUsed?: number;
   card?: boolean;
+  /** its place in the sheet's attack list (Aurora's displayed attacks), or null */
+  attack?: number | null;
   notes?: string | null;
   custom?: CustomItem | null;
   /** set by the server while the item is active and has rules */
@@ -301,6 +305,8 @@ export interface CharacterFacts {
 
 export interface ArmorClass {
   total: number;
+  /** without armor: the statistic of the feature whose calculation wins ("ac:draconic-resilience"), if any */
+  calculation?: string;
   /** how it adds up, for the info card */
   parts: { label: string; value: number }[];
   armor?: Resolved;
@@ -323,6 +329,7 @@ export function armorClass(inventory: Inventory, catalog: Catalog, c: CharacterF
   const shield = resolved.find((r) => r.entry.equipped && r.armor?.kind === "Shield");
   const dex = c.mod("DEX");
   const parts: { label: string; value: number }[] = [];
+  let calculation: string | undefined;
 
   if (armor?.armor) {
     parts.push({ label: armor.name, value: armor.armor.armorClass });
@@ -335,14 +342,17 @@ export function armorClass(inventory: Inventory, catalog: Catalog, c: CharacterF
     const options = c.statNames
       .filter((n) => n.startsWith("ac:") && !NOT_A_CALCULATION.test(n))
       .filter((n) => !shield || !/monk|dazzling/.test(n))
-      .map((n) => ({ label: n.slice(3).replace(/-/g, " ").replace(/^\w/, (x) => x.toUpperCase()), value: c.stat(n) ?? 0 }));
-    const best = options.reduce((a, b) => (b.value > a.value ? b : a), { label: "Unarmored (10 + Dexterity)", value: 10 + dex });
-    parts.push(best);
+      .map((n) => ({ label: n.slice(3).replace(/-/g, " ").replace(/^\w/, (x) => x.toUpperCase()), value: c.stat(n) ?? 0, statistic: n as string | undefined }));
+    const best = options.reduce((a, b) => (b.value > a.value ? b : a), { label: "Unarmored (10 + Dexterity)", value: 10 + dex, statistic: undefined as string | undefined });
+    parts.push({ label: best.label, value: best.value });
+    calculation = best.statistic;
   }
   if (shield?.armor) {
     parts.push({ label: shield.name, value: shield.armor.armorClass });
-    const magic = c.stat("ac:shield") ?? 0;
-    if (magic) parts.push({ label: "Magic shield", value: magic });
+    // the shield's own rule puts its +2 in ac:shield too: only what is above it is magic (a +1 shield gives 3)
+    const total = c.stat("ac:shield");
+    const magic = total === undefined ? 0 : total - shield.armor.armorClass;
+    if (magic > 0) parts.push({ label: "Magic shield", value: magic });
   }
   const misc = c.stat("ac:misc") ?? 0;
   if (misc) parts.push({ label: "Other bonuses", value: misc });
@@ -353,6 +363,7 @@ export function armorClass(inventory: Inventory, catalog: Catalog, c: CharacterF
     armor,
     shield,
     stealthDisadvantage: !!armor?.armor?.stealthDisadvantage,
+    calculation,
   };
 }
 
@@ -372,7 +383,9 @@ const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 /**
  * Attack lines for the weapons, equipped ones first: STR for melee, DEX for ranged, the better of the two for
  * finesse; proficiency from the weapon's own proficiency or its simple/martial group; a magic weapon's +N on
- * both; versatile dice when wielded two-handed; no positive ability modifier on off-hand damage.
+ * both; versatile dice when wielded two-handed. As on Aurora's sheet the damage always shows its modifier ("1d8+0")
+ * and an off-hand weapon its full one (only the Light property's extra attack leaves it out, which the feature
+ * text explains).
  */
 export function attacks(inventory: Inventory, catalog: Catalog, c: CharacterFacts): Attack[] {
   const entries = new Map(inventory.items.map((e) => [e.id, resolve(e, catalog)]));
@@ -391,7 +404,7 @@ export function attacks(inventory: Inventory, catalog: Catalog, c: CharacterFact
     const enhancement = r.base ? (r.item?.magic?.enhancement ?? 0) : 0;
     const toHit = ability + (proficient ? c.proficiencyBonus : 0) + enhancement;
     const dice = r.entry.equipped === "Two-Handed" && w.versatile ? w.versatile : w.damage;
-    const damageBonus = (r.entry.equipped === "Off Hand" && ability > 0 ? 0 : ability) + enhancement;
+    const damageBonus = ability + enhancement;
     const reach = properties.includes("Reach") ? "10 ft" : "5 ft";
     return {
       entryId: r.entry.id,
@@ -399,11 +412,27 @@ export function attacks(inventory: Inventory, catalog: Catalog, c: CharacterFact
       range: w.ranged || properties.includes("Thrown") ? (w.range ?? reach) : reach,
       toHit,
       attack: `${sign(toHit)} vs AC`,
-      damage: `${dice}${damageBonus ? sign(damageBonus) : ""}${w.damageType ? ` ${w.damageType}` : ""}`,
-      properties,
+      damage: `${dice}${sign(damageBonus)}${w.damageType ? ` ${w.damageType}` : ""}`,
+      // the properties and the mastery, in Aurora's order ("Finesse, Vex")
+      properties: [...properties, ...(w.mastery ? [w.mastery] : [])].sort((a, b) => a.localeCompare(b)),
       proficient,
     };
   });
+}
+
+/**
+ * The sheet's attack rows: the weapons the player put on the attack list (Aurora's displayed attacks), in that
+ * order; when none are listed, the equipped weapons, each name once.
+ */
+export function sheetAttacks(inventory: Inventory, catalog: Catalog, c: CharacterFacts): Attack[] {
+  const all = new Map(attacks(inventory, catalog, c).map((a) => [a.entryId, a]));
+  const listed = inventory.items.filter((e) => e.attack).sort((a, b) => a.attack! - b.attack!);
+  if (listed.length > 0) return listed.map((e) => all.get(e.id)).filter((a): a is Attack => !!a);
+  const seen = new Set<string>();
+  return inventory.items
+    .filter((e) => e.equipped)
+    .map((e) => all.get(e.id))
+    .filter((a): a is Attack => !!a && !seen.has(a.name) && !!seen.add(a.name));
 }
 
 /** The attunement limit: Aurora's attunement:max statistic (artificers raise it), otherwise 3. */

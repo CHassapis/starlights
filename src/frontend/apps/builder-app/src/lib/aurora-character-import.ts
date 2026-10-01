@@ -169,6 +169,7 @@ export async function importAuroraCharacter(
     await apiClient.post(`/api/characters/${characterId}/classes/${primary.characterClassId}/level`, { newLevel: level });
   }
 
+  await fillDeity(characterId, open, ids);
   const proxies = await addFeatProxies(characterId, doc, ids);
   open.push(...proxies);
   report.picked += await fillChoices(characterId, open, ids, { onlyEmpty: false, label: name, onProgress });
@@ -206,6 +207,8 @@ export async function importAuroraCharacter(
   const allies = text(build, ":scope > input > organization > allies");
   if (organization) story.organization = organization;
   if (allies) story.allies = allies;
+  const rolls = hitPointRolls(doc);
+  if (rolls) story.hitPointRolls = rolls;
   if (Object.keys(story).length > 0) {
     await apiClient.put(`/api/characters/${characterId}/story`, { fields: story });
   }
@@ -408,10 +411,22 @@ const COINS: [string, string][] = [
  * running it again adds nothing twice. Returns how many items were added and the ones not in the content.
  */
 export async function importAuroraEquipment(characterId: string, doc: Document): Promise<{ added: number; missing: string[] }> {
-  const current = await apiClient.get<{ items: unknown[]; coins: Record<string, number>; treasure?: string | null; questItems?: string | null }>(
+  const current = await apiClient.get<{ items: { id: string; attack?: number | null }[]; coins: Record<string, number>; treasure?: string | null; questItems?: string | null }>(
     `/api/characters/${characterId}/inventory`,
   );
-  if (current.items.length > 0 || Object.values(current.coins ?? {}).some((n) => n > 0)) return { added: 0, missing: [] };
+  // the weapons Aurora shows as attacks, in its order, by the item's identifier
+  const attackOrder = new Map(
+    Array.from(doc.querySelectorAll("build > input > attacks > attack"))
+      .filter((a) => a.getAttribute("displayed") !== "false" && a.getAttribute("identifier"))
+      .map((a, i) => [a.getAttribute("identifier")!, i + 1]),
+  );
+  if (current.items.length > 0 || Object.values(current.coins ?? {}).some((n) => n > 0)) {
+    // an inventory brought in before attacks were: give its entries their attack places, if none has one yet
+    if (!current.items.some((i) => i.attack) && current.items.some((i) => attackOrder.has(i.id))) {
+      await apiClient.put(`/api/characters/${characterId}/inventory`, { ...current, items: current.items.map((i) => ({ ...i, attack: attackOrder.get(i.id) ?? null })) });
+    }
+    return { added: 0, missing: [] };
+  }
 
   const nodes = Array.from(doc.querySelectorAll("build > equipment > item")).filter(
     (i) => i.getAttribute("hidden") !== "true" && !/_ITEM_FEAT_PROXY_/.test(i.getAttribute("id") ?? ""),
@@ -442,6 +457,7 @@ export async function importAuroraEquipment(characterId: string, doc: Document):
         equipped: equipped?.textContent?.trim() === "true" ? (SLOTS[equipped.getAttribute("location") ?? ""] ?? "Worn") : null,
         attuned: text(node, ":scope > attunement") === "true",
         card: node.querySelector(":scope > details")?.getAttribute("card") === "true",
+        attack: attackOrder.get(identifier) ?? null,
         notes: text(node, ":scope > details > notes") || null,
       },
     ];
@@ -484,6 +500,13 @@ export async function updateFromAurora(characterId: string, xmlText: string, onP
   const missing = picks.filter((p) => !ids[p.registered]).map((p) => `${p.name}: ${p.registered}`);
   const open = picks.filter((p) => ids[p.registered] && p.parent !== null);
 
+  onProgress?.("Deity and hit points…");
+  await fillDeity(characterId, [...picks.filter((p) => p.type === "Deity" && ids[p.registered])], ids);
+  const rolls = hitPointRolls(doc);
+  if (rolls) {
+    const { fields } = await apiClient.get<{ fields: Record<string, string> }>(`/api/characters/${characterId}/story`);
+    if (!fields.hitPointRolls) await apiClient.put(`/api/characters/${characterId}/story`, { fields: { ...fields, hitPointRolls: rolls } });
+  }
   onProgress?.("Feats…");
   open.push(...(await addFeatProxies(characterId, doc, ids)));
   onProgress?.("Choices…");
@@ -494,4 +517,28 @@ export async function updateFromAurora(characterId: string, xmlText: string, onP
   const prepared = await importAuroraPreparedSpells(characterId, doc);
 
   return { picked, items: equipment.added, prepared, missing: [...missing, ...equipment.missing], unmatched: await unmatchedPicks(characterId, open, ids) };
+}
+
+/**
+ * Aurora's hit point rolls: the level elements carry the character's rolled hit dice (rndhp, the first one the
+ * full die of level 1); Aurora's maximum hit points add them up level by level. Kept with the story fields.
+ */
+function hitPointRolls(doc: Document): string | null {
+  const rolls = doc.querySelector('build > elements element[type="Level"][rndhp]')?.getAttribute("rndhp")?.trim();
+  return rolls && /^\d+(,\d+)*$/.test(rolls) ? rolls : null;
+}
+
+/**
+ * The deity: Aurora files keep it as a "Deity" pick that may sit under another element (a cleric's domain), while
+ * Starlights has one Deity choice of its own; it is filled when still empty.
+ */
+async function fillDeity(characterId: string, picks: Pick[], ids: Record<string, string>) {
+  const pick = picks.find((p) => p.type === "Deity" && ids[p.registered]);
+  if (!pick) return;
+  const choices = await settledChoices(characterId);
+  const slot = choices.find((c) => c.depth === 0 && c.section === "Deity");
+  if (slot && !slot.selected) {
+    await registerPick(characterId, slot, ids[pick.registered]);
+    picks.splice(picks.indexOf(pick), 1);
+  }
 }

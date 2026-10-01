@@ -108,6 +108,7 @@ export function EquipmentTab({ characterId }: { characterId: string }) {
   const containers = groups.containers.map((g) => g.container);
   const rowProps = {
     containers,
+    nextAttack: Math.max(0, ...inventory.items.map((e) => e.attack ?? 0)) + 1,
     attackOf: (id: string) => summary?.attacks.get(id),
     onChange: (id: string, change: Partial<InventoryEntry>) => save.updateEntry(id, change, failed),
     onRemove: (id: string) =>
@@ -239,6 +240,8 @@ export function EquipmentTab({ characterId }: { characterId: string }) {
 
 interface RowProps {
   containers: Resolved[];
+  /** the place a weapon put on the sheet's attack list gets */
+  nextAttack: number;
   attackOf: (id: string) => Attack | undefined;
   onChange: (id: string, change: Partial<InventoryEntry>) => void;
   onRemove: (id: string) => void;
@@ -258,7 +261,7 @@ function Group({ title, icon, note, items, empty, ...row }: RowProps & { title: 
   );
 }
 
-function Row({ r, containers, attackOf, onChange, onRemove }: RowProps & { r: Resolved }) {
+function Row({ r, containers, nextAttack, attackOf, onChange, onRemove }: RowProps & { r: Resolved }) {
   const { entry, item } = r;
   const slots = equipSlots(r);
   const attack = attackOf(entry.id);
@@ -375,6 +378,11 @@ function Row({ r, containers, attackOf, onChange, onRemove }: RowProps & { r: Re
               <DropdownMenuCheckboxItem checked={entry.card !== false} onCheckedChange={(checked) => onChange(entry.id, { card: !!checked })}>
                 Card on the sheet
               </DropdownMenuCheckboxItem>
+              {r.weapon && (
+                <DropdownMenuCheckboxItem checked={!!entry.attack} onCheckedChange={(checked) => onChange(entry.id, { attack: checked ? nextAttack : null })}>
+                  On the sheet's attacks
+                </DropdownMenuCheckboxItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive" onSelect={() => onRemove(entry.id)}>
                 Remove

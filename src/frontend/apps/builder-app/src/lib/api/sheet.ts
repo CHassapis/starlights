@@ -1,6 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import type { BuilderChoice } from "@/lib/api/builder";
+import { useItemCatalog } from "@/lib/api/items";
+import { useSpellIndex } from "@/lib/api/magic";
+import type { CharacterFacts, Inventory } from "@/lib/rules/items";
+import { EMPTY_MAGIC, type KnownSpell, type MagicState, type Spellcasting } from "@/lib/rules/magic";
+import { summarizeProficiencies, type Proficiencies } from "@/lib/rules/proficiencies";
+import {
+  sheetArmor,
+  sheetAttackLines,
+  sheetEquipment,
+  sheetItemCards,
+  sheetSpellPages,
+  type ItemText,
+  type SheetArmor,
+  type SheetAttackLine,
+  type SheetEquipment,
+  type SheetItemCard,
+  type SheetSpellPage,
+} from "@/lib/sheet-model";
 
 interface AbilityScore {
   abilityScoreId: string;
@@ -32,6 +50,7 @@ interface StatisticGroup {
 }
 interface BatchEntry {
   id: string;
+  auroraId?: string | null;
   name: string;
   type: string;
   source: string | null;
@@ -42,6 +61,12 @@ interface BatchEntry {
 }
 
 export type Proficiency = "none" | "proficient" | "expertise";
+
+export interface Defenses {
+  resistances: string[];
+  immunities: string[];
+  vulnerabilities: string[];
+}
 
 export interface SheetFeature {
   title: string;
@@ -95,6 +120,18 @@ export interface SheetData {
   speeds: { walk: number; fly: number; climb: number; swim: number };
   vision: string[];
   armorClass: number;
+  armor: SheetArmor;
+  attacks: SheetAttackLine[];
+  equipment: SheetEquipment;
+  itemCards: SheetItemCard[];
+  spellPages: SheetSpellPage[];
+  /** the character's own spells for the spell cards (not the whole class list) */
+  cardSpells: SheetSpell[];
+  proficiencySummary: Proficiencies;
+  /** attacks in one Attack action: 2 with Extra Attack, more for a high-level fighter */
+  attacksPerAction: number;
+  /** damage resistances, immunities and vulnerabilities, for the sheet's box */
+  defenses: Defenses;
   hitDice: string;
   hitPoints: number | null;
   proficiencies: { armor: string[]; weapons: string[]; tools: string[] };
@@ -123,6 +160,17 @@ function proficiencyOf(bonus: Bonus, proficiencyBonus: number): Proficiency {
 // "Armor Proficiency (Light Armor)" -> "Light Armor"
 const inner = (name: string) => name.match(/\(([^)]+)\)\s*$/)?.[1] ?? name;
 const unique = (list: string[]) => [...new Set(list)].sort((a, b) => a.localeCompare(b));
+
+/**
+ * Maximum hit points: the hit die at level 1, then Aurora's rolls for the levels after when the character came from
+ * Aurora with them (its level elements' rndhp, kept by the importer), otherwise the fixed average; the Constitution
+ * modifier each level, and bonuses such as Draconic Resilience (the "hp" statistic).
+ */
+export function hitPointsFor(hitDie: number, level: number, con: number, bonus: number, rolls?: string): number {
+  const rolled = (rolls ?? "").split(",").map((r) => Number(r.trim())).filter((n) => n > 0);
+  const dice = rolled.length >= level ? rolled.slice(0, level).reduce((a, b) => a + b, 0) : hitDie + (level - 1) * (hitDie / 2 + 1);
+  return dice + level * con + bonus;
+}
 
 /** Aurora statistic names to the Starlights convention (same as the importer). */
 function statisticName(auroraName: string): string {
@@ -157,6 +205,12 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
   const classes = q<{ classes: { name: string; level: number; isPrimary: boolean; registrationId: string }[] }>("classes", `${base}/classes`);
   const choices = q<{ choices: BuilderChoice[] }>("choices", `${base}/builder/choices`);
   const story = q<{ fields: Record<string, string> }>("story", `${base}/story`);
+  const inventory = q<Inventory>("inventory", `${base}/inventory`);
+  const casting = q<Spellcasting>("spellcasting", `${base}/spellcasting`);
+  const magic = q<MagicState>("magic", `${base}/magic`);
+  const defenses = q<Defenses>("defenses", `${base}/defenses`);
+  const catalog = useItemCatalog();
+  const spellIndex = useSpellIndex();
 
   const all = flatten(registrations.data?.registrations ?? []);
   const elementIds = unique(all.map((r) => r.associatedElementId));
@@ -166,10 +220,22 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
     enabled: elementIds.length > 0,
   });
 
-  const parts = [details, abilities, saves, skills, stats, registrations, classes, choices, story, batch];
+  // the items' and prepared spells' own texts, for item cards, descriptions and spell cards
+  const textIds = unique([
+    ...(inventory.data?.items ?? []).flatMap((e) => [e.elementId ?? "", e.baseElementId ?? ""]),
+    ...Object.values(magic.data?.prepared ?? {}).flat(),
+  ].filter((id) => id && !elementIds.includes(id)));
+  const texts = useQuery({
+    queryKey: ["sheet", characterId, "texts", textIds.join(",")],
+    queryFn: () => apiClient.get<{ entries: BatchEntry[] }>(`/api/elements/compendium/batch?ids=${textIds.join(",")}`),
+    enabled: textIds.length > 0,
+  });
+
+  const parts = [details, abilities, saves, skills, stats, registrations, classes, choices, story, batch, inventory, casting, magic, catalog, spellIndex, ...(textIds.length ? [texts] : [])];
   const error = parts.find((p) => p.error)?.error ?? null;
   const isLoading = parts.some((p) => p.isLoading);
-  if (isLoading || error || !details.data || !abilities.data || !saves.data || !skills.data || !stats.data || !batch.data) return { isLoading, error };
+  if (isLoading || error || !details.data || !abilities.data || !saves.data || !skills.data || !stats.data || !batch.data || !inventory.data || !casting.data || !catalog.data)
+    return { isLoading, error };
 
   const entries = new Map(batch.data.entries.map((e) => [e.id, e]));
   const statistics = new Map(stats.data.statistics.map((s) => [s.groupName, s.totalValue]));
@@ -236,8 +302,12 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
   function spell(r: Registration): SheetSpell | null {
     const entry = entries.get(r.associatedElementId);
     if (!entry) return null;
-    const s = entry.setters;
     const parent = r.parentRegistrationId ? byRegistration.get(r.parentRegistrationId) : undefined;
+    return spellFromEntry(entry, parent?.name ?? "");
+  }
+
+  function spellFromEntry(entry: BatchEntry, origin: string): SheetSpell {
+    const s = entry.setters;
     const components = [s.hasVerbalComponent === "true" && "V", s.hasSomaticComponent === "true" && "S", s.hasMaterialComponent === "true" && `M (${s.materialComponent ?? "…"})`]
       .filter(Boolean)
       .join(", ");
@@ -252,7 +322,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       concentration: s.isConcentration === "true",
       ritual: s.isRitual === "true",
       description: entry.description,
-      origin: parent?.name ?? "",
+      origin,
       source: entry.source ?? "",
     };
   }
@@ -280,7 +350,20 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
     return false;
   }
 
-  const skillList = skills.data.skills.map((s) => ({ ...s, proficiency: proficiencyOf(s, proficiencyBonus) }));
+  // proficiency and expertise from what the character has, not from the size of a bonus (a cleric Thaumaturge's
+  // Wisdom on Arcana checks is no proficiency)
+  const owned = summarizeProficiencies(registrations.data?.registrations ?? []);
+  const skillOwned = new Map(owned.skills.map((x) => [x.name.toLowerCase(), x]));
+  const saveOwned = new Set(owned.savingThrows.map((x) => x.name.toLowerCase()));
+  const skillProficiency = (b: Bonus): Proficiency => {
+    const own = skillOwned.get(b.name.toLowerCase());
+    return own ? (own.expertise ? "expertise" : "proficient") : registrations.data ? "none" : proficiencyOf(b, proficiencyBonus);
+  };
+  const saveProficiency = (b: Bonus): Proficiency => {
+    const ability = ABILITY_NAMES.find((a) => a.slice(0, 3).toUpperCase() === b.abilityScoreAbbreviation) ?? b.name;
+    return saveOwned.has(ability.toLowerCase()) ? "proficient" : registrations.data ? "none" : proficiencyOf(b, proficiencyBonus);
+  };
+  const skillList = skills.data.skills.map((s) => ({ ...s, proficiency: skillProficiency(s) }));
   const perception = skillList.find((s) => s.name === "Perception")?.calculatedBonus ?? mod("WIS");
 
   const primary = classes.data?.classes.find((c) => c.isPrimary) ?? classes.data?.classes[0];
@@ -304,6 +387,78 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
   const dedupe = (list: SheetFeature[]) => list.filter((f) => (seen.has(f.title) ? false : (seen.add(f.title), true)));
   const background = all.find((r) => r.type === "Background Feature");
 
+  // equipment and attacks, by the same rules as the Equipment tab
+  const statistics2 = stats.data.statistics;
+  const facts: CharacterFacts & { strength: number } = {
+    mod: (a: string) => mod(a),
+    proficiencyBonus,
+    stat: (n: string) => stat(n),
+    statNames: statistics2.map((x) => x.groupName),
+    has: new Set(batch.data.entries.map((e) => e.auroraId).filter((id): id is string => !!id)),
+    strength: abilities.data.abilityScores.find((a) => a.abbreviation === "STR")?.calculatedScore ?? 10,
+  };
+  const levelless = (name: string) => name.replace(/^Level \d+:\s*/, "");
+  const slug = (name: string) => levelless(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const ancestors = (r: Registration) => {
+    const list: Registration[] = [];
+    for (let a = r.parentRegistrationId ? byRegistration.get(r.parentRegistrationId) : undefined; a; a = a.parentRegistrationId ? byRegistration.get(a.parentRegistrationId) : undefined) list.push(a);
+    return list;
+  };
+  // "ac:draconic-resilience" -> "Draconic Resilience (Sorcerer)": the feature and its class, as Aurora names it
+  const featureOf = (statistic: string) => {
+    const feature = all.find((r) => slug(r.name) === statistic.replace(/^ac:/, ""));
+    if (!feature) return undefined;
+    const owner = ancestors(feature).find((a) => a.type === "Class");
+    return owner ? `${levelless(feature.name)} (${owner.name})` : levelless(feature.name);
+  };
+  const itemTexts = new Map<string, ItemText>(
+    [...batch.data.entries, ...(texts.data?.entries ?? [])].map((e) => [e.id, { name: e.name, description: e.description, source: e.source, setters: e.setters }]),
+  );
+  const armor = sheetArmor(inventory.data, catalog.data.byId, facts, featureOf);
+
+  // spellcasting pages from the spellcasting worked out by the server
+  const magicState = { ...EMPTY_MAGIC, ...(magic.data ?? {}) };
+  const order = new Map(all.map((r, i) => [r.registrationId, i]));
+  const subclassOf = (c: { className: string | null }) => {
+    const owner = all.find((r) => r.type === "Class" && r.name === c.className);
+    return owner ? all.find((r) => r.type === "SubClass" && ancestors(r).includes(owner))?.name : undefined;
+  };
+  // Aurora labels another spell by the species, lineage or feature that gives it ("Tiefling", "High Elf", "Wizard")
+  const otherLabel = (s: KnownSpell) => {
+    const r = byRegistration.get(s.registrationId);
+    let node = r?.parentRegistrationId ? byRegistration.get(r.parentRegistrationId) : undefined;
+    // a lineage's spellcasting ability ("Wisdom" under High Elf) gives way to the lineage; a feat's ("Charisma") stays
+    while (node && node.type === "Species Feature" && ABILITY_NAMES.includes(node.name) && node.parentRegistrationId) node = byRegistration.get(node.parentRegistrationId);
+    if (!node) return "";
+    const up = node.parentRegistrationId ? byRegistration.get(node.parentRegistrationId) : undefined;
+    return node.type === "Species Feature" && up && (up.type === "Species" || up.type === "Race") ? up.name : levelless(node.name);
+  };
+  const spellName = (id: string) => {
+    const f = spellIndex.byId?.get(id);
+    return f ? { name: f.name, level: f.level ?? 0 } : undefined;
+  };
+  const spellPages = sheetSpellPages(casting.data, magicState, spellName, { subclassOf, otherLabel, order: (s) => order.get(s.registrationId) ?? 0 });
+
+  // spell cards: every spell the character has (with the origins worked out above) and the ones it has prepared
+  const cardSpells: SheetSpell[] = [];
+  const carded = new Set<string>();
+  for (const sp of [...casters.flatMap((c) => c.casting.spells), ...otherSpells]) {
+    if (carded.has(`${sp.name}|${sp.level}`)) continue;
+    carded.add(`${sp.name}|${sp.level}`);
+    cardSpells.push(sp);
+  }
+  for (const c of casting.data.casters) {
+    for (const id of magicState.prepared[c.name] ?? []) {
+      const entry = entries.get(id) ?? texts.data?.entries.find((e) => e.id === id);
+      if (!entry) continue;
+      const sp = spellFromEntry(entry, `Prepared (${c.name})`);
+      if (carded.has(`${sp.name}|${sp.level}`)) continue;
+      carded.add(`${sp.name}|${sp.level}`);
+      cardSpells.push(sp);
+    }
+  }
+  cardSpells.sort((x, y) => x.level - y.level || x.name.localeCompare(y.name));
+
   return {
     isLoading: false,
     error: null,
@@ -319,7 +474,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       subclass: subclass ?? "",
       proficiencyBonus,
       abilities: abilities.data.abilityScores,
-      saves: saves.data.savingThrows.map((s) => ({ ...s, proficiency: proficiencyOf(s, proficiencyBonus) })),
+      saves: saves.data.savingThrows.map((s) => ({ ...s, proficiency: saveProficiency(s) })),
       skills: skillList,
       passivePerception: 10 + perception,
       initiative: mod("DEX") + (stat("initiative") ?? 0),
@@ -330,12 +485,34 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
         swim: stat("innate-speed:swim") ?? 0,
       },
       vision: unique(all.filter((r) => r.type === "Vision").map((r) => r.name)),
-      armorClass: 10 + mod("DEX"),
+      armorClass: armor.total,
+      armor,
+      attacks: sheetAttackLines(inventory.data, catalog.data.byId, facts),
+      equipment: sheetEquipment(inventory.data, catalog.data.byId, facts, itemTexts),
+      itemCards: sheetItemCards(inventory.data, catalog.data.byId, itemTexts),
+      spellPages,
+      cardSpells,
+      proficiencySummary: owned,
+      attacksPerAction: Math.max(
+        1,
+        ...all.map((r) => {
+          const name = r.name.replace(/^Level \d+:\s*/, "");
+          if (/^Extra Attack$/i.test(name)) return 2;
+          const n = name.match(/^Extra Attack \((\d)\)$/i)?.[1] ?? { Two: "2", Three: "3" }[name.match(/^(Two|Three) Extra Attacks$/i)?.[1] ?? ""];
+          return n ? 1 + Number(n) : 1;
+        }),
+      ),
+      defenses: defenses.data ?? { resistances: [], immunities: [], vulnerabilities: [] },
       hitDice: hitDie ? `${level}d${hitDie}` : "",
-      hitPoints: hitDie ? hitDie + con + (level - 1) * (hitDie / 2 + 1 + con) : null,
+      hitPoints: hitDie ? hitPointsFor(hitDie, level, con, stat("hp") ?? 0, story.data?.fields.hitPointRolls) : null,
       proficiencies: { armor: unique(proficiencies.armor), weapons: unique(proficiencies.weapons), tools: unique(proficiencies.tools) },
       languages: unique(all.filter((r) => r.type === "Language").map((r) => r.name)),
-      speciesTraits: dedupe(featureList((t) => t === "Species Feature")),
+      speciesTraits: dedupe(
+        all
+          .filter((r) => r.type === "Species Feature" && ancestors(r).some((a) => a.type === "Species" || a.type === "Race"))
+          .map(feature)
+          .filter((f): f is SheetFeature => f !== null),
+      ),
       features: dedupe(featureList((t) => FEATURE_TYPES.has(t))),
       backgroundFeature: background ? feature(background) : null,
       spellcasting: casters.map((c) => c.casting),

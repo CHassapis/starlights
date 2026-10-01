@@ -1,6 +1,6 @@
 import fontkit from "@pdf-lib/fontkit";
 import { PDFCheckBox, PDFDocument, PDFTextField, StandardFonts, rgb, type Color, type PDFEmbeddedPage, type PDFFont, type PDFPage } from "pdf-lib";
-import type { SheetData, SheetFeature, SheetSpell, SheetSpellcasting } from "@/lib/api/sheet";
+import type { SheetData, SheetFeature, SheetSpell } from "@/lib/api/sheet";
 import { spellLevelLine } from "@/lib/api/sheet";
 
 /*
@@ -45,6 +45,7 @@ interface Box {
 }
 
 interface FieldBox extends Box {
+  checkbox?: boolean;
   size: number;
   align: 0 | 1 | 2;
   multiline: boolean;
@@ -128,7 +129,10 @@ class SheetBuilder {
                 multiline: field instanceof PDFTextField && field.isMultiline(),
                 color: color ? rgb(+color[1], +color[2], +color[3]) : gray ? rgb(+gray[1], +gray[1], +gray[1]) : BLACK,
               };
-              if (field instanceof PDFCheckBox) box.size = 0;
+              if (field instanceof PDFCheckBox) {
+                box.size = 0;
+                box.checkbox = true;
+              }
               fields.set(field.getName(), [...(fields.get(field.getName()) ?? []), box]);
             }
           }
@@ -362,72 +366,117 @@ function drawCheck(page: PDFPage, box: FieldBox | undefined, glyph: "cross" | "s
 const ABILITY_KEYS: Record<string, string> = { STR: "str", DEX: "dex", CON: "con", INT: "int", WIS: "wis", CHA: "cha" };
 const skillKey = (name: string) => name.toLowerCase().replace(/[^a-z]/g, "");
 
-async function detailsPage(b: SheetBuilder, data: SheetData) {
-  const { page, fields } = await b.page("Page.details_2.pdf");
-  const f = (name: string, value: string | number | null | undefined) => {
-    const box = field(fields, name);
-    if (box) drawField(page, box, value, b.fonts);
+/**
+ * The details page's one-line fields and checkboxes under Aurora's field names ("Yes" ticks a box), as Aurora fills
+ * them; the comparison with Aurora's own sheets reads these too.
+ */
+export function detailsValues(data: SheetData): Record<string, string> {
+  const v: Record<string, string> = {};
+  const set = (name: string, value: string | number | null | undefined) => {
+    if (value !== null && value !== undefined && value !== "") v[name] = String(value);
   };
   const s = data.story;
+  set("details_build", data.classLine);
+  set("details_xp", s.experience);
+  set("details_character_name", data.name);
+  set("details_background", data.background);
+  set("details_player", data.player);
+  set("details_alignment", data.alignment);
+  set("details_deity", data.deity);
 
-  f("details_build", data.classLine);
-  f("details_xp", s.experience);
-  f("details_character_name", data.name);
-  f("details_background", data.background);
-  f("details_player", data.player);
-  f("details_alignment", data.alignment);
-  f("details_deity", data.deity);
-
-  f("details_armor_class", data.armorClass);
-  f("details_equipped_armor", "");
-  f("details_proficiency_bonus", sign(data.proficiencyBonus));
+  set("details_armor_class", data.armor.total);
+  set("details_equipped_armor", data.armor.label);
+  set("details_equipped_shield", data.armor.shield);
+  if (data.armor.stealthDisadvantage) v.details_armor_stealth_disadvantage = "Yes";
+  set("details_proficiency_bonus", sign(data.proficiencyBonus));
   for (const a of data.abilities) {
     const key = ABILITY_KEYS[a.abbreviation];
-    f(`details_${key}_score`, a.calculatedScore);
-    f(`details_${key}_modifier`, sign(a.calculatedModifier));
+    set(`details_${key}_score`, a.calculatedScore);
+    set(`details_${key}_modifier`, sign(a.calculatedModifier));
   }
   for (const save of data.saves) {
     const key = ABILITY_KEYS[save.abilityScoreAbbreviation];
-    f(`details_${key}_save_total`, sign(save.calculatedBonus));
-    if (save.proficiency !== "none") drawCheck(page, field(fields, `details_${key}_save_proficiency`), "cross", b.fonts);
+    set(`details_${key}_save_total`, sign(save.calculatedBonus));
+    if (save.proficiency !== "none") v[`details_${key}_save_proficiency`] = "Yes";
   }
   for (const skill of data.skills) {
     const key = skillKey(skill.name);
-    f(`details_${key}_total`, sign(skill.calculatedBonus));
-    if (skill.proficiency !== "none") drawCheck(page, field(fields, `details_${key}_proficiency`), "cross", b.fonts);
-    if (skill.proficiency === "expertise") drawCheck(page, field(fields, `details_${key}_expertise`), "star", b.fonts);
+    set(`details_${key}_total`, sign(skill.calculatedBonus));
+    if (skill.proficiency !== "none") v[`details_${key}_proficiency`] = "Yes";
+    if (skill.proficiency === "expertise") v[`details_${key}_expertise`] = "Yes";
   }
-  f("details_passive_perception_total", data.passivePerception);
-  f("details_initiative", sign(data.initiative));
+  set("details_passive_perception_total", data.passivePerception);
+  set("details_initiative", sign(data.initiative));
 
-  const extraAttacks = data.features.map((x) => x.title.match(/^Extra Attack(?: \((\d)\))?/)).find(Boolean);
-  const attacks = extraAttacks ? 1 + Number(extraAttacks[1] ?? 1) : 1;
-  f("details_encounter_box", `${attacks} ${attacks === 1 ? "Attack" : "Attacks"} / Attack Action`);
+  const attacks = data.attacksPerAction;
+  set("details_encounter_box", `${attacks} ${attacks === 1 ? "Attack" : "Attacks"} / Attack Action`);
+  data.attacks.slice(0, 4).forEach((a, i) => {
+    set(`details_attack${i + 1}_weapon`, a.name);
+    set(`details_attack${i + 1}_range`, a.range);
+    set(`details_attack${i + 1}_attack`, a.attack);
+    set(`details_attack${i + 1}_damage`, a.damage);
+    set(`details_attack${i + 1}_description`, a.description);
+  });
 
-  f("details_hp_max", data.hitPoints);
-  f("details_hd", data.hitDice);
-  f("details_speed_walking", `${data.speeds.walk}ft.`);
-  f("details_speed_fly", `${data.speeds.fly}ft.`);
-  f("details_speed_climb", `${data.speeds.climb}ft.`);
-  f("details_speed_swim", `${data.speeds.swim}ft.`);
-  f("details_vision", data.vision.join(", "));
+  set("details_hp_max", data.hitPoints);
+  set("details_hd", data.hitDice);
+  set("details_speed_walking", `${data.speeds.walk}ft.`);
+  set("details_speed_fly", `${data.speeds.fly}ft.`);
+  set("details_speed_climb", `${data.speeds.climb}ft.`);
+  set("details_speed_swim", `${data.speeds.swim}ft.`);
+  set("details_vision", data.vision.join(", "));
+  return v;
+}
 
-  // the three text boxes Aurora fills with formatted text
+/** "Resistances. Necrotic, Radiant" and the like, as Aurora's resistances box lists them. */
+export function defenseLines(data: SheetData): [string, string[]][] {
+  const d = data.defenses;
+  return ([["Resistances", d.resistances], ["Immunities", d.immunities], ["Vulnerabilities", d.vulnerabilities]] as [string, string[]][]).filter(([, list]) => list.length > 0);
+}
+
+/** Fills a page's one-line fields and ticks its checkboxes from a value map. */
+function fillFields(page: PDFPage, fields: Map<string, FieldBox[]>, values: Record<string, string>, fonts: Fonts) {
+  for (const [name, value] of Object.entries(values)) {
+    const box = field(fields, name);
+    if (!box) continue;
+    if (box.checkbox) {
+      // a checkbox: Aurora ticks proficiency with a cross, expertise with a star
+      if (value === "Yes") drawCheck(page, box, name.endsWith("_expertise") ? "star" : "cross", fonts);
+    } else {
+      drawField(page, box, value, fonts);
+    }
+  }
+}
+
+async function detailsPage(b: SheetBuilder, data: SheetData) {
+  const { page, fields } = await b.page("Page.details_2.pdf");
+  fillFields(page, fields, detailsValues(data), b.fonts);
+
+  // the text boxes Aurora fills with formatted text
   const box = (name: string) => field(fields, name);
+  const resistances = box("details_resistances");
+  if (resistances) {
+    const lines = defenseLines(data).map(([title, list]): Paragraph => [
+      { text: `${title}.`, font: "boldItalic" },
+      { text: ` ${list.join(", ")}`, font: "regular" },
+    ]);
+    if (lines.length) drawParagraphs(page, resistances, lines, b.fonts, { size: 7, minSize: 4 });
+  }
   const racial = box("details_additional_notes");
   if (racial) drawParagraphs(page, racial, featureParagraphs(data.speciesTraits), b.fonts, { size: 7, minSize: 4 });
   const features = box("details_features");
   if (features) drawParagraphs(page, features, featureParagraphs(data.features), b.fonts, { size: 7, minSize: 3.5 });
   const proficiencies = box("details_proficiencies_languages");
   if (proficiencies) {
-    const line = (title: string, list: string[]): Paragraph | null =>
-      list.length ? [{ text: `${title}.`, font: "boldItalic" }, { text: ` ${list.join(", ")}`, font: "regular" }] : null;
+    const line = (title: string, list: { name: string }[]): Paragraph | null =>
+      list.length ? [{ text: `${title}.`, font: "boldItalic" }, { text: ` ${list.map((e) => e.name).join(", ")}`, font: "regular" }] : null;
+    const p = data.proficiencySummary;
     const paragraphs = [
-      line("Armor Proficiencies", data.proficiencies.armor),
-      line("Weapon Proficiencies", data.proficiencies.weapons),
-      line("Tool Proficiencies", data.proficiencies.tools),
-      line("Languages", data.languages),
-    ].filter((p): p is Paragraph => p !== null);
+      line("Armor Proficiencies", p.armor),
+      line("Weapon Proficiencies", p.weapons),
+      line("Tool Proficiencies", p.tools),
+      line("Languages", p.languages),
+    ].filter((x): x is Paragraph => x !== null);
     drawParagraphs(page, proficiencies, paragraphs, b.fonts, { size: 7, minSize: 4 });
   }
 }
@@ -504,19 +553,57 @@ async function backgroundPage(b: SheetBuilder, data: SheetData): Promise<Paragra
   return overflow;
 }
 
+/** The equipment page's lists and figures under Aurora's field names (list rows as name.0, name.1, …). */
+export function equipmentValues(data: SheetData): Record<string, string> {
+  const e = data.equipment;
+  const v: Record<string, string> = {};
+  const rows = (prefix: string, lines: { name: string; count: number; weight: string }[], max: number) =>
+    lines.slice(0, max).forEach((l, i) => {
+      v[`${prefix}_name.${i}`] = l.name;
+      v[`${prefix}_count.${i}`] = String(l.count);
+      v[`${prefix}_weight.${i}`] = l.weight;
+    });
+  rows("equipment_page_gear", e.gear, 40);
+  rows("equipment_page_magic_gear", e.magicGear, 20);
+  rows("equipment_page_valuable", e.valuables, 10);
+  e.storage.forEach((box, i) => {
+    v[`equipment_page_vehicle_${i + 1}_name`] = box.name;
+    rows(`equipment_page_vehicle_${i + 1}_cargo`, box.items, 10);
+  });
+  for (const coin of ["cp", "sp", "ep", "gp", "pp"] as const) v[`equipment_page_coins_${coin}`] = String(e.coins[coin]);
+  v.equipment_page_attunement_current = String(e.attuned);
+  v.equipment_page_attunement_max = String(e.attunementMax);
+  v.equipment_page_weight_carried = `${e.carried} lb`;
+  v.equipment_page_weight_capacity = `${e.capacity} lb`;
+  v.equipment_page_weight_drag = `${e.drag} lb`;
+  return v;
+}
+
 async function equipmentPage(b: SheetBuilder, data: SheetData) {
   const { page, fields } = await b.page("Aurora.Pages.equipment_page.pdf");
-  const f = (name: string, value: string | number) => {
-    const box = field(fields, name);
+  const values = equipmentValues(data);
+  // list rows: every widget of a list field is one row, in order
+  for (const [name, value] of Object.entries(values)) {
+    const m = name.match(/^(.*)\.(\d+)$/);
+    const box = m ? (fields.get(m[1])?.[Number(m[2])] ?? fields.get(name)?.[0]) : field(fields, name);
     if (box) drawField(page, box, value, b.fonts);
+  }
+
+  const e = data.equipment;
+  const text = (name: string, paragraphs: Paragraph[], size = 7) => {
+    const box = field(fields, name);
+    if (box && paragraphs.length) drawParagraphs(page, box, paragraphs, b.fonts, { size, minSize: 4 });
   };
-  const strength = data.abilities.find((a) => a.abbreviation === "STR")?.calculatedScore ?? 10;
-  f("equipment_page_attunement_current", 0);
-  f("equipment_page_attunement_max", 3);
-  for (const coin of ["cp", "sp", "ep", "gp", "pp"]) f(`equipment_page_coins_${coin}`, 0);
-  f("equipment_page_weight_carried", "0 lb");
-  f("equipment_page_weight_capacity", `${strength * 15} lb`);
-  f("equipment_page_weight_drag", `${strength * 30} lb`);
+  // the magic items' descriptions, each led by its name like a feature
+  text(
+    "equipment_page_magic_items",
+    e.descriptions.flatMap((d) => {
+      const [first, ...rest] = htmlParagraphs(d.html);
+      return [[{ text: `${clean(d.title)}.`, font: "boldItalic" as const }, ...(first ?? []).map((r, i) => (i === 0 ? { ...r, text: ` ${r.text}` } : r))], ...rest];
+    }),
+  );
+  text("equipment_page_additional_treasure", textParagraphs(e.treasure));
+  text("equipment_page_quest_items", textParagraphs(e.questItems));
 }
 
 async function notesPage(b: SheetBuilder, data: SheetData, backstoryOverflow: Paragraph[]) {
@@ -544,40 +631,8 @@ interface SpellList {
 }
 
 function spellLists(data: SheetData): SpellList[] {
-  const lists: SpellList[] = data.spellcasting.map((c: SheetSpellcasting) => {
-    const levels = new Map<number, { name: string; prepared: boolean }[]>();
-    const top = Math.max(0, ...Object.keys(c.slots).map(Number), ...c.spells.map((s) => s.level));
-    for (let l = 0; l <= top; l++) levels.set(l, []);
-    for (const spell of [...c.spells].sort((x, y) => x.name.localeCompare(y.name))) {
-      // spells a feature grants are always prepared; Aurora lists them first, marked
-      const granted = spell.level > 0 && !/spellcasting/i.test(spell.origin);
-      levels.get(spell.level)!.push({ name: granted ? `${spell.name} (Always Prepared)` : spell.name, prepared: granted });
-    }
-    return {
-      title: data.subclass && data.spellcasting.length === 1 ? `${c.name}, ${data.subclass}` : c.name,
-      ability: c.ability,
-      attack: sign(c.attackBonus),
-      save: String(c.saveDc),
-      prepare: c.prepare ? String(c.prepare) : "",
-      levels: [...levels.entries()]
-        .filter(([l, spells]) => l === 0 || spells.length > 0 || (c.slots[l] ?? 0) > 0)
-        .map(([level, spells]) => ({ level, slots: c.slots[level] ?? 0, spells: [...spells.filter((s) => s.prepared), ...spells.filter((s) => !s.prepared)] })),
-    };
-  });
-
-  if (data.otherSpells.length > 0) {
-    const levels = new Map<number, { name: string; prepared: boolean }[]>();
-    for (const spell of [...data.otherSpells].sort((x, y) => x.level - y.level || x.name.localeCompare(y.name))) {
-      if (!levels.has(spell.level)) levels.set(spell.level, []);
-      levels.get(spell.level)!.push({ name: spell.origin ? `${spell.name} (${originName(spell.origin)})` : spell.name, prepared: false });
-    }
-    lists.push({ title: "Other Spells", ability: "", attack: "", save: "", prepare: "", levels: [...levels.entries()].map(([level, spells]) => ({ level, slots: 0, spells })) });
-  }
-  return lists;
+  return data.spellPages.map((p) => ({ ...p, levels: p.levels.map((l) => ({ ...l, spells: l.spells })) }));
 }
-
-/** "Level 1: Spellcasting (Cleric)" -> "Cleric"; "High Elf" stays. */
-const originName = (origin: string) => origin.match(/\(([^)]+)\)\s*$/)?.[1] ?? origin.replace(/^Level \d+:\s*/, "");
 
 async function spellcastingPages(b: SheetBuilder, data: SheetData) {
   for (const list of spellLists(data)) {
@@ -642,7 +697,7 @@ const CARD_X = [26, 215, 404];
 const CARD_Y = [526, 277, 28];
 
 async function spellCards(b: SheetBuilder, data: SheetData) {
-  const spells = [...data.spellcasting.flatMap((c) => c.spells), ...data.otherSpells].sort((x, y) => x.level - y.level || x.name.localeCompare(y.name));
+  const spells = data.cardSpells;
   const card = await b.partial("Partial.spellcard.pdf");
   let p = b.doc.getPage(0);
   spells.forEach((spell: SheetSpell, i) => {
@@ -682,6 +737,35 @@ async function spellCards(b: SheetBuilder, data: SheetData) {
 }
 
 /**
+ * Item cards like Aurora's: the item's (or the player's) name, the category under it, the description, and the
+ * weight and book at the foot; nine to a page, after the spell cards.
+ */
+async function itemCards(b: SheetBuilder, data: SheetData) {
+  if (data.itemCards.length === 0) return;
+  const card = await b.partial("Partial.card.pdf");
+  let p = b.doc.getPage(0);
+  data.itemCards.forEach((item, i) => {
+    if (i % 9 === 0) p = b.doc.addPage([612, 792]);
+    const x0 = CARD_X[i % 3];
+    const y0 = CARD_Y[Math.floor(i / 3) % 3];
+    p.drawPage(card, { x: x0, y: y0 });
+
+    const centered = (text: string, font: PDFFont, size: number, y: number, max: number) => {
+      let sz = size;
+      while (sz > 5 && widthOf(text, font, sz) > max) sz -= 0.25;
+      p.drawText(text, { x: x0 + 90 - widthOf(text, font, sz) / 2, y: y0 + y, size: sz, font });
+    };
+    // positions inside the card from Aurora's generic card page (title box 8,224 168x14; subtitle 11,212 160x9)
+    centered(clean(item.title), b.fonts.regular, 10, 227.5, 160);
+    centered(clean(item.subtitle), b.fonts.italic, 6, 214.5, 156);
+    drawParagraphs(p, { x: x0 + 4, y: y0 + 20, w: 172, h: 186 }, htmlParagraphs(item.html), b.fonts, { size: 6, minSize: 3.5, paragraphGap: 0, lineHeight: 1.0 });
+    p.drawText(clean(item.weight), { x: x0 + 6, y: y0 + 6.4, size: 6, font: b.fonts.regular });
+    const source = clean(item.source);
+    p.drawText(source, { x: x0 + 174 - widthOf(source, b.fonts.regular, 6), y: y0 + 6.4, size: 6, font: b.fonts.regular });
+  });
+}
+
+/**
  * The whole sheet as PDF bytes: details, background, equipment and notes pages, then spellcasting pages and spell
  * cards for casters.
  */
@@ -691,10 +775,11 @@ export async function buildAuroraSheet(data: SheetData): Promise<Uint8Array> {
   const overflow = await backgroundPage(b, data);
   await equipmentPage(b, data);
   await notesPage(b, data, overflow);
-  if (data.spellcasting.length > 0 || data.otherSpells.length > 0) {
+  if (data.spellPages.length > 0) {
     await spellcastingPages(b, data);
     await spellCards(b, data);
   }
+  await itemCards(b, data);
   b.doc.setTitle(`${data.name}: character sheet`);
   return b.doc.save();
 }

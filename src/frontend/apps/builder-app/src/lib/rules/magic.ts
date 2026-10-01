@@ -15,6 +15,8 @@ export interface KnownSpell {
   /** cantrip; always prepared; in a spellbook (may be prepared); known (always castable) */
   kind: SpellKind;
   origin: string;
+  /** gained from a feat or species and taken into this class's list: always prepared, but Aurora's sheet leaves it unticked */
+  fromElsewhere?: boolean;
 }
 
 export interface Caster {

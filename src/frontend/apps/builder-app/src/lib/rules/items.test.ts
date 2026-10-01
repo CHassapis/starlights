@@ -3,6 +3,7 @@ import {
   armorClass,
   attacks,
   attunementMax,
+  sheetAttacks,
   displayName,
   equipProblems,
   equipSlots,
@@ -33,6 +34,7 @@ const items: ItemInfo[] = [
   { id: "leather", name: "Leather Armor", elementType: "Armor", auroraId: "ID_LEATHER", categories: ["Armor"], weight: 10, armor: { kind: "Light", armorClass: 11 } },
   { id: "breastplate", name: "Breastplate", elementType: "Armor", auroraId: "ID_BREASTPLATE", categories: ["Armor"], weight: 20, armor: { kind: "Medium", armorClass: 14 } },
   { id: "shield", name: "Shield", elementType: "Armor", auroraId: "ID_SHIELD", categories: ["Armor"], weight: 6, armor: { kind: "Shield", armorClass: 2 } },
+  { id: "chainshirt", name: "Chain Shirt", elementType: "Armor", auroraId: "ID_CHAIN_SHIRT", categories: ["Armor"], weight: 20, armor: { kind: "Medium", armorClass: 13 } },
   { id: "weapon+1", name: "Weapon, +1", elementType: "Magic Item", auroraId: "ID_WEAPON_1", categories: ["Magic Weapons", "Weapons"],
     magic: { rarity: "Uncommon", enhancement: 1 }, base: { kind: "Weapon", rule: "ID_…", nameFormat: "{{parent}} +{{enhancement}}" } },
   { id: "flametongue", name: "Flame Tongue", elementType: "Magic Item", auroraId: "ID_FLAME", categories: ["Magic Weapons", "Weapons"],
@@ -175,7 +177,8 @@ describe("armor class", () => {
     const ac = armorClass(
       inv(entry("a", "chain", { equipped: "Armor" }), entry("s", "shield", { equipped: "Off Hand" })),
       catalog,
-      facts({}, { "ac:armored:enhancement": 1, "ac:shield": 1, "ac:misc": 1 }),
+      // the engine's ac:shield holds the shield's own +2 as well: 3 for a +1 shield
+      facts({}, { "ac:armored:enhancement": 1, "ac:shield": 3, "ac:misc": 1 }),
     );
     expect(ac.total).toBe(16 + 1 + 2 + 1 + 1);
     expect(ac.parts.map((p) => p.label)).toEqual(["Chain Mail", "Magic armor", "Shield", "Magic shield", "Other bonuses"]);
@@ -185,6 +188,11 @@ describe("armor class", () => {
     expect(armorClass(inv(), catalog, facts({ DEX: 12 }, { "ac:draconic-resilience": 14 })).total).toBe(14);
     // worn armor replaces it
     expect(armorClass(inv(entry("a", "leather", { equipped: "Armor" })), catalog, facts({ DEX: 12 }, { "ac:draconic-resilience": 14 })).total).toBe(12);
+  });
+
+  it("counts a plain shield's +2 once, though its rule also puts it in ac:shield (Mira: Chain Shirt 13 + DEX 1 + 2 = 16)", () => {
+    const ac = armorClass(inv(entry("a", "chainshirt", { equipped: "Armor" }), entry("s", "shield", { equipped: "Off Hand" })), catalog, facts({ DEX: 12 }, { "ac:shield": 2 }));
+    expect(ac.total).toBe(16);
   });
 
   it("drops monk-style unarmored defense when a shield is carried", () => {
@@ -215,10 +223,29 @@ describe("attacks", () => {
     expect(sword.proficient).toBe(false);
   });
 
-  it("uses versatile dice two-handed, and no positive modifier on off-hand damage", () => {
+  it("uses versatile dice two-handed, and the full modifier off-hand, like Aurora", () => {
     const list = attacks(inv(entry("a", "longsword", { equipped: "Two-Handed" }), entry("b", "dagger", { equipped: "Off Hand" })), catalog, facts({ STR: 16 }, {}, proficient));
     expect(list.find((a) => a.entryId === "a")!.damage).toBe("1d10+3 slashing");
-    expect(list.find((a) => a.entryId === "b")).toMatchObject({ damage: "1d4 piercing", range: "20/60" });
+    expect(list.find((a) => a.entryId === "b")).toMatchObject({ damage: "1d4+3 piercing", range: "20/60" });
+  });
+
+  it("lists the weapon mastery with the properties, like Aurora's \"Finesse, Vex\"", () => {
+    const mastered = new Map(catalog);
+    mastered.set("rapier", { ...catalog.get("rapier")!, weapon: { ...catalog.get("rapier")!.weapon!, mastery: "Vex" } });
+    const [rapier] = attacks(inv(entry("r", "rapier", { equipped: "Main Hand" })), mastered, facts({ DEX: 16 }, {}, proficient));
+    expect(rapier.properties.join(", ")).toBe("Finesse, Vex");
+  });
+
+  it("always shows the damage modifier, like Aurora's 1d8+0", () => {
+    const [sword] = attacks(inv(entry("s", "longsword", { equipped: "Main Hand" })), catalog, facts({ STR: 10 }, {}, proficient));
+    expect(sword.damage).toBe("1d8+0 slashing");
+  });
+
+  it("puts the listed weapons on the sheet in their order, else the equipped ones once each", () => {
+    const listed = inv(entry("a", "longsword", { attack: 2 }), entry("b", "rapier", { equipped: "Main Hand", attack: 1 }), entry("c", "dagger"));
+    expect(sheetAttacks(listed, catalog, facts({})).map((a) => a.name)).toEqual(["Rapier", "Longsword"]);
+    const unlisted = inv(entry("a", "dagger", { equipped: "Main Hand" }), entry("b", "dagger"), entry("c", "longbow"), entry("d", "dagger", { equipped: "Off Hand" }));
+    expect(sheetAttacks(unlisted, catalog, facts({})).map((a) => a.entryId)).toEqual(["a"]);
   });
 
   it("adds a magic weapon's +1 to attack and damage, with the base weapon's figures", () => {

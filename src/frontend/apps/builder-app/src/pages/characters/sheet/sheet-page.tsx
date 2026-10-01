@@ -1,5 +1,5 @@
 import DOMPurify from "dompurify";
-import { buildAuroraSheet } from "@/lib/aurora-sheet";
+import { buildAuroraSheet, defenseLines, detailsValues, equipmentValues } from "@/lib/aurora-sheet";
 import { ArrowLeftIcon, DownloadIcon, FileTextIcon, PrinterIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -522,8 +522,18 @@ export function CharacterSheetPage() {
   const notes = [data.story.backstory && data.story.backstory.length > 1600 ? data.story.backstory : "", data.story.notes ?? ""].filter(Boolean).join("\n\n");
   const allSpells = [...data.spellcasting.flatMap((c) => c.spells), ...data.otherSpells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
+  // ?fields: the values the PDF writes, by Aurora's field names, for comparing with Aurora's own sheets
+  const fields = new URLSearchParams(window.location.search).has("fields")
+    ? JSON.stringify({ fields: { ...detailsValues(data), ...equipmentValues(data), details_resistances: defenseLines(data).map(([t, l]) => `${t}. ${l.join(", ")}`).join("\n") }, spellPages: data.spellPages, itemCards: data.itemCards.map(({ html: _, ...c }) => c), cardSpells: data.cardSpells.map((s) => s.name) })
+    : null;
+
   return (
     <div className="min-h-screen bg-neutral-300 py-6 print:bg-white print:py-0">
+      {fields && (
+        <pre id="sheet-fields" hidden>
+          {fields}
+        </pre>
+      )}
       <div className="mx-auto mb-4 flex w-[816px] max-w-full items-center gap-2 px-4 print:hidden">
         <Button variant="secondary" asChild>
           <Link to={`/characters/${id}`}>
