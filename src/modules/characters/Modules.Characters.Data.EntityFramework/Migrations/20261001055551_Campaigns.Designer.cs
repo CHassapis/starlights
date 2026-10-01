@@ -12,7 +12,7 @@ using Starlights.Modules.Characters.Data.EntityFramework;
 namespace Starlights.Modules.Characters.Data.EntityFramework.Migrations
 {
     [DbContext(typeof(CharactersContext))]
-    [Migration("20261001054802_Campaigns")]
+    [Migration("20261001055551_Campaigns")]
     partial class Campaigns
     {
         /// <inheritdoc />
@@ -113,6 +113,10 @@ namespace Starlights.Modules.Characters.Data.EntityFramework.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)")
                         .HasColumnName("name");
+
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("password_hash");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("datetimeoffset")

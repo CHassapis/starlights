@@ -28,7 +28,11 @@ public class CampaignsGroup : Group
     }
 }
 
-public sealed record CampaignSummaryModel(Guid Id, string Name, string Description, string? CoverUrl, int PartySize, DateTimeOffset UpdatedAt);
+/// <summary>
+/// A campaign in the list. A password-protected one the reader has not opened shows only its name: no
+/// description, cover or party.
+/// </summary>
+public sealed record CampaignSummaryModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, bool CanOpen, DateTimeOffset UpdatedAt);
 
 public sealed record CampaignsResponse(List<CampaignSummaryModel> Campaigns, bool Dm);
 
@@ -38,7 +42,7 @@ public sealed record CampaignsResponse(List<CampaignSummaryModel> Campaigns, boo
 /// </summary>
 public sealed record PartyMemberModel(Guid CharacterId, string Name, string? PlayerName, int? Level, string? Build, string? PortraitUrl, bool Locked, bool Missing);
 
-public sealed record CampaignModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, DateTimeOffset UpdatedAt);
+public sealed record CampaignModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, DateTimeOffset UpdatedAt);
 
 public sealed record CampaignResponse(CampaignModel Campaign, List<PartyMemberModel> Party, List<CampaignEntryModel> Entries, bool Dm);
 
@@ -67,7 +71,18 @@ internal static class CampaignAccess
         }
     }
 
-    public static CampaignModel Model(Campaign c) => new(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.UpdatedAt);
+    public static CampaignModel Model(Campaign c) => new(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.PasswordHash is not null, c.UpdatedAt);
+
+    /// <summary>Whether the reader may read the campaign: it is open, or they gave its password, or they are the DM.</summary>
+    public static bool CanOpen(HttpContext context, PlayerAccess access, Campaign c) =>
+        c.PasswordHash is null || access.HasCampaignToken(context.Request.Headers[PlayerAccess.TokenHeader], c.Id);
+
+    /// <summary>Whether the reader may change the character: its player is not locked, or they hold the player's token.</summary>
+    public static async Task<bool> CanEditCharacter(HttpContext context, PlayerAccess access, Guid characterId)
+    {
+        var player = await access.GetCharacterPlayerAsync(characterId);
+        return string.IsNullOrEmpty(player) || !await access.IsLockedAsync(player) || access.HasToken(context.Request.Headers[PlayerAccess.TokenHeader], player);
+    }
 }
 
 /// <summary>The campaigns; everyone can see that they exist, their names and descriptions.</summary>
@@ -93,7 +108,9 @@ public sealed class GetCampaignsEndpoint : EndpointWithoutRequest<CampaignsRespo
     {
         var campaigns = await _persistence.GetRepository<ICampaignsRepository>().GetCampaignsAsync();
         await Send.OkAsync(new CampaignsResponse(
-            campaigns.Select(c => new CampaignSummaryModel(c.Id, c.Name, c.Description, c.CoverUrl, c.Party.Count, c.UpdatedAt)).ToList(),
+            campaigns.Select(c => CampaignAccess.CanOpen(HttpContext, _access, c)
+                ? new CampaignSummaryModel(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.PasswordHash is not null, true, c.UpdatedAt)
+                : new CampaignSummaryModel(c.Id, c.Name, string.Empty, null, [], true, false, c.UpdatedAt)).ToList(),
             CampaignAccess.IsDm(HttpContext, _access)), ct);
     }
 }
@@ -127,6 +144,13 @@ public sealed class GetCampaignEndpoint : EndpointWithoutRequest<CampaignRespons
         if (campaign is null)
         {
             await Send.NotFoundAsync(ct);
+            return;
+        }
+
+        if (!CampaignAccess.CanOpen(HttpContext, _access, campaign))
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await HttpContext.Response.WriteAsJsonAsync(new { locked = campaign.Name }, ct);
             return;
         }
 
@@ -518,5 +542,179 @@ public sealed class GetCampaignImageEndpoint : EndpointWithoutRequest
         var contentType = Path.GetExtension(name) switch { ".png" => "image/png", ".webp" => "image/webp", _ => "image/jpeg" };
         HttpContext.Response.Headers.CacheControl = "private, max-age=31536000, immutable";
         await Send.FileAsync(new FileInfo(path), contentType, cancellation: ct);
+    }
+}
+
+public sealed record CampaignPasswordRequest(string? Password);
+
+public sealed record CampaignUnlockResponse(string Token);
+
+public sealed record JoinCampaignRequest(Guid CharacterId);
+
+/// <summary>Opens a password-protected campaign: the right password gives a token the browser keeps (as for players).</summary>
+public sealed class UnlockCampaignEndpoint : Endpoint<CampaignPasswordRequest, CampaignUnlockResponse>
+{
+    private readonly IPersistence _persistence;
+    private readonly PlayerAccess _access;
+
+    public UnlockCampaignEndpoint(IPersistence persistence, PlayerAccess access)
+    {
+        _persistence = persistence;
+        _access = access;
+    }
+
+    public override void Configure()
+    {
+        Post("{campaignId:guid}/unlock");
+        Group<CampaignsGroup>();
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(CampaignPasswordRequest req, CancellationToken ct)
+    {
+        var campaign = await _persistence.GetRepository<ICampaignsRepository>().GetCampaignAsync(Route<Guid>("campaignId"));
+        if (campaign is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+        if (campaign.PasswordHash is not null && !PlayerAccess.VerifyPassword(req.Password ?? string.Empty, campaign.PasswordHash))
+        {
+            AddError("That is not the campaign's password.");
+            await Send.ErrorsAsync(StatusCodes.Status401Unauthorized, ct);
+            return;
+        }
+        await Send.OkAsync(new CampaignUnlockResponse(_access.IssueCampaignToken(campaign.Id)), ct);
+    }
+}
+
+/// <summary>Sets the campaign's password, or with an empty one opens it again (the DM only).</summary>
+public sealed class SetCampaignPasswordEndpoint : Endpoint<CampaignPasswordRequest>
+{
+    private readonly IPersistence _persistence;
+    private readonly PlayerAccess _access;
+
+    public SetCampaignPasswordEndpoint(IPersistence persistence, PlayerAccess access)
+    {
+        _persistence = persistence;
+        _access = access;
+    }
+
+    public override void Configure()
+    {
+        Put("{campaignId:guid}/password");
+        Group<CampaignsGroup>();
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(CampaignPasswordRequest req, CancellationToken ct)
+    {
+        if (!CampaignAccess.IsDm(HttpContext, _access))
+        {
+            await Send.ForbiddenAsync(ct);
+            return;
+        }
+        var password = req.Password ?? string.Empty;
+        if (password.Length is > 0 and < 6 || password.Length > 200)
+        {
+            AddError("A campaign password has 6 to 200 characters (empty removes it).");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+        var campaign = await _persistence.GetRepository<ICampaignsRepository>().GetCampaignAsync(Route<Guid>("campaignId"));
+        if (campaign is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+        campaign.SetPasswordHash(password.Length == 0 ? null : PlayerAccess.HashPassword(password));
+        await _persistence.SaveChangesAsync();
+        await Send.NoContentAsync(ct);
+    }
+}
+
+/// <summary>
+/// A player joins their character to a campaign: they must be able to open the campaign (its password, if it has
+/// one) and to change the character (its player's password, if locked). The DM can add any character.
+/// </summary>
+public sealed class JoinCampaignEndpoint : Endpoint<JoinCampaignRequest, CampaignModel>
+{
+    private readonly IPersistence _persistence;
+    private readonly PlayerAccess _access;
+
+    public JoinCampaignEndpoint(IPersistence persistence, PlayerAccess access)
+    {
+        _persistence = persistence;
+        _access = access;
+    }
+
+    public override void Configure()
+    {
+        Post("{campaignId:guid}/party");
+        Group<CampaignsGroup>();
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(JoinCampaignRequest req, CancellationToken ct)
+    {
+        var campaign = await _persistence.GetRepository<ICampaignsRepository>().GetCampaignAsync(Route<Guid>("campaignId"));
+        var character = await _persistence.GetRepository<ICharactersRepository>().GetCharacterAsync(req.CharacterId);
+        if (campaign is null || character is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+        if (!CampaignAccess.CanOpen(HttpContext, _access, campaign) || !await CampaignAccess.CanEditCharacter(HttpContext, _access, req.CharacterId))
+        {
+            await Send.ForbiddenAsync(ct);
+            return;
+        }
+        if (!campaign.Join(req.CharacterId))
+        {
+            AddError("The party is full (20 characters).");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+        await _persistence.SaveChangesAsync();
+        await Send.OkAsync(CampaignAccess.Model(campaign), ct);
+    }
+}
+
+/// <summary>Takes a character out of a campaign: whoever may change the character, or the DM.</summary>
+public sealed class LeaveCampaignEndpoint : EndpointWithoutRequest
+{
+    private readonly IPersistence _persistence;
+    private readonly PlayerAccess _access;
+
+    public LeaveCampaignEndpoint(IPersistence persistence, PlayerAccess access)
+    {
+        _persistence = persistence;
+        _access = access;
+    }
+
+    public override void Configure()
+    {
+        Delete("{campaignId:guid}/party/{characterId:guid}");
+        Group<CampaignsGroup>();
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var campaign = await _persistence.GetRepository<ICampaignsRepository>().GetCampaignAsync(Route<Guid>("campaignId"));
+        if (campaign is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+        var characterId = Route<Guid>("characterId");
+        if (!CampaignAccess.IsDm(HttpContext, _access) && !await CampaignAccess.CanEditCharacter(HttpContext, _access, characterId))
+        {
+            await Send.ForbiddenAsync(ct);
+            return;
+        }
+        campaign.Leave(characterId);
+        await _persistence.SaveChangesAsync();
+        await Send.NoContentAsync(ct);
     }
 }

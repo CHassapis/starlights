@@ -134,6 +134,12 @@ public sealed class SetPlayerPasswordEndpoint : Endpoint<SetPlayerPasswordReques
     public override async Task HandleAsync(SetPlayerPasswordRequest req, CancellationToken ct)
     {
         var name = req.Name.Trim();
+        if (PlayerAccess.IsReservedName(name))
+        {
+            AddError(r => r.Name, "Player names cannot start with * or #.");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
         if (name.Length is 0 or > 64 || (req.Password.Length > 0 && req.Password.Length < 6))
         {
             AddError("Give the player name and a password of at least 6 characters.");
@@ -189,7 +195,7 @@ public sealed class AssignPlayerEndpoint : Endpoint<AssignPlayerRequest>
             return;
         }
 
-        if (req.PlayerName.Trim().Length > 64)
+        if (req.PlayerName.Trim().Length > 64 || PlayerAccess.IsReservedName(req.PlayerName))
         {
             AddError(r => r.PlayerName, "A player name can be at most 64 characters.");
             await Send.ErrorsAsync(cancellation: ct);

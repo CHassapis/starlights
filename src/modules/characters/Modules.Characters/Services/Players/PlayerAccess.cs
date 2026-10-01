@@ -51,6 +51,25 @@ public sealed class PlayerAccess
         return IssueToken(AdminName);
     }
 
+    /// <summary>
+    /// Names that are not players' to have: the admin token is a token for "*admin*" and a campaign's for
+    /// "#campaign:…", so a player by such a name could unlock their way into them.
+    /// </summary>
+    public static bool IsReservedName(string? name) => name?.TrimStart() is { Length: > 0 } n && (n[0] == '*' || n[0] == '#');
+
+    /// <summary>The token name that opens a password-protected campaign.</summary>
+    public static string CampaignTokenName(Guid campaignId) => $"#campaign:{campaignId:N}";
+
+    /// <summary>A token for a campaign whose password was given.</summary>
+    public string IssueCampaignToken(Guid campaignId) => IssueToken(CampaignTokenName(campaignId));
+
+    /// <summary>Whether the header opens the campaign: its token, or the admin's (the DM).</summary>
+    public bool HasCampaignToken(string? tokensHeader, Guid campaignId) => HasToken(tokensHeader, CampaignTokenName(campaignId), allowAdmin: true);
+
+    public static string HashPassword(string password) => Hash(password);
+
+    public static bool VerifyPassword(string password, string stored) => Verify(password, stored);
+
     /// <summary>Whether the header carries a valid admin token.</summary>
     public bool HasAdminToken(string? tokensHeader) => HasToken(tokensHeader, AdminName, allowAdmin: false);
 
@@ -71,6 +90,11 @@ public sealed class PlayerAccess
     /// </summary>
     public async Task<string?> UnlockAsync(string playerName, string password)
     {
+        if (IsReservedName(playerName))
+        {
+            return null;
+        }
+
         var player = await Players.GetPlayerAsync(playerName);
         if (player?.PasswordHash is null || !Verify(password, player.PasswordHash))
         {
@@ -86,6 +110,11 @@ public sealed class PlayerAccess
     /// </summary>
     public async Task<string> SetPasswordAsync(string playerName, string? password)
     {
+        if (IsReservedName(playerName))
+        {
+            throw new ArgumentException("That name is reserved.", nameof(playerName));
+        }
+
         var player = await Players.GetPlayerAsync(playerName);
         if (player is null)
         {

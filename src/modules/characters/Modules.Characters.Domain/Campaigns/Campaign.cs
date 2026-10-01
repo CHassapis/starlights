@@ -30,6 +30,40 @@ public sealed class Campaign : EntityBase<Guid>
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// The salted hash of the campaign's password, or null when it is open: with one, only those who give the
+    /// password (and the DM) can read the campaign or add a character to it.
+    /// </summary>
+    public string? PasswordHash { get; private set; }
+
+    public void SetPasswordHash(string? hash)
+    {
+        PasswordHash = hash;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Adds a character to the party (a player joining); false when the party is full.</summary>
+    public bool Join(Guid characterId)
+    {
+        if (_party.Contains(characterId))
+        {
+            return true;
+        }
+        if (_party.Count >= 20)
+        {
+            return false;
+        }
+        _party.Add(characterId);
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return true;
+    }
+
+    public void Leave(Guid characterId)
+    {
+        _party.Remove(characterId);
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     public static Campaign Create(string name)
     {
         var now = DateTimeOffset.UtcNow;

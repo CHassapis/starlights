@@ -24,6 +24,10 @@ public sealed partial class Program
     [GeneratedRegex("^/api/characters/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(/|$)")]
     private static partial Regex LockedCharacterRoute();
 
+    // POST /api/campaigns/{id}/unlock, POST /api/campaigns/{id}/party, DELETE /api/campaigns/{id}/party/{characterId}
+    [GeneratedRegex("^/api/campaigns/[0-9a-fA-F-]{32,36}/(unlock|party(/[0-9a-fA-F-]{32,36})?)$")]
+    private static partial Regex CampaignPlayerRoute();
+
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -104,8 +108,9 @@ public sealed partial class Program
                 (!HttpMethods.IsGet(context.Request.Method) || path.StartsWithSegments("/api/elements/initialize")) &&
                 !path.StartsWithSegments("/api/elements/aurora-lookup")) || // read-only, POST only for the id list
                 (path.StartsWithSegments("/api/admin") && !path.StartsWithSegments("/api/admin/unlock")) ||
-                // campaigns: only the DM changes anything (the endpoints check it too)
-                (path.StartsWithSegments("/api/campaigns") && !HttpMethods.IsGet(context.Request.Method));
+                // campaigns: only the DM changes anything (the endpoints check it too), except giving a campaign's
+                // password and a player joining or taking out their own character, which the endpoints check
+                (path.StartsWithSegments("/api/campaigns") && !HttpMethods.IsGet(context.Request.Method) && !CampaignPlayerRoute().IsMatch(path.Value ?? string.Empty));
 
             var given = Encoding.UTF8.GetBytes(context.Request.Headers["X-Admin-Key"].ToString());
             var keyOk = adminKey.Length > 0 && CryptographicOperations.FixedTimeEquals(given, adminKey);

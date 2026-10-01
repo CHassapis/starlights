@@ -18,6 +18,7 @@ public class CampaignTypeConfiguration : IEntityTypeConfiguration<Campaign>
         builder.Property(e => e.CoverUrl).HasColumnName("cover_url").HasMaxLength(500);
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
         builder.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+        builder.Property(e => e.PasswordHash).HasColumnName("password_hash");
 
         // the party as a JSON list of character ids
         builder.Property<List<Guid>>("_party")

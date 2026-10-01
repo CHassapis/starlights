@@ -22,6 +22,7 @@ namespace Starlights.Modules.Characters.Data.EntityFramework.Migrations
                     cover_url = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     updated_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    password_hash = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     party = table.Column<string>(type: "nvarchar(max)", nullable: false)
                 },
                 constraints: table =>
