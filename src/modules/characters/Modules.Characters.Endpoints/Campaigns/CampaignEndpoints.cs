@@ -718,3 +718,151 @@ public sealed class LeaveCampaignEndpoint : EndpointWithoutRequest
         await Send.NoContentAsync(ct);
     }
 }
+
+public sealed record GiveRequest(Guid CharacterId, Guid? CampaignItemId, Guid? ElementId, Guid? BaseElementId, int Quantity, Dictionary<string, int>? Coins, bool FromFund, string? Note);
+
+public sealed record GiveResponse(string Given, CampaignEntryModel Ledger);
+
+/// <summary>
+/// The DM gives a party member something: one of the campaign's own magic items (copied onto the character as a
+/// homebrew item with its picture), an item of the content, or coins into their purse. It goes straight into the
+/// character's equipment (the player does not have to add it, and can remove it), and the Gold tab gets a line for
+/// it (with a line out of the party fund when it came from there).
+/// </summary>
+public sealed class GiveEndpoint : Endpoint<GiveRequest, GiveResponse>
+{
+    private readonly IPersistence _persistence;
+    private readonly PlayerAccess _access;
+    private readonly Modules.Elements.Integration.IItemCatalog _catalog;
+
+    public GiveEndpoint(IPersistence persistence, PlayerAccess access, Modules.Elements.Integration.IItemCatalog catalog)
+    {
+        _persistence = persistence;
+        _access = access;
+        _catalog = catalog;
+    }
+
+    public override void Configure()
+    {
+        Post("{campaignId:guid}/give");
+        Group<CampaignsGroup>();
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(GiveRequest req, CancellationToken ct)
+    {
+        if (!CampaignAccess.IsDm(HttpContext, _access))
+        {
+            await Send.ForbiddenAsync(ct);
+            return;
+        }
+        var campaigns = _persistence.GetRepository<ICampaignsRepository>();
+        var campaign = await campaigns.GetCampaignAsync(Route<Guid>("campaignId"));
+        var character = await _persistence.GetRepository<ICharactersRepository>().GetCharacterAsync(req.CharacterId);
+        if (campaign is null || character is null || !campaign.Party.Contains(req.CharacterId))
+        {
+            AddError("Give only to a character in this campaign's party.");
+            await Send.ErrorsAsync(StatusCodes.Status404NotFound, ct);
+            return;
+        }
+        var coins = (req.Coins ?? []).Where(c => c.Value != 0).ToDictionary();
+        if (coins.Any(c => !Domain.Characters.CharacterInventory.CoinKinds.Contains(c.Key) || c.Value is < 0 or > 1_000_000) || req.Quantity is < 0 or > 1000 || (req.Note?.Length ?? 0) > 500)
+        {
+            AddError("Coins are cp, sp, ep, gp and pp from 0 to 1,000,000; at most 1,000 of an item.");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+
+        Domain.Characters.InventoryItem? item = null;
+        if (req.CampaignItemId is { } campaignItemId)
+        {
+            var entry = await campaigns.GetEntryAsync(campaign.Id, campaignItemId);
+            if (entry is null || entry.Kind != CampaignEntry.MagicItem)
+            {
+                await Send.NotFoundAsync(ct);
+                return;
+            }
+            using var data = JsonDocument.Parse(entry.Data);
+            string? Text(string name) => data.RootElement.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : null;
+            item = new Domain.Characters.InventoryItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = entry.Title,
+                Quantity = Math.Max(1, req.Quantity),
+                Card = true,
+                Custom = new Domain.Characters.CustomItem
+                {
+                    Category = Text("category") ?? "Wondrous Item",
+                    Description = entry.Body,
+                    Magic = true,
+                    Rarity = Text("rarity"),
+                    Attunement = Text("attunement") is { } a && !a.Equals("no", StringComparison.OrdinalIgnoreCase),
+                    Weight = data.RootElement.TryGetProperty("weight", out var w) && w.ValueKind == JsonValueKind.Number ? w.GetDecimal() : null,
+                    ImageUrl = entry.ImageUrl,
+                    Source = campaign.Name,
+                },
+            };
+        }
+        else if (req.ElementId is { } elementId)
+        {
+            var catalog = await _catalog.GetAsync(ct);
+            if (catalog.Find(elementId) is not { BuildOption: false } info)
+            {
+                AddError("That is not an item.");
+                await Send.ErrorsAsync(cancellation: ct);
+                return;
+            }
+            item = new Domain.Characters.InventoryItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ElementId = elementId,
+                BaseElementId = req.BaseElementId,
+                Quantity = Math.Max(1, req.Quantity),
+                Card = true,
+            };
+        }
+        if (item is null && coins.Count == 0)
+        {
+            AddError("Give an item or some coins.");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+
+        var inventory = character.Inventory;
+        var purse = new Dictionary<string, int>(inventory.Coins);
+        foreach (var (kind, n) in coins)
+        {
+            purse[kind] = purse.GetValueOrDefault(kind) + n;
+        }
+        var updated = inventory with
+        {
+            Revision = inventory.Revision + 1,
+            Items = item is null ? inventory.Items : [.. inventory.Items, item],
+            Coins = purse,
+        };
+        if (updated.Validate() is { } problem)
+        {
+            AddError(problem);
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+        character.UpdateInventory(updated);
+
+        // the Gold tab's record of it
+        var itemName = item?.Name ?? (item?.ElementId is { } id ? (await _catalog.GetAsync(ct)).Find(id)?.Name : null);
+        var given = string.Join(" and ", new[] { item is null ? null : $"{(item.Quantity > 1 ? $"{item.Quantity} × " : string.Empty)}{itemName}", coins.Count > 0 ? string.Join(" ", coins.Select(c => $"{c.Value} {c.Key}")) : null }.OfType<string>());
+        var line = CampaignEntry.Create(campaign.Id, CampaignEntry.Ledger);
+        var lineData = JsonSerializer.Serialize(new { coins, to = character.Id.Value.ToString(), items = itemName is null ? Array.Empty<string>() : [itemName] });
+        line.Update($"Given to {character.Name}", null, DateTime.UtcNow.ToString("yyyy-MM-dd"), true, req.Note ?? string.Empty, string.Empty, null, lineData, 0);
+        campaigns.Add(line);
+        if (req.FromFund && coins.Count > 0)
+        {
+            var fundLine = CampaignEntry.Create(campaign.Id, CampaignEntry.Ledger);
+            fundLine.Update($"Paid out to {character.Name}", null, DateTime.UtcNow.ToString("yyyy-MM-dd"), true, string.Empty, string.Empty, null,
+                JsonSerializer.Serialize(new { coins = coins.ToDictionary(c => c.Key, c => -c.Value), to = "party", items = Array.Empty<string>() }), 0);
+            campaigns.Add(fundLine);
+        }
+        await _persistence.SaveChangesAsync();
+        await Send.OkAsync(new GiveResponse(given, CampaignView.Entry(line, dm: true)), ct);
+    }
+}

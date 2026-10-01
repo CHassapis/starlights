@@ -23,6 +23,8 @@ import { LibraryDevelopmentPage } from "./pages/development/library-page.tsx";
 import BuilderAppLayout2 from "./pages/layouts/builder-app-layout-2.tsx";
 import BuilderAppLayout from "./pages/layouts/builder-app-layout.tsx";
 import CharactersLayout from "./pages/layouts/builder-layout.tsx";
+import { CampaignsPage } from "./pages/campaigns/campaigns-page";
+import { CampaignPage } from "./pages/campaigns/campaign-page";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,6 +68,14 @@ const router = createBrowserRouter([
       // the upstream test page, still handy for looking at raw registrations and statistics
       { path: ":id/debug", element: <CharactersDetailsPage /> },
       { path: "create", element: <CharactersCreatePage /> },
+    ],
+  },
+  {
+    path: "/campaigns",
+    element: <AppWide />,
+    children: [
+      { index: true, element: <CampaignsPage /> },
+      { path: ":id", element: <CampaignPage /> },
     ],
   },
   {

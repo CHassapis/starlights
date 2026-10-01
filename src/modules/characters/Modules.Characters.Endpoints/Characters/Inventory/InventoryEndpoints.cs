@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using FastEndpoints;
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain.Characters;
@@ -38,6 +39,8 @@ public sealed class GetCharacterInventoryEndpoint : EndpointWithoutRequest<Chara
         await Send.OkAsync(character.Inventory, ct);
     }
 }
+
+public sealed record InventorySaved(int Revision);
 
 /// <summary>
 /// Replaces a character's inventory (at most 1,000 items, texts and numbers within limits, containers valid).
@@ -80,6 +83,15 @@ public sealed class UpdateCharacterInventoryEndpoint : Endpoint<CharacterInvento
             return;
         }
 
+        // a save from an older copy would undo what happened since (an item the DM gave): refuse it, the app
+        // reloads and applies its change again
+        if (req.Revision != character.Inventory.Revision)
+        {
+            AddError("The equipment changed meanwhile; load it again.");
+            await Send.ErrorsAsync(StatusCodes.Status409Conflict, ct);
+            return;
+        }
+
         // registrations belong to the server (whatever the client sent): an item whose element has rules is
         // registered while it is active, i.e. equipped, or attuned when it needs attunement (as Aurora applies them);
         // mundane weapons and armor are not, the sheet works them out from the catalog
@@ -107,7 +119,7 @@ public sealed class UpdateCharacterInventoryEndpoint : Endpoint<CharacterInvento
             await _attached.RemoveAsync(character.Id, gone);
         }
 
-        character.UpdateInventory(req with { Version = 1, Items = items });
+        character.UpdateInventory(req with { Version = 1, Revision = character.Inventory.Revision + 1, Items = items });
         await _persistence.SaveChangesAsync();
 
         // an item's rules came or went: work the character out again now, so the sheet is right when this returns
@@ -117,6 +129,6 @@ public sealed class UpdateCharacterInventoryEndpoint : Endpoint<CharacterInvento
         {
             await _processor.ReproccessRegistrations(character.Id);
         }
-        await Send.NoContentAsync(ct);
+        await Send.OkAsync(new InventorySaved(character.Inventory.Revision), ct);
     }
 }

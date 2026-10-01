@@ -280,6 +280,25 @@ function Row({ r, containers, nextAttack, attackOf, onChange, onRemove }: RowPro
               <InfoCard id={item.id} className="truncate font-medium">
                 {r.name}
               </InfoCard>
+            ) : entry.custom?.imageUrl || entry.custom?.description ? (
+              // a homebrew item (one the DM gave from a campaign): its picture and description in a card
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" className="flex min-w-0 items-center gap-1.5 text-left">
+                    {entry.custom.imageUrl && <img src={entry.custom.imageUrl} alt="" className="size-6 shrink-0 rounded object-cover" />}
+                    <span className="truncate font-medium decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline">{r.name}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 space-y-2 text-sm">
+                  {entry.custom.imageUrl && <img src={entry.custom.imageUrl} alt="" className="max-h-48 w-full rounded-md object-contain" />}
+                  <p className="font-medium">{r.name}</p>
+                  <p className="text-xs italic text-muted-foreground">
+                    {[entry.custom.category, entry.custom.rarity, entry.custom.attunement ? "requires attunement" : null].filter(Boolean).join(", ")}
+                  </p>
+                  {entry.custom.description && <p className="whitespace-pre-wrap">{entry.custom.description}</p>}
+                  {entry.custom.source && <p className="text-xs text-muted-foreground">From {entry.custom.source}</p>}
+                </PopoverContent>
+              </Popover>
             ) : (
               <span className="truncate font-medium">{r.name}</span>
             )}

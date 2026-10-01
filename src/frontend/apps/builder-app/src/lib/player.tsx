@@ -55,9 +55,19 @@ export function forgetAdminToken() {
   forgetUnlockToken(ADMIN);
 }
 
-/** The X-Player-Token header value: every token this browser holds. */
-export function unlockTokenHeader(): string {
-  return Object.values(readTokens()).join(",");
+/** The X-Player-Token header value: every token this browser holds (without the DM's, to see what players see). */
+export function unlockTokenHeader(includeAdmin = true): string {
+  return Object.entries(readTokens())
+    .filter(([name]) => includeAdmin || name !== ADMIN)
+    .map(([, token]) => token)
+    .join(",");
+}
+
+const campaignKey = (campaignId: string) => `#campaign:${campaignId}`;
+
+/** Remembers the token a campaign's password gave. */
+export function saveCampaignToken(campaignId: string, token: string) {
+  saveUnlockToken(campaignKey(campaignId), token);
 }
 
 type PlayerContextValue = {

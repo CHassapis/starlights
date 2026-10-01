@@ -30,6 +30,7 @@ import { AbilitiesTab } from "./abilities-tab";
 import { EquipmentTab } from "./equipment-tab";
 import { MagicTab } from "./magic-tab";
 import { AuroraUpdateDialog } from "../aurora-import-dialog";
+import { CharacterCampaigns } from "./character-campaigns";
 import { ExtrasCard } from "./extras-card";
 import { editionOf, restrictedForEdition, useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { EditionPicker } from "@/components/edition-picker";
@@ -237,6 +238,7 @@ function BuilderHeader({ characterId, choices, pending }: { characterId: string;
             </Link>
           </Button>
           <AuroraUpdateDialog characterId={characterId} />
+          <CharacterCampaigns characterId={characterId} playerName={owner} />
           {(pending || setLevel.isPending) && (
             <span className="flex items-center gap-2 text-sm text-muted-foreground">
               <Spinner className="size-4" /> Updating…

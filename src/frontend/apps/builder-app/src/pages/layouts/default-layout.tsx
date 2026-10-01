@@ -9,6 +9,7 @@ import {
   Icon,
   LibraryBigIcon,
   LibraryIcon,
+  ScrollTextIcon,
   MapIcon,
   OrbitIcon,
   PencilRulerIcon,
@@ -179,6 +180,19 @@ export function MainNavigation() {
                               <div>
                                 <div className="font-medium mt-0.5">Character Collection</div>
                                 <div className="text-muted-foreground text-xs">The characters in your collection.</div>
+                              </div>
+                            </Link>
+                          </div>
+                        </NavigationMenuLink>
+                      </li>
+                      <li>
+                        <NavigationMenuLink asChild>
+                          <div>
+                            <Link to="/campaigns" className="flex flex-row items-center gap-3 font-overpass leading-snug">
+                              <ScrollTextIcon size={16} className=" size-9 rounded-sm p-2 stroke-amber-600" />
+                              <div>
+                                <div className="font-medium mt-0.5">Campaigns</div>
+                                <div className="text-muted-foreground text-xs">Sessions, codex, maps, magic items and gold.</div>
                               </div>
                             </Link>
                           </div>
@@ -379,6 +393,9 @@ export function MainNavigation() {
             <Link to="/characters" aria-label="Characters" className="rounded-md p-2 hover:bg-muted">
               <CrownIcon className="size-5" />
             </Link>
+            <Link to="/campaigns" aria-label="Campaigns" className="rounded-md p-2 hover:bg-muted">
+              <ScrollTextIcon className="size-5" />
+            </Link>
             <Link to="/compendium" aria-label="Compendium" className="rounded-md p-2 hover:bg-muted">
               <LibraryBigIcon className="size-5" />
             </Link>
@@ -387,7 +404,10 @@ export function MainNavigation() {
           <AdminButton />
           <div className="flex items-center justify-end gap-2">
             <ModeToggle />
-            <GitHubIconButton />
+            {/* room for the menu icons on a phone */}
+            <span className="hidden sm:contents">
+              <GitHubIconButton />
+            </span>
           </div>
 
           {import.meta.env.DEV && (

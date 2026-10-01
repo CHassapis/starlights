@@ -74,6 +74,10 @@ export interface CustomItem {
   attunement?: boolean;
   container?: boolean;
   capacity?: number | null;
+  /** a picture of it (a campaign magic item's) */
+  imageUrl?: string | null;
+  /** where it comes from, for its card (the campaign that gave it) */
+  source?: string | null;
 }
 
 export interface InventoryEntry {
@@ -103,6 +107,8 @@ export const COIN_NAMES: Record<Coin, string> = { cp: "Copper", sp: "Silver", ep
 
 export interface Inventory {
   version?: number;
+  /** goes up with every save; a save names the revision it started from (see useSaveInventory) */
+  revision?: number;
   items: InventoryEntry[];
   coins: Partial<Record<Coin, number>>;
   treasure?: string | null;

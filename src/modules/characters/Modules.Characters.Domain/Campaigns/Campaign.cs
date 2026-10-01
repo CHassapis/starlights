@@ -109,8 +109,11 @@ public sealed class CampaignEntry : EntityBase<Guid>
     public const string Session = "session";
     public const string Ledger = "ledger";
 
+    /// <summary>A magic item of the DM's own, given to characters from the campaign (never offered when building).</summary>
+    public const string MagicItem = "magicitem";
+
     /// <summary>The kinds of entries.</summary>
-    public static readonly IReadOnlySet<string> Kinds = new HashSet<string>(["session", "npc", "place", "faction", "item", "handout", "quest", "ledger"]);
+    public static readonly IReadOnlySet<string> Kinds = new HashSet<string>(["session", "npc", "encounter", "place", "faction", "item", "handout", "quest", "ledger", "map", MagicItem]);
 
     private CampaignEntry(Guid id, Guid campaignId, string kind)
         : base(id)
@@ -209,6 +212,10 @@ public sealed class CampaignEntry : EntityBase<Guid>
             {
                 return problem;
             }
+            if (kind == MagicItem && ValidateMagicItem(parsed.RootElement) is { } itemProblem)
+            {
+                return itemProblem;
+            }
         }
         catch (JsonException)
         {
@@ -218,6 +225,24 @@ public sealed class CampaignEntry : EntityBase<Guid>
     }
 
     private static readonly string[] Coins = ["cp", "sp", "ep", "gp", "pp"];
+
+    /// <summary>A magic item's details: rarity, category and attunement as text, weight in pounds.</summary>
+    private static string? ValidateMagicItem(JsonElement data)
+    {
+        foreach (var name in new[] { "rarity", "category", "attunement" })
+        {
+            if (data.TryGetProperty(name, out var value) && (value.ValueKind != JsonValueKind.String || value.GetString()!.Length > 100))
+            {
+                return "A magic item's rarity, category and attunement are short texts.";
+            }
+        }
+        if (data.TryGetProperty("weight", out var weight) && weight.ValueKind != JsonValueKind.Null &&
+            (weight.ValueKind != JsonValueKind.Number || weight.GetDecimal() is < 0 or > 100_000))
+        {
+            return "A magic item's weight is a number of pounds.";
+        }
+        return null;
+    }
 
     /// <summary>A ledger line: whole coins per kind (in or out), who it is for ("party", a character, or "other"), items by name.</summary>
     private static string? ValidateLedger(JsonElement data)

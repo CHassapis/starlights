@@ -191,7 +191,7 @@ export function sheetItemCards(inventory: Inventory, catalog: Catalog, texts: Re
         html: custom?.description ?? own?.description ?? "",
         // the book's weight text, as Aurora's cards print it ("5 lb. (full)", "—")
         weight: custom?.weight ? `${custom.weight} lb.` : (base?.setters.weight ?? own?.setters.weight ?? ""),
-        source: custom ? "Homebrew" : (own?.source ?? ""),
+        source: custom ? (custom.source ?? "Homebrew") : (own?.source ?? ""),
       };
     });
 }

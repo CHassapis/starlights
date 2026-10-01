@@ -68,6 +68,12 @@ public sealed record CustomItem
     /// <summary>It holds other items (a chest at home, a wagon).</summary>
     public bool Container { get; init; }
     public decimal? Capacity { get; init; }
+
+    /// <summary>A picture of it (a campaign magic item's).</summary>
+    public string? ImageUrl { get; init; }
+
+    /// <summary>Where it comes from, for its card ("Curse of Strahd", for an item the DM gave).</summary>
+    public string? Source { get; init; }
 }
 
 /// <summary>
@@ -77,6 +83,12 @@ public sealed record CustomItem
 public sealed record CharacterInventory
 {
     public int Version { get; init; } = 1;
+
+    /// <summary>
+    /// Goes up with every save. A save must name the revision it started from, so a page with an older copy (a
+    /// player's Equipment tab open while the DM gives them an item) cannot write over the newer one.
+    /// </summary>
+    public int Revision { get; init; }
 
     public List<InventoryItem> Items { get; init; } = [];
 
@@ -113,6 +125,7 @@ public sealed record CharacterInventory
             if ((i.Name?.Length ?? 0) > 200 || (i.Notes?.Length ?? 0) > 5_000 || (i.Equipped?.Length ?? 0) > 40
                 || i.Quantity is < 0 or > 100_000 || i.ChargesUsed is < 0 or > 1_000 || i.Attack is < 1 or > 100
                 || (i.Custom is { } c && ((c.Category?.Length ?? 0) > 100 || (c.Description?.Length ?? 0) > 20_000 || (c.Rarity?.Length ?? 0) > 40
+                    || (c.ImageUrl?.Length ?? 0) > 500 || (c.Source?.Length ?? 0) > 200
                     || c.Weight is < 0 or > 100_000 || c.Capacity is < 0 or > 1_000_000)))
             {
                 return $"\"{i.Name ?? "An item"}\" has a value that is too long or out of range.";
