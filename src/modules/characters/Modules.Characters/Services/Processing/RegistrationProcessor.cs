@@ -2,7 +2,9 @@
 using Microsoft.Extensions.Logging;
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain;
+using Starlights.Modules.Characters.Domain.Abilities;
 using Starlights.Modules.Characters.Domain.Characters;
+using Starlights.Modules.Characters.Domain.Classes;
 using Starlights.Modules.Characters.Domain.Progression;
 using Starlights.Modules.Characters.Domain.Registrations;
 using Starlights.Modules.Characters.Services.Statistics;
@@ -488,13 +490,60 @@ public class RegistrationProcessor : IRegistrationProcessor
             var registrations = await _persistence.GetRepository<IRegistrationRepository>().GetRegistrationsAsync(context.Character.Id);
             registered = registrations.Select(r => r.AssociatedElementId.Value).ToHashSet();
             context.Items[RegisteredElementsKey] = registered;
+            context.Items[RegistrationsKey] = registrations;
         }
 
-        var level = context.Character.GetRequiredComponent<ProgressionComponent>().CharacterLevel;
-        return RequirementsExpression.Evaluate(requirements, registered.Contains, level);
+        var character = context.Character;
+        var level = character.GetRequiredComponent<ProgressionComponent>().CharacterLevel;
+
+        int? Value(string name)
+        {
+            if (name is "level" or "character")
+            {
+                return level;
+            }
+            if (name.StartsWith("level:", StringComparison.Ordinal))
+            {
+                // a class the character does not have is level 0
+                var className = name[6..].Replace('-', ' ');
+                return character.GetRequiredComponent<ClassComponent>().Classes
+                    .FirstOrDefault(c => string.Equals(c.Name, className, StringComparison.OrdinalIgnoreCase))?.Level ?? 0;
+            }
+            if (AbilityNames.TryGetValue(name, out var ability))
+            {
+                return character.GetRequiredComponent<AbilitiesComponent>().AbilityScores
+                    .FirstOrDefault(a => string.Equals(a.Name, ability, StringComparison.OrdinalIgnoreCase))?.CalculatedScore;
+            }
+
+            // any other statistic, worked out once for this pass from the rules as they stand
+            if (context.Items.TryGetValue(StatisticsKey, out var stored) is false || stored is not StatisticValuesGroupCollection statistics)
+            {
+                var registrations = context.Items.TryGetValue(RegistrationsKey, out var list) && list is IEnumerable<Registration> known ? known.ToList() : [];
+                statistics = _statisticsCalculator.Calculate(character, registrations).Statistics;
+                context.Items[StatisticsKey] = statistics;
+            }
+            var statisticName = AuroraSave.Replace(name, "$1-saving-throw").Replace(' ', '-');
+            return statistics.TryGetGroup(statisticName, out var group) ? group.Sum() : null;
+        }
+
+        return RequirementsExpression.Evaluate(requirements, registered.Contains, Value);
     }
 
     private const string RegisteredElementsKey = "RegisteredElements";
+    private const string RegistrationsKey = "Registrations";
+    private const string StatisticsKey = "RequirementStatistics";
+
+    private static readonly Dictionary<string, string> AbilityNames = new()
+    {
+        ["str"] = "Strength", ["strength"] = "Strength",
+        ["dex"] = "Dexterity", ["dexterity"] = "Dexterity",
+        ["con"] = "Constitution", ["constitution"] = "Constitution",
+        ["int"] = "Intelligence", ["intelligence"] = "Intelligence",
+        ["wis"] = "Wisdom", ["wisdom"] = "Wisdom",
+        ["cha"] = "Charisma", ["charisma"] = "Charisma",
+    };
+
+    private static readonly System.Text.RegularExpressions.Regex AuroraSave = new(@"^(strength|dexterity|constitution|intelligence|wisdom|charisma):save\b");
 
     /// <summary>
     /// Initializes a new processing context for the specified registration by retrieving all required domain entities.

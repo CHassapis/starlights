@@ -52,4 +52,30 @@ public class RequirementsExpressionTests
         Evaluate("[innate speed:swim:1]").Should().BeFalse();
         Evaluate("!([str:15]||ID_NOT_IMPORTED)").Should().BeTrue();
     }
+
+    [TestMethod]
+    [DataRow(14, false)]
+    [DataRow(13, false)]
+    [DataRow(12, true)]
+    public void HeavyArmorSlowsOnlyBelowItsStrength(int strength, bool slowed)
+    {
+        // Chain Mail: <stat name="innate speed" value="-10" requirements="!([str:13]||ID_…_IGNORE_STRENGTH_REQUIREMENT)" />
+        var values = new Dictionary<string, int> { ["str"] = strength };
+        RequirementsExpression.Evaluate("!([str:13]||ID_NOT_IMPORTED)", _ => false, n => values.TryGetValue(n, out var v) ? v : null).Should().Be(slowed);
+    }
+
+    [TestMethod]
+    public void ValueTerms()
+    {
+        var values = new Dictionary<string, int> { ["level"] = 5, ["character"] = 5, ["level:warlock"] = 3, ["level:cleric"] = 0, ["innate speed:fly"] = 30, ["dex"] = 15 };
+        bool Eval(string e) => RequirementsExpression.Evaluate(e, _ => false, n => values.TryGetValue(n, out var v) ? v : null);
+
+        Eval("[character:5]").Should().BeTrue();
+        Eval("[level:warlock:3]").Should().BeTrue();
+        Eval("[level:warlock:4]").Should().BeFalse();
+        Eval("[level:paladin:1]||[level:cleric:1]").Should().BeFalse();
+        Eval("[innate speed:fly:1]").Should().BeTrue();
+        Eval("[Dex:13],[level:5]").Should().BeTrue();
+        Eval("[rune shaper:usage:2]").Should().BeFalse();
+    }
 }
