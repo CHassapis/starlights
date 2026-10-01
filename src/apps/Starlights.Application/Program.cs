@@ -32,19 +32,16 @@ public sealed partial class Program
         builder.Services.AddAuthorization();
         builder.Services.AddOpenApi();
 
+        // other origins only in development (the Vite dev server): the web app and the API share one origin behind
+        // nginx, and outside development another site must not use a player's sign-in cookie (Cloudflare Access)
         builder.Services.AddCors(options =>
         {
-            options.AddDefaultPolicy(builder =>
+            options.AddDefaultPolicy(policy =>
             {
-                builder
-                    .SetIsOriginAllowed(_ =>
-                    {
-                        // Allow all origins for development purposes
-                        return true;
-                    })
-                    .AllowAnyHeader()
-                    .AllowCredentials()
-                    .AllowAnyMethod();
+                if (builder.Environment.IsDevelopment())
+                {
+                    policy.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowCredentials().AllowAnyMethod();
+                }
             });
         });
 
