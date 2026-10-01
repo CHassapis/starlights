@@ -253,6 +253,8 @@ function wrap(paragraphs: Paragraph[], fonts: Fonts, width: number, size: number
       }
     }
     if (line.length > 0) lines.push(line);
+    // a paragraph of nothing but a space is a deliberate empty line
+    if (lines.length === 0 && paragraph.length > 0) lines.push([]);
     return lines;
   });
 }
@@ -591,16 +593,19 @@ async function equipmentPage(b: SheetBuilder, data: SheetData) {
   }
 
   const e = data.equipment;
-  const text = (name: string, paragraphs: Paragraph[], size = 7) => {
+  // these boxes are ruled every 10 points: one line of text per rule, as Aurora writes them
+  const text = (name: string, paragraphs: Paragraph[]) => {
     const box = field(fields, name);
-    if (box && paragraphs.length) drawParagraphs(page, box, paragraphs, b.fonts, { size, minSize: 4 });
+    if (box && paragraphs.length) drawParagraphs(page, box, paragraphs, b.fonts, { size: 7, minSize: 7, lineHeight: 10 / 7, paragraphGap: 0 });
   };
-  // the magic items' descriptions, each led by its name like a feature
+  const blank: Paragraph = [{ text: "\u00a0", font: "regular" }];
+  // the magic items' descriptions, each led by its name like a feature, an empty line between them
   text(
     "equipment_page_magic_items",
-    e.descriptions.flatMap((d) => {
+    e.descriptions.flatMap((d, i) => {
       const [first, ...rest] = htmlParagraphs(d.html);
-      return [[{ text: `${clean(d.title)}.`, font: "boldItalic" as const }, ...(first ?? []).map((r, i) => (i === 0 ? { ...r, text: ` ${r.text}` } : r))], ...rest];
+      const lead: Paragraph = [{ text: `${clean(d.title)}.`, font: "boldItalic" }, ...(first ?? []).map((r, k) => (k === 0 ? { ...r, text: ` ${r.text}` } : r))];
+      return [...(i > 0 ? [blank] : []), lead, ...rest];
     }),
   );
   text("equipment_page_additional_treasure", textParagraphs(e.treasure));
