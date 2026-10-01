@@ -719,7 +719,7 @@ public sealed class LeaveCampaignEndpoint : EndpointWithoutRequest
     }
 }
 
-public sealed record GiveRequest(Guid CharacterId, Guid? CampaignItemId, Guid? ElementId, Guid? BaseElementId, int Quantity, Dictionary<string, int>? Coins, bool FromFund, string? Note);
+public sealed record GiveRequest(Guid CharacterId, Guid? CampaignItemId, Guid? ElementId, Guid? BaseElementId, int Quantity, Dictionary<string, int>? Coins, bool FromFund, string? Note, string? ImageUrl = null);
 
 public sealed record GiveResponse(string Given, CampaignEntryModel Ledger);
 
@@ -773,7 +773,19 @@ public sealed class GiveEndpoint : Endpoint<GiveRequest, GiveResponse>
             return;
         }
 
+        // a picture handed over with it: one of this campaign's uploads
+        if (req.ImageUrl is { } picture && !picture.StartsWith(CampaignAccess.UrlPrefix(campaign.Id), StringComparison.Ordinal))
+        {
+            AddError("The picture must be one uploaded to this campaign.");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+
         Domain.Characters.InventoryItem? item = null;
+        var elementToGive = req.ElementId;
+        var baseToGive = req.BaseElementId;
+        var pictureToGive = req.ImageUrl;
+        string? nameToGive = null;
         if (req.CampaignItemId is { } campaignItemId)
         {
             var entry = await campaigns.GetEntryAsync(campaign.Id, campaignItemId);
@@ -784,26 +796,37 @@ public sealed class GiveEndpoint : Endpoint<GiveRequest, GiveResponse>
             }
             using var data = JsonDocument.Parse(entry.Data);
             string? Text(string name) => data.RootElement.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : null;
-            item = new Domain.Characters.InventoryItem
+            pictureToGive ??= entry.ImageUrl;
+            if (Text("elementId") is { } bookItem && Guid.TryParse(bookItem, out var bookId))
             {
-                Id = Guid.NewGuid().ToString("N"),
-                Name = entry.Title,
-                Quantity = Math.Max(1, req.Quantity),
-                Card = true,
-                Custom = new Domain.Characters.CustomItem
+                // an item of the books with the campaign's picture (and name): it goes as that item, so its rules apply
+                elementToGive = bookId;
+                baseToGive = Text("baseElementId") is { } b && Guid.TryParse(b, out var baseId) ? baseId : null;
+                nameToGive = entry.Title;
+            }
+            else
+            {
+                item = new Domain.Characters.InventoryItem
                 {
-                    Category = Text("category") ?? "Wondrous Item",
-                    Description = entry.Body,
-                    Magic = true,
-                    Rarity = Text("rarity"),
-                    Attunement = Text("attunement") is { } a && !a.Equals("no", StringComparison.OrdinalIgnoreCase),
-                    Weight = data.RootElement.TryGetProperty("weight", out var w) && w.ValueKind == JsonValueKind.Number ? w.GetDecimal() : null,
-                    ImageUrl = entry.ImageUrl,
-                    Source = campaign.Name,
-                },
-            };
+                    Id = Guid.NewGuid().ToString("N"),
+                    Name = entry.Title,
+                    Quantity = Math.Max(1, req.Quantity),
+                    Card = true,
+                    Custom = new Domain.Characters.CustomItem
+                    {
+                        Category = Text("category") ?? "Wondrous Item",
+                        Description = entry.Body,
+                        Magic = true,
+                        Rarity = Text("rarity"),
+                        Attunement = Text("attunement") is { } a && !a.Equals("no", StringComparison.OrdinalIgnoreCase),
+                        Weight = data.RootElement.TryGetProperty("weight", out var w) && w.ValueKind == JsonValueKind.Number ? w.GetDecimal() : null,
+                        ImageUrl = pictureToGive,
+                        Source = campaign.Name,
+                    },
+                };
+            }
         }
-        else if (req.ElementId is { } elementId)
+        if (item is null && elementToGive is { } elementId)
         {
             var catalog = await _catalog.GetAsync(ct);
             if (catalog.Find(elementId) is not { BuildOption: false } info)
@@ -816,9 +839,12 @@ public sealed class GiveEndpoint : Endpoint<GiveRequest, GiveResponse>
             {
                 Id = Guid.NewGuid().ToString("N"),
                 ElementId = elementId,
-                BaseElementId = req.BaseElementId,
+                BaseElementId = baseToGive,
+                // the DM's own name for it, when it differs from the book's
+                Name = nameToGive is not null && !nameToGive.Equals(info.Name, StringComparison.OrdinalIgnoreCase) ? nameToGive : null,
                 Quantity = Math.Max(1, req.Quantity),
                 Card = true,
+                ImageUrl = pictureToGive,
             };
         }
         if (item is null && coins.Count == 0)

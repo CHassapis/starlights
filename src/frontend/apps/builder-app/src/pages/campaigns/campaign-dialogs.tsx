@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ItemPicker } from "@/components/item-picker";
 import { unlockCampaign, useCampaignActions, type CampaignEntry, type EntryInput, type EntryKind, type PartyMember } from "@/lib/api/campaigns";
 import { shrinkImage } from "@/lib/image";
 import { COIN_KINDS, formatCoins, isEmpty, shareOut, type Coins } from "@/lib/rules/ledger";
@@ -31,13 +32,15 @@ export const CODEX_KINDS: EntryKind[] = ["place", "faction", "item", "handout"];
 export const textareaClass =
   "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+/** A labelled field; group for buttons and uploads, which a label must not wrap. */
+function Field({ label, hint, children, group }: { label: string; hint?: string; children: ReactNode; group?: boolean }) {
+  const Tag = group ? "div" : "label";
   return (
-    <label className="block space-y-1">
-      <span className="text-sm font-medium">{label}</span>
+    <Tag className="block space-y-1" role={group ? "group" : undefined} aria-label={group ? label : undefined}>
+      <span className="block text-sm font-medium">{label}</span>
       {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
       {children}
-    </label>
+    </Tag>
   );
 }
 
@@ -111,6 +114,7 @@ export function EntryDialog({
     entry ? { ...entry, dmNotes: entry.dmNotes ?? "", data: { ...entry.data } } : blank(kind, sort, kind === "session" ? nextNumber : undefined),
   );
   const [uploading, setUploading] = useState(false);
+  const [pickingBook, setPickingBook] = useState(false);
   const set = (change: Partial<EntryInput>) => setForm((f) => ({ ...f, ...change }));
   const setData = (change: Record<string, unknown>) => setForm((f) => ({ ...f, data: { ...f.data, ...change } }));
   const k = form.kind;
@@ -223,6 +227,22 @@ export function EntryDialog({
           {(CODEX_KINDS.includes(k) || k === "npc") && (
             <Field label="Status" hint="Alive, dead, ally, destroyed… (players see it)">
               <Input value={(form.data.status as string) ?? ""} onChange={(e) => setData({ status: e.target.value })} maxLength={60} />
+            </Field>
+          )}
+          {k === "magicitem" && (
+            <Field group label="Item from the books (optional)" hint="Give it as that item, so its rules count on the sheet, with your picture and name">
+              {form.data.elementId ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium">{(form.data.bookName as string) ?? "An item of the books"}</span>
+                  <Button size="sm" variant="ghost" onClick={() => setData({ elementId: null, baseElementId: null, bookName: null })}>
+                    <Trash2Icon /> Unlink
+                  </Button>
+                </div>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setPickingBook(true)}>
+                  Choose an item…
+                </Button>
+              )}
             </Field>
           )}
           {k === "magicitem" && (
@@ -359,6 +379,33 @@ export function EntryDialog({
             </Button>
           </div>
         </div>
+        {k === "magicitem" && (
+          <ItemPicker
+            open={pickingBook}
+            onOpenChange={setPickingBook}
+            restrictedSources={[]}
+            onAdd={(add) => {
+              if (!add.item) return;
+              const book = add.item;
+              setPickingBook(false);
+              setForm((f) => ({
+                ...f,
+                title: f.title.trim() ? f.title : book.name,
+                data: {
+                  ...f.data,
+                  elementId: book.id,
+                  baseElementId: add.baseElementId ?? null,
+                  bookName: book.name,
+                  // the book's details, which the DM can still change
+                  rarity: RARITIES.find((r) => r.toLowerCase() === book.magic?.rarity?.toLowerCase()) ?? f.data.rarity,
+                  category: book.categories[0] ?? f.data.category,
+                  attunement: book.magic?.attunement ? (book.magic.attunementBy ? `by ${book.magic.attunementBy}`.replace(/^by by /, "by ") : "Yes") : "",
+                  weight: book.weight ?? f.data.weight ?? null,
+                },
+              }));
+            }}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -525,7 +572,21 @@ export function GiveDialog({
   const [coins, setCoins] = useState<Coins>({});
   const [fromFund, setFromFund] = useState(true);
   const [note, setNote] = useState("");
+  const [picture, setPicture] = useState<string | null>(item?.imageUrl ?? null);
+  const [uploading, setUploading] = useState(false);
   const what = item?.title ?? book?.name;
+
+  async function pickPicture(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      setPicture((await actions.uploadImage(await shrinkImage(file, 1200))).url);
+    } catch (e) {
+      toast.error("Could not upload the picture", { description: (e as Error).message });
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function give() {
     actions.give.mutate(
@@ -538,6 +599,7 @@ export function GiveDialog({
         coins: Object.fromEntries(Object.entries(coins).filter(([, n]) => (n ?? 0) > 0)) as Record<string, number>,
         fromFund,
         note,
+        imageUrl: what ? picture : null,
       },
       {
         onSuccess: (r) => {
@@ -599,6 +661,23 @@ export function GiveDialog({
                 </label>
               )}
             </div>
+            {what && (
+              <Field group label="Picture (optional)" hint="Shown next to the item in their equipment, like an item card">
+                {picture ? (
+                  <div className="flex items-center gap-2">
+                    <img src={picture} alt="" className="size-16 rounded-md border object-cover" />
+                    <Button size="sm" variant="ghost" onClick={() => setPicture(null)}>
+                      <Trash2Icon /> Remove picture
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
+                    <ImagePlusIcon className="size-4" /> {uploading ? "Uploading…" : "Add a picture"}
+                    <input type="file" accept="image/*" hidden onChange={(e) => pickPicture(e.target.files?.[0])} />
+                  </label>
+                )}
+              </Field>
+            )}
             <Field label="Note (optional)">
               <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Found in Death House" />
             </Field>
@@ -606,7 +685,7 @@ export function GiveDialog({
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={give} disabled={!to || actions.give.isPending || (!what && isEmpty(coins))}>
+              <Button onClick={give} disabled={!to || actions.give.isPending || uploading || (!what && isEmpty(coins))}>
                 Give
               </Button>
             </div>

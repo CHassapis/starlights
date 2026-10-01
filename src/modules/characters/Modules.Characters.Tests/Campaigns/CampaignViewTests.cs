@@ -59,7 +59,10 @@ public class CampaignViewTests
         CampaignEntry.Validate("session", "Session 1", 1, "2026-09-28", "", "", null, "{}").Should().BeNull();
         CampaignEntry.Validate("diary", "x", null, null, "", "", null, "{}").Should().NotBeNull();
         CampaignEntry.Validate("npc", " ", null, null, "", "", null, "{}").Should().NotBeNull();
-        CampaignEntry.Validate("npc", "Arik", null, null, new string('x', 50_001), "", null, "{}").Should().NotBeNull();
+        CampaignEntry.Validate("session", "Into Vallaki", null, null, "", new string('x', 100_000), null, "{}").Should().BeNull();
+        CampaignEntry.Validate("npc", "Arik", null, null, new string('x', 200_001), "", null, "{}").Should().NotBeNull();
+        CampaignEntry.Validate("magicitem", "Sunsword", null, null, "", "", null, $$"""{"rarity":"legendary","elementId":"{{Guid.NewGuid()}}"}""").Should().BeNull();
+        CampaignEntry.Validate("magicitem", "Sunsword", null, null, "", "", null, """{"elementId":"the sun"}""").Should().NotBeNull();
         CampaignEntry.Validate("npc", "Arik", null, null, "", "", null, "[1]").Should().NotBeNull();
         CampaignEntry.Validate("ledger", "Loot", null, null, "", "", null, """{"coins":{"gp":-30,"sp":5},"to":"party","items":["Sunsword"]}""").Should().BeNull();
         CampaignEntry.Validate("ledger", "Loot", null, null, "", "", null, """{"coins":{"gp":1.5}}""").Should().NotBeNull();

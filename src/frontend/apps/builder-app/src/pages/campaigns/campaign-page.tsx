@@ -17,6 +17,7 @@ import { normalizeText } from "@/lib/rules/picker";
 import { cn } from "@/lib/utils";
 import { ItemPicker } from "@/components/item-picker";
 import { CODEX_KINDS, DmNotes, EntryDialog, GiveDialog, KIND_NAMES, Prose, ShareOutDialog, textareaClass, UnlockCampaign } from "./campaign-dialogs";
+import { PartySummary } from "./party-summary";
 
 type Editing = { kind: EntryKind; entry?: CampaignEntry | null } | null;
 
@@ -33,6 +34,7 @@ export function CampaignPage() {
   const query = asPlayer ? player : own;
   const [editing, setEditing] = useState<Editing>(null);
   const [settings, setSettings] = useState(false);
+  const [tab, setTab] = useState("sessions");
 
   if (query.error instanceof CampaignLockedError) {
     return (
@@ -82,8 +84,9 @@ export function CampaignPage() {
         <Party party={view.party} />
       </header>
 
-      <Tabs defaultValue="sessions">
+      <Tabs value={!canEdit && tab === "party" ? "sessions" : tab} onValueChange={setTab}>
         <TabsList className="max-w-full justify-start overflow-x-auto">
+          {canEdit && <TabsTrigger value="party">Party</TabsTrigger>}
           <TabsTrigger value="sessions">Sessions</TabsTrigger>
           <TabsTrigger value="npcs">NPCs</TabsTrigger>
           <TabsTrigger value="encounters">Encounters</TabsTrigger>
@@ -93,6 +96,11 @@ export function CampaignPage() {
           <TabsTrigger value="items">Magic items</TabsTrigger>
           <TabsTrigger value="gold">Gold</TabsTrigger>
         </TabsList>
+        {canEdit && (
+          <TabsContent value="party" className="mt-4">
+            <PartySummary party={view.party} />
+          </TabsContent>
+        )}
         <TabsContent value="sessions" className="mt-4">
           <Sessions view={view} canEdit={canEdit} onEdit={edit} />
         </TabsContent>
@@ -610,6 +618,7 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
                     .filter(Boolean)
                     .join(", ")}
                 </span>
+                {canEdit && typeof it.data.bookName === "string" && <span className="block text-xs text-muted-foreground">Given as {it.data.bookName}</span>}
                 <HiddenBadge entry={it} canEdit={canEdit} />
                 <span className="line-clamp-2 block text-xs text-muted-foreground">{it.body}</span>
               </span>

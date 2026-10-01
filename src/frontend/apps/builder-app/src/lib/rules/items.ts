@@ -95,6 +95,8 @@ export interface InventoryEntry {
   card?: boolean;
   /** its place in the sheet's attack list (Aurora's displayed attacks), or null */
   attack?: number | null;
+  /** a picture of this one (the item card the DM handed over with it) */
+  imageUrl?: string | null;
   notes?: string | null;
   custom?: CustomItem | null;
   /** set by the server while the item is active and has rules */

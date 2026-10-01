@@ -276,6 +276,19 @@ function Row({ r, containers, nextAttack, attackOf, onChange, onRemove }: RowPro
         <div className="min-w-0 flex-1 basis-48">
           <div className="flex items-center gap-1.5">
             {r.magic && <SparklesIcon className={cn("size-3.5 shrink-0", rarityColor(rarity))} />}
+            {item && entry.imageUrl && (
+              // the picture the DM handed over with it
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" className="shrink-0" aria-label={`Picture of ${r.name}`}>
+                    <img src={entry.imageUrl} alt="" className="size-6 rounded object-cover" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-2">
+                  <img src={entry.imageUrl} alt={r.name} className="max-h-96 w-full rounded-md object-contain" />
+                </PopoverContent>
+              </Popover>
+            )}
             {item ? (
               <InfoCard id={item.id} className="truncate font-medium">
                 {r.name}

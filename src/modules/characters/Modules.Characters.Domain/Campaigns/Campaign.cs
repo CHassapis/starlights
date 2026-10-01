@@ -193,9 +193,10 @@ public sealed class CampaignEntry : EntityBase<Guid>
         {
             return "The number, date or picture is out of range.";
         }
-        if ((body?.Length ?? 0) > 50_000 || (dmNotes?.Length ?? 0) > 50_000)
+        // a whole session prep document fits (about 100,000 characters)
+        if ((body?.Length ?? 0) > 200_000 || (dmNotes?.Length ?? 0) > 200_000)
         {
-            return "The text is too long (50,000 characters at most).";
+            return "The text is too long (200,000 characters at most).";
         }
         if ((data?.Length ?? 0) > 20_000)
         {
@@ -226,7 +227,10 @@ public sealed class CampaignEntry : EntityBase<Guid>
 
     private static readonly string[] Coins = ["cp", "sp", "ep", "gp", "pp"];
 
-    /// <summary>A magic item's details: rarity, category and attunement as text, weight in pounds.</summary>
+    /// <summary>
+    /// A magic item's details: rarity, category and attunement as text, weight in pounds, and optionally the item of
+    /// the books it is (elementId), which is then given with its rules and the campaign's picture.
+    /// </summary>
     private static string? ValidateMagicItem(JsonElement data)
     {
         foreach (var name in new[] { "rarity", "category", "attunement" })
@@ -234,6 +238,14 @@ public sealed class CampaignEntry : EntityBase<Guid>
             if (data.TryGetProperty(name, out var value) && (value.ValueKind != JsonValueKind.String || value.GetString()!.Length > 100))
             {
                 return "A magic item's rarity, category and attunement are short texts.";
+            }
+        }
+        foreach (var name in new[] { "elementId", "baseElementId" })
+        {
+            if (data.TryGetProperty(name, out var element) && element.ValueKind != JsonValueKind.Null &&
+                (element.ValueKind != JsonValueKind.String || !Guid.TryParse(element.GetString(), out _)))
+            {
+                return "A magic item's book item is an element id.";
             }
         }
         if (data.TryGetProperty("weight", out var weight) && weight.ValueKind != JsonValueKind.Null &&

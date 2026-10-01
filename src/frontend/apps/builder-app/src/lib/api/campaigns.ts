@@ -14,6 +14,8 @@ export interface GiveInput {
   coins?: Record<string, number>;
   fromFund: boolean;
   note?: string;
+  /** a picture to hand over with it (one uploaded to the campaign) */
+  imageUrl?: string | null;
 }
 
 export interface CampaignSummary {
