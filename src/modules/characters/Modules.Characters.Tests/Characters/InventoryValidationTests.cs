@@ -61,4 +61,12 @@ public class InventoryValidationTests
         new CharacterInventory { Items = [Item("a") with { Quantity = -1 }] }.Validate().Should().Contain("out of range");
         new CharacterInventory { Items = [Item("a") with { Custom = new() { Weight = -3 } }] }.Validate().Should().Contain("out of range");
     }
+
+    [TestMethod]
+    public void AnAttackPlace_IsWithinTheList()
+    {
+        new CharacterInventory { Items = [Item("sword") with { Attack = 1 }] }.Validate().Should().BeNull();
+        new CharacterInventory { Items = [Item("sword") with { Attack = 0 }] }.Validate().Should().NotBeNull();
+        new CharacterInventory { Items = [Item("sword") with { Attack = 101 }] }.Validate().Should().NotBeNull();
+    }
 }

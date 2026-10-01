@@ -212,7 +212,11 @@ public static partial class ItemClassifier
             category?.Contains("MARTIAL", StringComparison.Ordinal) == true,
             category?.EndsWith("RANGED", StringComparison.Ordinal) == true,
             set("proficiency"),
-            set("ammunition"));
+            set("ammunition"),
+            // the 2024 weapon mastery, a property element of the book ("ID_WOTC_PHB24_WEAPON_PROPERTY_VEX")
+            supports.Select(s => MasteryRegex().Match(s)).Where(m => m.Success)
+                .Select(m => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(m.Groups[1].Value.Replace('_', ' ').ToLowerInvariant()))
+                .FirstOrDefault());
     }
 
     private static ArmorInfo? ArmorOf(Func<string, string?> set)
@@ -386,6 +390,9 @@ public static partial class ItemClassifier
 
     [GeneratedRegex(@"^ID_INTERNAL_WEAPON_PROPERTY_([A-Z_]+)$")]
     private static partial Regex WeaponPropertyRegex();
+
+    [GeneratedRegex(@"^ID_(?!INTERNAL_)[A-Z0-9_]*_WEAPON_PROPERTY_([A-Z_]+)$")]
+    private static partial Regex MasteryRegex();
 
     [GeneratedRegex(@"^ID_INTERNAL_DAMAGE_TYPE_([A-Z]+)$")]
     private static partial Regex DamageTypeRegex();

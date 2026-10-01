@@ -82,8 +82,10 @@ public sealed record CasterFacts
 /// <summary>
 /// A spell the character has. Kind is "cantrip", "always" (always prepared: domain spells, and spells of the list
 /// gained from a feat or species, as Aurora counts them), "spellbook" (may be prepared), or "known".
+/// FromElsewhere marks a spell gained from a feat or species that its class's list takes in (Magic Initiate's
+/// Protection from Evil and Good under Cleric): always prepared by the rules, but Aurora's sheet leaves it unticked.
 /// </summary>
-public sealed record KnownSpell(Guid RegistrationId, Guid ElementId, string Name, int Level, string Kind, string Origin);
+public sealed record KnownSpell(Guid RegistrationId, Guid ElementId, string Name, int Level, string Kind, string Origin, bool FromElsewhere = false);
 
 public sealed record PactSlots(int Level, int Count);
 
@@ -229,11 +231,13 @@ public static partial class SpellcastingFacts
                     }
                 }
             }
+            var fromElsewhere = false;
             if (owner is null && spell.Level >= 1)
             {
                 // only a caster that knows its whole list takes it in (a wizard's or sorcerer's stays apart, as in Aurora)
                 var onList = casters.Where(c => c.Facts.KnowsWholeList && c.Facts.Lists.Any(l => spell.Lists.Contains(l, StringComparer.OrdinalIgnoreCase))).ToList();
                 owner = onList.Count == 1 ? onList[0].Facts : null;
+                fromElsewhere = owner is not null;
             }
 
             var kind = spell.Level == 0 ? "cantrip"
@@ -242,7 +246,7 @@ public static partial class SpellcastingFacts
                 : owner.Spellbook && own && picked ? "spellbook"
                 : owner.Prepares ? "always"
                 : "known";
-            var known = new KnownSpell(registration.Id, registration.ElementId, spell.Name, spell.Level, kind, Origin(parent, parent?.ParentId is { } g ? byId.GetValueOrDefault(g) : null));
+            var known = new KnownSpell(registration.Id, registration.ElementId, spell.Name, spell.Level, kind, Origin(parent, parent?.ParentId is { } g ? byId.GetValueOrDefault(g) : null), fromElsewhere);
             (owner?.Spells ?? other).Add(known);
         }
 

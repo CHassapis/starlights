@@ -137,3 +137,72 @@ public sealed class UpdateCharacterMagicEndpoint : Endpoint<CharacterMagic>
         await Send.OkAsync(character.Magic, ct);
     }
 }
+
+public sealed record DefensesResponse(List<string> Resistances, List<string> Immunities, List<string> Vulnerabilities);
+
+/// <summary>
+/// The character's damage resistances, immunities and vulnerabilities: Aurora grants them as conditions built into
+/// the app (ID_INTERNAL_CONDITION_DAMAGE_RESISTANCE_FIRE), which the rules engine cannot register, so they are read
+/// from the XML of the elements the character has.
+/// </summary>
+public sealed partial class GetDefensesEndpoint : EndpointWithoutRequest<DefensesResponse>
+{
+    private readonly IPersistence _persistence;
+    private readonly ISpellIndex _spells;
+
+    public GetDefensesEndpoint(IPersistence persistence, ISpellIndex spells)
+    {
+        _persistence = persistence;
+        _spells = spells;
+    }
+
+    public override void Configure()
+    {
+        Get("{characterId:guid}/defenses");
+        Group<CharactersGroup>();
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var character = await _persistence.GetRepository<ICharactersRepository>().GetCharacterAsync(new CharacterId(Route<Guid>("characterId")));
+        if (character is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+
+        var registrations = await _persistence.GetRepository<IRegistrationRepository>().GetRegistrationsAsync(character.Id);
+        var elementIds = registrations.Select(r => r.AssociatedElementId.Value).Distinct().ToList();
+        var magic = await _spells.GetElementMagicAsync(elementIds, ct);
+        var result = new DefensesResponse([], [], []);
+        foreach (var id in elementIds)
+        {
+            foreach (var condition in magic.GetValueOrDefault(id)?.Conditions ?? [])
+            {
+                var m = ConditionRegex().Match(condition);
+                if (!m.Success)
+                {
+                    continue;
+                }
+                var list = m.Groups[1].Value switch
+                {
+                    "RESISTANCE" => result.Resistances,
+                    "IMMUNITY" => result.Immunities,
+                    _ => result.Vulnerabilities,
+                };
+                var name = System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(m.Groups[2].Value.Replace('_', ' ').ToLowerInvariant());
+                if (!list.Contains(name))
+                {
+                    list.Add(name);
+                }
+            }
+        }
+
+        await Send.OkAsync(result, ct);
+    }
+
+    // Aurora spells vulnerability "VULNERAILITY" once
+    [System.Text.RegularExpressions.GeneratedRegex(@"^ID_INTERNAL_CONDITION_DAMAGE_(RESISTANCE|IMMUNITY|VULNERABILITY|VULNERAILITY)_([A-Z_]+)$")]
+    private static partial System.Text.RegularExpressions.Regex ConditionRegex();
+}

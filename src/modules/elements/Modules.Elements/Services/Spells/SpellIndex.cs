@@ -162,12 +162,16 @@ internal sealed class SpellIndex : ISpellIndex
             })
             .FirstOrDefault(k => k is not null);
         var spellcasting = ReadSpellcasting(elementId, xml);
+        var conditions = rules.Where(r => r.Name == "grant" && string.Equals((string?)r.Attribute("type"), "Condition", StringComparison.OrdinalIgnoreCase))
+            .Select(r => (string?)r.Attribute("id"))
+            .OfType<string>()
+            .ToList();
 
-        if (spellcasting is null && grants.Count == 0 && selects.Count == 0 && stats.Count == 0)
+        if (spellcasting is null && grants.Count == 0 && selects.Count == 0 && stats.Count == 0 && conditions.Count == 0)
         {
             return null;
         }
-        return new ElementMagic(elementId, (string?)xml.Attribute("name") ?? string.Empty, (string?)xml.Attribute("source"), spellcasting, multiclass, grants, selects, stats);
+        return new ElementMagic(elementId, (string?)xml.Attribute("name") ?? string.Empty, (string?)xml.Attribute("source"), spellcasting, multiclass, grants, selects, stats, conditions);
     }
 
     public static SpellcastingDefinition? ReadSpellcasting(Guid elementId, string rawXml)

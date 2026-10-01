@@ -31,7 +31,10 @@ public interface ISpellIndex
     Task<IReadOnlyDictionary<Guid, ElementMagic>> GetElementMagicAsync(IReadOnlyCollection<Guid> elementIds, CancellationToken cancellationToken = default);
 }
 
-/// <summary>The magic an element's Aurora XML describes; see <see cref="ISpellIndex.GetElementMagicAsync"/>.</summary>
+/// <summary>
+/// The magic an element's Aurora XML describes (see <see cref="ISpellIndex.GetElementMagicAsync"/>), and the Aurora
+/// conditions it grants (damage resistances and the like, built into Aurora rather than its data, so not elements).
+/// </summary>
 public sealed record ElementMagic(
     Guid ElementId,
     string Name,
@@ -40,7 +43,8 @@ public sealed record ElementMagic(
     MulticlassSlots? Multiclass,
     IReadOnlyList<SpellGrant> Grants,
     IReadOnlyList<SpellSelect> Selects,
-    IReadOnlyList<SpellcastingStat> Stats);
+    IReadOnlyList<SpellcastingStat> Stats,
+    IReadOnlyList<string>? Conditions = null);
 
 /// <summary>
 /// How a spellcasting class's levels count toward the shared multiclass spell slots (Aurora's

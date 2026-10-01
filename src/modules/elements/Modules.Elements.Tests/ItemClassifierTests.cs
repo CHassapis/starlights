@@ -25,7 +25,7 @@ public class ItemClassifierTests
         item.Magic.Should().BeNull();
         item.Weight.Should().Be(3);
         item.Cost.Should().Be(15);
-        item.Weapon.Should().BeEquivalentTo(new WeaponInfo("1d8", "slashing", "1d10", null, ["Versatile"], true, false, "ID_PROFICIENCY_WEAPON_PROFICIENCY_LONGSWORD", null));
+        item.Weapon.Should().BeEquivalentTo(new WeaponInfo("1d8", "slashing", "1d10", null, ["Versatile"], true, false, "ID_PROFICIENCY_WEAPON_PROFICIENCY_LONGSWORD", null, "Sap"));
         item.HasRules.Should().BeFalse();
     }
 

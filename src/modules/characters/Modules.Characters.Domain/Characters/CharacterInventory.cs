@@ -40,6 +40,9 @@ public sealed record InventoryItem
     /// <summary>Whether the sheet prints a card for it (Aurora's "card" option).</summary>
     public bool Card { get; init; } = true;
 
+    /// <summary>Its place in the sheet's attack list (Aurora's displayed attacks), or null when not listed.</summary>
+    public int? Attack { get; init; }
+
     public string? Notes { get; init; }
 
     /// <summary>A homebrew item's details (or overrides for an element's).</summary>
@@ -108,7 +111,7 @@ public sealed record CharacterInventory
                 return "A homebrew item needs a name.";
             }
             if ((i.Name?.Length ?? 0) > 200 || (i.Notes?.Length ?? 0) > 5_000 || (i.Equipped?.Length ?? 0) > 40
-                || i.Quantity is < 0 or > 100_000 || i.ChargesUsed is < 0 or > 1_000
+                || i.Quantity is < 0 or > 100_000 || i.ChargesUsed is < 0 or > 1_000 || i.Attack is < 1 or > 100
                 || (i.Custom is { } c && ((c.Category?.Length ?? 0) > 100 || (c.Description?.Length ?? 0) > 20_000 || (c.Rarity?.Length ?? 0) > 40
                     || c.Weight is < 0 or > 100_000 || c.Capacity is < 0 or > 1_000_000)))
             {

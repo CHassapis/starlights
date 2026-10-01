@@ -92,7 +92,8 @@ public sealed record WeaponInfo(
     bool Martial,
     bool Ranged,
     string? ProficiencyId,
-    string? AmmunitionId);
+    string? AmmunitionId,
+    string? Mastery = null);
 
 /// <summary>Kind is Light, Medium, Heavy or Shield; ArmorClass is the base AC (the bonus for a shield).</summary>
 public sealed record ArmorInfo(string Kind, int ArmorClass, int? StrengthRequirement, bool StealthDisadvantage, string? ProficiencyId);

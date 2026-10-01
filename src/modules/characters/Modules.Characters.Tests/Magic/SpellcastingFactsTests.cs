@@ -112,7 +112,8 @@ public class SpellcastingFactsTests
         c.PrepareMax.Should().Be(9);
         c.Slots.Should().BeEquivalentTo(new Dictionary<int, int> { [1] = 4, [2] = 3, [3] = 2 });
         c.Spells.Select(s => (s.Name, s.Kind)).Should().Equal(("Toll the Dead", "cantrip"), ("False Life", "always"), ("Protection from Evil and Good", "always"));
-        c.Spells.Single(s => s.Name == "Protection from Evil and Good").Origin.Should().Be("Cleric (Acolyte)");
+        c.Spells.Single(s => s.Name == "Protection from Evil and Good").Should().Match<KnownSpell>(s => s.Origin == "Cleric (Acolyte)" && s.FromElsewhere);
+        c.Spells.Single(s => s.Name == "False Life").FromElsewhere.Should().BeFalse();
         facts.OtherSpells.Select(s => (s.Name, s.Kind, s.Origin)).Should().Equal(("Light", "cantrip", "Cleric (Acolyte)"), ("Misty Step", "known", "Wisdom (High Elf)"));
         // the cleric list up to 3rd level, from the ticked books only, without what is always prepared
         c.Preparable.Should().BeEquivalentTo([bless.Id, aid.Id, dispel.Id]);
