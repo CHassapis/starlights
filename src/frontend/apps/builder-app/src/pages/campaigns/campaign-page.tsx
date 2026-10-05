@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftIcon, CoinsIcon, CrownIcon, EyeIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, Trash2Icon, UsersIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiClient } from "@/lib/api-client";
 import { CampaignLockedError, unlockCampaignDm, useCampaign, useCampaignActions, type CampaignEntry, type CampaignView, type EntryKind, type PartyMember } from "@/lib/api/campaigns";
 import { shrinkImage } from "@/lib/image";
+import type { CompendiumLink } from "@/lib/lore/campaign-links";
 import { formatCoins, gpValue, ledgerRows, partyFund, totalsByRecipient, type LedgerLine } from "@/lib/rules/ledger";
 import { normalizeText } from "@/lib/rules/picker";
 import { cn } from "@/lib/utils";
@@ -187,6 +188,19 @@ interface TabProps {
   onEdit: (kind: EntryKind, entry?: CampaignEntry | null) => void;
 }
 
+const CompendiumLinks = lazy(() => import("@/components/lore/compendium-picker").then((m) => ({ default: m.CompendiumLinks })));
+
+/** An entry's links into the Compendium of Lore, with previews (players see them once the entry is revealed). */
+function EntryLinks({ entry }: { entry: CampaignEntry }) {
+  const links = entry.data.links as CompendiumLink[] | undefined;
+  if (!links?.length) return null;
+  return (
+    <Suspense fallback={null}>
+      <CompendiumLinks links={links} className="mt-2" />
+    </Suspense>
+  );
+}
+
 function HiddenBadge({ entry, canEdit }: { entry: CampaignEntry; canEdit: boolean }) {
   if (!canEdit || entry.visible) return null;
   return (
@@ -227,6 +241,7 @@ function Sessions({ view, canEdit, onEdit }: TabProps) {
           </div>
           {s.imageUrl && <img src={s.imageUrl} alt="" className="mt-3 max-h-64 rounded-md border object-cover" />}
           <Prose text={s.body} className="mt-2" />
+          <EntryLinks entry={s} />
           <DmNotes text={s.dmNotes} />
         </article>
       ))}
@@ -304,6 +319,7 @@ function Codex({ view, canEdit, onEdit, kinds }: TabProps & { kinds: EntryKind[]
             </DialogHeader>
             {open.imageUrl && <img src={open.imageUrl} alt="" className="max-h-80 w-full rounded-md border object-contain" />}
             <Prose text={open.body} />
+            <EntryLinks entry={open} />
             <DmNotes text={open.dmNotes} />
             {canEdit && (
               <Button
@@ -363,6 +379,7 @@ function Encounters({ view, canEdit, onEdit }: TabProps) {
                     </p>
                   )}
                   <Prose text={e.body} className="mt-1" />
+                  <EntryLinks entry={e} />
                   <DmNotes text={e.dmNotes} />
                 </div>
               </article>
@@ -404,6 +421,7 @@ function Quests({ view, canEdit, onEdit }: TabProps) {
                   {canEdit && <EditButton onClick={() => onEdit("quest", q)} label={`Edit ${q.title}`} />}
                 </div>
                 <Prose text={q.body} className="mt-1" />
+                <EntryLinks entry={q} />
                 <DmNotes text={q.dmNotes} />
               </article>
             ))}
@@ -551,6 +569,7 @@ function Maps({ view, canEdit, onEdit }: TabProps) {
               <HiddenBadge entry={m} canEdit={canEdit} />
               {canEdit && <EditButton onClick={() => onEdit("map", m)} label={`Edit ${m.title}`} />}
               <Prose text={m.body} className="w-full text-muted-foreground" />
+              <EntryLinks entry={m} />
               <div className="w-full">
                 <DmNotes text={m.dmNotes} />
               </div>
@@ -645,6 +664,7 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
             </DialogHeader>
             {open.imageUrl && <img src={open.imageUrl} alt="" className="max-h-80 w-full rounded-md border object-contain" />}
             <Prose text={open.body} />
+            <EntryLinks entry={open} />
             <DmNotes text={open.dmNotes} />
           </DialogContent>
         </Dialog>

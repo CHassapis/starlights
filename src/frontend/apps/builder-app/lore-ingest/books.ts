@@ -64,8 +64,12 @@ function searchOf(chapter: Json, ch: number) {
   return sections.map((s) => ({ ch: s.ch, id: s.id, name: s.name, text: s.parts.join(" ").replace(/\s+/g, " ").trim() }));
 }
 
+/** A place or section of a book, for linking from a campaign: [name, kind, book key, chapter, section id, book name]. */
+export type SectionRow = [string, "books" | "adventures", string, number, string, string];
+
 export function ingestBooks(ctx: Context, writer: Writer) {
   const out: Record<"books" | "adventures", BookRow[]> = { books: [], adventures: [] };
+  const sections: SectionRow[] = [];
   for (const [kind, file, listKey, folder, prefix] of [
     ["books", "books.json", "book", "book", "book-"],
     ["adventures", "adventures.json", "adventure", "adventure", "adventure-"],
@@ -98,6 +102,10 @@ export function ingestBooks(ctx: Context, writer: Writer) {
           headers: headersOf(c),
         };
       });
+      toc.forEach((c, i) => {
+        if (c.id) sections.push([c.name, kind, keyPart(id), i, c.id, String(b.name)]);
+        for (const h of c.headers) if (h.id && h.depth <= 1) sections.push([h.name, kind, keyPart(id), i, h.id, String(b.name)]);
+      });
       const source = str(b.source) ?? id;
       writer.write(`${base}/toc.json`, { id, name: b.name, source, kind, toc, ids, cover: (b.cover as Json | undefined)?.path ?? null });
       writer.write(`${base}/search.json`, search);
@@ -118,5 +126,30 @@ export function ingestBooks(ctx: Context, writer: Writer) {
     }
     out[kind].sort((a, b) => (b.published ?? "").localeCompare(a.published ?? "") || a.name.localeCompare(b.name));
   }
+  writer.write("sections.json", sections);
   return out;
+}
+
+/** A map printed in a book: [title, kind, book key, chapter, image path, player version's path or "", book name]. */
+export type MapRow = [string, "books" | "adventures", string, number, string, string, string];
+
+/** Every map in the books and adventures, from the release's generated map list, with its player version if any. */
+export function ingestMaps(ctx: Context, writer: Writer) {
+  const path = join(ctx.data, "generated", "gendata-maps.json");
+  if (!existsSync(path)) return;
+  const rows: MapRow[] = [];
+  for (const book of Object.values(readJson(path)) as Json[]) {
+    const kind = book.prop === "book" ? "books" : "adventures";
+    for (const ch of (book.chapters as Json[] | undefined) ?? []) {
+      const images = (ch.images as Json[] | undefined) ?? [];
+      for (const im of images) {
+        if (im.imageType !== "map") continue;
+        const player = images.find((p) => p.imageType === "mapPlayer" && (p.mapParent as Json | undefined)?.id === im.id);
+        const href = (im.href as Json | undefined)?.path;
+        if (typeof href !== "string") continue;
+        rows.push([String(im.title ?? ch.name ?? "Map"), kind, keyPart(String(book.id)), Number(ch.ix ?? 0), href, String((player?.href as Json | undefined)?.path ?? ""), String(book.name)]);
+      }
+    }
+  }
+  writer.write("maps.json", rows);
 }

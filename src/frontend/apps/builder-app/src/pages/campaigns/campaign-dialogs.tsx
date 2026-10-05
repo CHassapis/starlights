@@ -1,5 +1,5 @@
 import { EyeIcon, EyeOffIcon, ImagePlusIcon, LockIcon, Trash2Icon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { ItemPicker } from "@/components/item-picker";
 import { unlockCampaign, useCampaignActions, type CampaignEntry, type EntryInput, type EntryKind, type PartyMember } from "@/lib/api/campaigns";
 import { shrinkImage } from "@/lib/image";
+import { creatureDetails, type CompendiumLink } from "@/lib/lore/campaign-links";
+import { useLoreMeta } from "@/lib/lore/data";
 import { COIN_KINDS, formatCoins, isEmpty, shareOut, type Coins } from "@/lib/rules/ledger";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +33,10 @@ export const CODEX_KINDS: EntryKind[] = ["place", "faction", "item", "handout"];
 
 export const textareaClass =
   "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
+// the compendium's picker and link chips load only when a dialog uses them
+const CompendiumPicker = lazy(() => import("@/components/lore/compendium-picker").then((m) => ({ default: m.CompendiumPicker })));
+const CompendiumLinks = lazy(() => import("@/components/lore/compendium-picker").then((m) => ({ default: m.CompendiumLinks })));
 
 /** A labelled field; group for buttons and uploads, which a label must not wrap. */
 function Field({ label, hint, children, group }: { label: string; hint?: string; children: ReactNode; group?: boolean }) {
@@ -128,6 +134,29 @@ export function EntryDialog({
   );
   const [uploading, setUploading] = useState(false);
   const [pickingBook, setPickingBook] = useState(false);
+  const [picker, setPicker] = useState<null | "everything" | "creatures" | "maps">(null);
+  const lore = useLoreMeta();
+  const links = (form.data.links as CompendiumLink[] | undefined) ?? [];
+  const addLink = (link: CompendiumLink) =>
+    setForm((f) => {
+      const current = (f.data.links as CompendiumLink[] | undefined) ?? [];
+      if (current.some((l) => l.category === link.category && l.key === link.key && l.anchor === link.anchor && l.ch === link.ch)) return f;
+      return { ...f, data: { ...f.data, links: [...current, link].slice(0, 30) } };
+    });
+  async function pickCreature(link: CompendiumLink) {
+    addLink(link);
+    if (k === "encounter") {
+      setForm((f) => ({ ...f, data: { ...f.data, creatures: [String(f.data.creatures ?? "").trim(), link.name].filter(Boolean).join("\n") } }));
+      return;
+    }
+    const details = lore.data ? await creatureDetails(lore.data, link).catch(() => ({ role: "", imageUrl: null })) : { role: "", imageUrl: null };
+    setForm((f) => ({
+      ...f,
+      title: f.title.trim() ? f.title : link.name,
+      imageUrl: f.imageUrl ?? details.imageUrl,
+      data: { ...f.data, role: f.data.role || details.role },
+    }));
+  }
   const set = (change: Partial<EntryInput>) => setForm((f) => ({ ...f, ...change }));
   const setData = (change: Record<string, unknown>) => setForm((f) => ({ ...f, data: { ...f.data, ...change } }));
   const k = form.kind;
@@ -371,6 +400,49 @@ export function EntryDialog({
                 </label>
               )}
             </div>
+          )}
+          {k !== "ledger" && (
+            <Field group label="From the Compendium" hint="Links to creatures, items, spells and places in the books: players get a preview card once you reveal this">
+              <Suspense fallback={null}>
+                <CompendiumLinks links={links} onRemove={(l) => setData({ links: links.filter((x) => x !== l) })} className="mb-1.5" />
+              </Suspense>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setPicker("everything")}>
+                  Link from the Compendium
+                </Button>
+                {(k === "npc" || k === "encounter") && (
+                  <Button size="sm" variant="outline" onClick={() => setPicker("creatures")}>
+                    {k === "npc" ? "Fill from a creature" : "Add a creature"}
+                  </Button>
+                )}
+                {k === "map" && (
+                  <Button size="sm" variant="outline" onClick={() => setPicker("maps")}>
+                    Use a map from the books
+                  </Button>
+                )}
+              </div>
+            </Field>
+          )}
+          {picker && (
+            <Suspense fallback={null}>
+              <CompendiumPicker
+                open
+                onOpenChange={(o) => !o && setPicker(null)}
+                mode={picker}
+                onPick={(link) => (picker === "creatures" ? void pickCreature(link) : addLink(link))}
+                onPickMap={(map) => {
+                  addLink(map.link);
+                  setForm((f) => ({
+                    ...f,
+                    // players see the title: no "DM Version" in it when they get the players' map
+                    title: f.title.trim() ? f.title : map.playerUrl ? map.title.replace(/;\s*DM Version/i, "").replace(/\s*\(DM Version\)/i, "") : map.title,
+                    // the players' version as the picture; the DM's (with secrets) only in the DM notes
+                    imageUrl: map.playerUrl ?? map.url,
+                    dmNotes: map.playerUrl ? `${f.dmNotes.trim() ? `${f.dmNotes.trim()}\n\n` : ""}DM version of the map: ${map.url}` : f.dmNotes,
+                  }));
+                }}
+              />
+            </Suspense>
           )}
           {k !== "ledger" && (
             <button
