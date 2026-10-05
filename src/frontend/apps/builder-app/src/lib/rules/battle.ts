@@ -52,6 +52,19 @@ export function average(roll: Roll): number {
   return Math.max(0, roll.dice.reduce((s, d) => s + (d.count * (d.sides + 1)) / 2, 0) + roll.bonus);
 }
 
+/**
+ * The average with Great Weapon Fighting: 2024 counts a 1 or 2 on a damage die as 3; 2014 rerolls a 1 or 2 once
+ * (keeping the new roll).
+ */
+export function averageGreatWeapon(roll: Roll, edition: "2014" | "2024"): number {
+  const die = (sides: number) => {
+    let sum = 0;
+    for (let face = 1; face <= sides; face++) sum += face <= 2 ? (edition === "2024" ? 3 : (sides + 1) / 2) : face;
+    return sum / sides;
+  };
+  return Math.max(0, roll.dice.reduce((s, d) => s + d.count * die(d.sides), 0) + roll.bonus);
+}
+
 /** A critical hit rolls the damage dice twice; the modifier is added once. */
 export function critical(roll: Roll): Roll {
   return { ...roll, dice: roll.dice.map((d) => ({ ...d, count: d.count * 2 })) };

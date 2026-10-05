@@ -37,7 +37,9 @@ import {
   COINS,
   COIN_NAMES,
   armorClass,
+  attackModes,
   attacks,
+  type AttackMode,
   attunementMax,
   equipProblems,
   equipSlots,
@@ -73,6 +75,8 @@ export function EquipmentTab({ characterId }: { characterId: string }) {
     return {
       ac: armorClass(inventory, byId, facts),
       attacks: new Map(attacks(inventory, byId, facts).map((a) => [a.entryId, a])),
+      // every way each weapon can be used (one hand, two hands, thrown, off hand), per inventory entry
+      modes: attackModes(inventory, byId, facts, { onePerName: false }).reduce((m, a) => m.set(a.entryId, [...(m.get(a.entryId) ?? []), a]), new Map<string, AttackMode[]>()),
       weight: weight(inventory, byId, facts.strength),
       problems: equipProblems(inventory, byId, attunementMax(facts)),
     };
@@ -110,6 +114,7 @@ export function EquipmentTab({ characterId }: { characterId: string }) {
     containers,
     nextAttack: Math.max(0, ...inventory.items.map((e) => e.attack ?? 0)) + 1,
     attackOf: (id: string) => summary?.attacks.get(id),
+    modesOf: (id: string) => summary?.modes.get(id),
     onChange: (id: string, change: Partial<InventoryEntry>) => save.updateEntry(id, change, failed),
     onRemove: (id: string) =>
       save.update(
@@ -243,6 +248,7 @@ interface RowProps {
   /** the place a weapon put on the sheet's attack list gets */
   nextAttack: number;
   attackOf: (id: string) => Attack | undefined;
+  modesOf: (id: string) => AttackMode[] | undefined;
   onChange: (id: string, change: Partial<InventoryEntry>) => void;
   onRemove: (id: string) => void;
 }
@@ -261,10 +267,32 @@ function Group({ title, icon, note, items, empty, ...row }: RowProps & { title: 
   );
 }
 
-function Row({ r, containers, nextAttack, attackOf, onChange, onRemove }: RowProps & { r: Resolved }) {
+/** A weapon's other ways to attack (two hands, thrown, off hand), the grip in use first and marked. */
+function AttackModes({ modes }: { modes: AttackMode[] }) {
+  const sorted = [...modes].sort((a, b) => Number(b.current) - Number(a.current));
+  return (
+    <ul className="flex flex-wrap gap-1.5 text-[11px]" aria-label="Ways to attack with it">
+      {sorted.map((m) => (
+        <li
+          key={m.mode}
+          title={m.notes.join(". ") || undefined}
+          className={cn("rounded-full border px-2 py-0.5", m.current ? "border-primary/50 bg-primary/10 text-foreground" : "text-muted-foreground")}
+        >
+          <span className="font-medium">{m.mode}</span>
+          {m.action === "Bonus Action" ? " (bonus action)" : ""} {m.attack.replace(" vs AC", "")} · {m.damage}
+          {m.mode === "Thrown" || m.mode === "Ranged" ? ` · ${m.range}` : ""}
+          {m.notes.some((n) => /\+2/.test(n) && !/when it is/.test(n)) ? " ✦" : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Row({ r, containers, nextAttack, attackOf, modesOf, onChange, onRemove }: RowProps & { r: Resolved }) {
   const { entry, item } = r;
   const slots = equipSlots(r);
   const attack = attackOf(entry.id);
+  const modes = modesOf(entry.id) ?? [];
   const charges = item?.magic?.charges ?? null;
   const [notesOpen, setNotesOpen] = useState(false);
   const rarity = item ? rarityOf(item) : null;
@@ -329,6 +357,7 @@ function Row({ r, containers, nextAttack, attackOf, onChange, onRemove }: RowPro
             )}
             {charges ? ` · ${charges - (entry.chargesUsed ?? 0)}/${charges} charges` : ""}
           </p>
+          {modes.length > 1 && <AttackModes modes={modes} />}
           {needsBase && <BaseChooser r={r} onChange={(id) => onChange(entry.id, { baseElementId: id })} />}
         </div>
 

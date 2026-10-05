@@ -3,7 +3,7 @@ import { apiClient } from "@/lib/api-client";
 import type { BuilderChoice } from "@/lib/api/builder";
 import { useItemCatalog } from "@/lib/api/items";
 import { useSpellIndex } from "@/lib/api/magic";
-import type { CharacterFacts, Inventory } from "@/lib/rules/items";
+import { attackModes, type AttackMode, type CharacterFacts, type Inventory } from "@/lib/rules/items";
 import { EMPTY_MAGIC, type KnownSpell, type MagicState, type Spellcasting } from "@/lib/rules/magic";
 import { summarizeProficiencies, type Proficiencies } from "@/lib/rules/proficiencies";
 import {
@@ -124,6 +124,8 @@ export interface SheetData {
   armorClass: number;
   armor: SheetArmor;
   attacks: SheetAttackLine[];
+  /** every way each carried weapon can attack (one hand, two hands, thrown, off hand), for the Battle Action Simulator */
+  attackModes: AttackMode[];
   equipment: SheetEquipment;
   itemCards: SheetItemCard[];
   spellPages: SheetSpellPage[];
@@ -502,6 +504,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       armorClass: armor.total,
       armor,
       attacks: sheetAttackLines(inventory.data, catalog.data.byId, facts),
+      attackModes: attackModes(inventory.data, catalog.data.byId, facts),
       equipment: sheetEquipment(inventory.data, catalog.data.byId, facts, itemTexts),
       itemCards: sheetItemCards(inventory.data, catalog.data.byId, itemTexts),
       spellPages,

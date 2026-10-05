@@ -388,12 +388,81 @@ export interface Attack {
 
 const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
+/** Fighting styles that change an attack by how the weapon is held (Aurora gives these no numbers to add). */
+const STYLES = {
+  dueling: ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_DUELING", "ID_WOTC_PHB24_FEAT_DUELING"],
+  greatWeapon2014: ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_GREAT_WEAPON_FIGHTING"],
+  greatWeapon2024: ["ID_WOTC_PHB24_FEAT_GREAT_WEAPON_FIGHTING"],
+  thrown: ["ID_WOTC_TCOE_CLASS_FEATURE_FIGHTING_STYLE_THROWN_WEAPON_FIGHTING", "ID_WOTC_PHB24_FEAT_THROWN_WEAPON_FIGHTING"],
+  twoWeapon: ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_TWOWEAPON_FIGHTING", "ID_WOTC_PHB24_FEAT_TWOWEAPON_FIGHTING"],
+};
+const hasAny = (c: CharacterFacts, ids: string[]) => ids.some((id) => c.has.has(id));
+
 /**
- * Attack lines for the weapons, equipped ones first: STR for melee, DEX for ranged, the better of the two for
- * finesse; proficiency from the weapon's own proficiency or its simple/martial group; a magic weapon's +N on
- * both; versatile dice when wielded two-handed. As on Aurora's sheet the damage always shows its modifier ("1d8+0")
- * and an off-hand weapon its full one (only the Light property's extra attack leaves it out, which the feature
- * text explains).
+ * Whether the character has picked a weapon's mastery (2024 Weapon Mastery: one element per weapon and property,
+ * "…_MASTERY_PROPERTY_DAGGER_NICK", "…_CROSSBOW_HAND_VEX").
+ */
+export function knowsMastery(c: CharacterFacts, weaponName: string, mastery: string | null | undefined): boolean {
+  if (!mastery) return false;
+  const words = weaponName.toUpperCase().split(/[^A-Z]+/).filter(Boolean);
+  const end = `_${mastery.toUpperCase().replace(/[^A-Z]+/g, "_")}`;
+  for (const id of c.has) if (id.includes("_MASTERY_PROPERTY_") && id.endsWith(end) && words.every((w) => id.includes(`_${w}`))) return true;
+  return false;
+}
+
+interface WeaponLineOptions {
+  /** damage dice: the weapon's, or its versatile dice in two hands */
+  dice: string;
+  /** a ranged attack (a ranged weapon, or a melee weapon thrown) */
+  ranged: boolean;
+  /** the range or reach to show */
+  range: string;
+  /** extra damage (a fighting style) */
+  extraDamage?: number;
+  /** leave a positive ability modifier off the damage (the Light property's extra attack) */
+  noAbilityDamage?: boolean;
+}
+
+/**
+ * One way of attacking with a weapon: STR for melee, DEX for ranged weapons, the better of the two for finesse
+ * (thrown weapons keep their melee ability); proficiency from the weapon's own proficiency or its simple/martial
+ * group; a magic weapon's +N on both; and the bonuses the character's elements give, as Aurora names them:
+ * "ranged:attack" (Archery), "melee:damage", and per weapon "longsword:attack", "longbow:damage".
+ */
+function weaponLine(r: Resolved, c: CharacterFacts, o: WeaponLineOptions) {
+  const w = r.weapon!;
+  const properties = w.properties ?? [];
+  const finesse = properties.includes("Finesse");
+  const ability = w.ranged ? c.mod("DEX") : finesse ? Math.max(c.mod("STR"), c.mod("DEX")) : c.mod("STR");
+  const group = w.martial ? "MARTIAL" : "SIMPLE";
+  const proficient =
+    (!!w.proficiencyId && c.has.has(w.proficiencyId)) ||
+    c.has.has(`ID_PROFICIENCY_WEAPON_PROFICIENCY_${group}_WEAPONS`) ||
+    c.has.has(`ID_PROFICIENCY_WEAPON_PROFICIENCY_${group}_${w.ranged ? "RANGED" : "MELEE"}_WEAPONS`);
+  const enhancement = r.base ? (r.item?.magic?.enhancement ?? 0) : 0;
+  const kind = o.ranged ? "ranged" : "melee";
+  const weaponName = (r.base?.name ?? r.item?.name ?? "").toLowerCase().trim().replace(/ /g, "-");
+  const statBonus = (what: "attack" | "damage") => (c.stat(`${kind}:${what}`) ?? 0) + (weaponName ? (c.stat(`${weaponName}:${what}`) ?? 0) : 0);
+  const toHit = ability + (proficient ? c.proficiencyBonus : 0) + enhancement + statBonus("attack");
+  const damageBonus = (o.noAbilityDamage && ability > 0 ? 0 : ability) + enhancement + statBonus("damage") + (o.extraDamage ?? 0);
+  return {
+    entryId: r.entry.id,
+    name: r.name,
+    range: o.range,
+    toHit,
+    attack: `${sign(toHit)} vs AC`,
+    damage: `${o.dice}${sign(damageBonus)}${w.damageType ? ` ${w.damageType}` : ""}`,
+    // the properties and the mastery, in Aurora's order ("Finesse, Vex")
+    properties: [...properties, ...(w.mastery ? [w.mastery] : [])].sort((a, b) => a.localeCompare(b)),
+    proficient,
+  };
+}
+
+const reachOf = (r: Resolved) => ((r.weapon?.properties ?? []).includes("Reach") ? "10 ft" : "5 ft");
+
+/**
+ * Attack lines for the weapons as they are held now, equipped ones first (Aurora's sheet: versatile dice when
+ * wielded two-handed; the damage always shows its modifier, "1d8+0"; an off-hand weapon its full one).
  */
 export function attacks(inventory: Inventory, catalog: Catalog, c: CharacterFacts): Attack[] {
   const entries = new Map(inventory.items.map((e) => [e.id, resolve(e, catalog)]));
@@ -402,30 +471,103 @@ export function attacks(inventory: Inventory, catalog: Catalog, c: CharacterFact
   return resolved.map((r) => {
     const w = r.weapon!;
     const properties = w.properties ?? [];
-    const finesse = properties.includes("Finesse");
-    const ability = w.ranged ? c.mod("DEX") : finesse ? Math.max(c.mod("STR"), c.mod("DEX")) : c.mod("STR");
-    const group = w.martial ? "MARTIAL" : "SIMPLE";
-    const proficient =
-      (!!w.proficiencyId && c.has.has(w.proficiencyId)) ||
-      c.has.has(`ID_PROFICIENCY_WEAPON_PROFICIENCY_${group}_WEAPONS`) ||
-      c.has.has(`ID_PROFICIENCY_WEAPON_PROFICIENCY_${group}_${w.ranged ? "RANGED" : "MELEE"}_WEAPONS`);
-    const enhancement = r.base ? (r.item?.magic?.enhancement ?? 0) : 0;
-    const toHit = ability + (proficient ? c.proficiencyBonus : 0) + enhancement;
-    const dice = r.entry.equipped === "Two-Handed" && w.versatile ? w.versatile : w.damage;
-    const damageBonus = ability + enhancement;
-    const reach = properties.includes("Reach") ? "10 ft" : "5 ft";
-    return {
-      entryId: r.entry.id,
-      name: r.name,
-      range: w.ranged || properties.includes("Thrown") ? (w.range ?? reach) : reach,
-      toHit,
-      attack: `${sign(toHit)} vs AC`,
-      damage: `${dice}${sign(damageBonus)}${w.damageType ? ` ${w.damageType}` : ""}`,
-      // the properties and the mastery, in Aurora's order ("Finesse, Vex")
-      properties: [...properties, ...(w.mastery ? [w.mastery] : [])].sort((a, b) => a.localeCompare(b)),
-      proficient,
-    };
+    return weaponLine(r, c, {
+      dice: r.entry.equipped === "Two-Handed" && w.versatile ? w.versatile : w.damage,
+      ranged: !!w.ranged,
+      range: w.ranged || properties.includes("Thrown") ? (w.range ?? reachOf(r)) : reachOf(r),
+    });
   });
+}
+
+export type AttackModeName = "One hand" | "Two hands" | "Thrown" | "Ranged" | "Off hand";
+
+export interface AttackMode extends Attack {
+  mode: AttackModeName;
+  /** an off-hand attack takes a bonus action (2014, and 2024 without the Nick mastery) */
+  action: "Attack" | "Bonus Action";
+  /** the way the weapon is held now */
+  current: boolean;
+  equipped: boolean;
+  /** what changes the numbers here ("Dueling +2 damage") or what to know ("Great Weapon Fighting: …") */
+  notes: string[];
+  /** Great Weapon Fighting on this attack's damage dice: 2014 rerolls 1s and 2s once, 2024 counts them as 3 */
+  greatWeapon?: "2014" | "2024";
+  /** the character has picked this weapon's mastery (2024), so it applies */
+  masteryKnown: boolean;
+}
+
+/**
+ * Every way each carried weapon can attack: one-handed, two-handed (versatile or two-handed weapons), thrown,
+ * ranged, and the off-hand attack of a light weapon, with the fighting styles that depend on the grip:
+ * Dueling (+2 damage, one hand, no other weapon held), Great Weapon Fighting (two hands), Thrown Weapon Fighting
+ * (+2 damage thrown), Two-Weapon Fighting (the off-hand attack keeps the ability modifier). Equipped weapons first.
+ */
+export function attackModes(inventory: Inventory, catalog: Catalog, c: CharacterFacts, { onePerName = true } = {}): AttackMode[] {
+  const entries = new Map(inventory.items.map((e) => [e.id, resolve(e, catalog)]));
+  const resolved = [...entries.values()].filter((r) => r.weapon && isCarried(r.entry, entries));
+  resolved.sort((a, b) => Number(!!b.entry.equipped) - Number(!!a.entry.equipped));
+  const dueling = hasAny(c, STYLES.dueling);
+  const greatWeapon = hasAny(c, STYLES.greatWeapon2024) ? "2024" : hasAny(c, STYLES.greatWeapon2014) ? "2014" : undefined;
+  const thrownStyle = hasAny(c, STYLES.thrown);
+  const twoWeapon = hasAny(c, STYLES.twoWeapon);
+  const heldWeapons = (except: Resolved) => resolved.filter((x) => x !== except && x.entry.equipped && x.entry.equipped !== "Armor" && x.weapon).length;
+
+  const seen = new Set<string>();
+  const out: AttackMode[] = [];
+  for (const r of resolved) {
+    // one set of lines per kind of weapon (six daggers are one dagger), the equipped one first
+    if (onePerName && seen.has(r.name)) continue;
+    seen.add(r.name);
+    const w = r.weapon!;
+    const p = w.properties ?? [];
+    const equipped = !!r.entry.equipped;
+    const held = r.entry.equipped;
+    const masteryKnown = knowsMastery(c, r.base?.name ?? r.item?.name ?? r.name, w.mastery);
+    const push = (mode: AttackModeName, current: boolean, o: WeaponLineOptions, notes: string[] = [], extra: Partial<AttackMode> = {}) =>
+      out.push({ ...weaponLine(r, c, o), mode, action: "Attack", current, equipped, notes, masteryKnown, ...extra });
+
+    if (w.ranged) {
+      push("Ranged", equipped, { dice: w.damage, ranged: true, range: w.range ?? "" });
+      continue;
+    }
+    if (!p.includes("Two-Handed")) {
+      const alone = heldWeapons(r) === 0;
+      const duel = dueling && alone;
+      push(
+        "One hand",
+        held === "Main Hand" || held === "Off Hand",
+        { dice: w.damage, ranged: false, range: reachOf(r), extraDamage: duel ? 2 : 0 },
+        dueling ? [alone ? "Dueling +2 damage (no other weapon held)" : "Dueling: +2 damage when it is the only weapon you hold"] : [],
+      );
+    }
+    if (p.includes("Versatile") || p.includes("Two-Handed")) {
+      push(
+        "Two hands",
+        held === "Two-Handed",
+        { dice: p.includes("Versatile") && w.versatile ? w.versatile : w.damage, ranged: false, range: reachOf(r) },
+        greatWeapon ? [greatWeapon === "2024" ? "Great Weapon Fighting: damage dice of 1 or 2 count as 3" : "Great Weapon Fighting: reroll damage dice of 1 or 2 once"] : [],
+        greatWeapon ? { greatWeapon } : {},
+      );
+    }
+    if (p.includes("Thrown")) {
+      push("Thrown", false, { dice: w.damage, ranged: true, range: w.range ?? "20/60", extraDamage: thrownStyle ? 2 : 0 }, thrownStyle ? ["Thrown Weapon Fighting +2 damage"] : []);
+    }
+    if (p.includes("Light")) {
+      const nick = w.mastery === "Nick" && masteryKnown;
+      push(
+        "Off hand",
+        false,
+        { dice: w.damage, ranged: false, range: reachOf(r), noAbilityDamage: !twoWeapon },
+        [
+          "After attacking with a different Light weapon",
+          twoWeapon ? "Two-Weapon Fighting: keeps the ability modifier" : "No ability modifier to its damage unless it is negative",
+          ...(nick ? ["Nick: part of the Attack action, not a bonus action (once per turn)"] : []),
+        ],
+        { action: nick ? "Attack" : "Bonus Action" },
+      );
+    }
+  }
+  return out;
 }
 
 /**

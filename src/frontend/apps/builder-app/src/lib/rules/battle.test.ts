@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   average,
+  averageGreatWeapon,
   castingAction,
   critical,
   EMPTY_COMBAT,
@@ -41,6 +42,12 @@ describe("dice", () => {
     expect(parseRoll("2d6 + 1d8 - 1 fire")).toEqual({ dice: [{ count: 1, sides: 8 }, { count: 2, sides: 6 }], bonus: -1, type: "fire" });
     expect(parseRoll("1d8+0 piercing")?.bonus).toBe(0);
     expect(parseRoll("nonsense")).toBeNull();
+  });
+
+  it("Great Weapon Fighting: 2024 counts 1s and 2s as 3, 2014 rerolls them once", () => {
+    const greatsword = parseRoll("2d6+3 slashing")!;
+    expect(averageGreatWeapon(greatsword, "2024")).toBeCloseTo(2 * 4 + 3);
+    expect(averageGreatWeapon(greatsword, "2014")).toBeCloseTo(2 * (25 / 6) + 3);
   });
 
   it("averages, doubles dice on a critical hit, and formats", () => {

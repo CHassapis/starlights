@@ -38,6 +38,7 @@ import { buildBattleModel, type BattleFeature, type BattleModel, type BattleSpel
 import { useLoreLookup } from "@/lib/lore/lookup";
 import {
   average,
+  averageGreatWeapon,
   CONDITIONS,
   critical,
   currentHitPoints,
@@ -690,10 +691,20 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
       <TabsContent value="action" className="space-y-3">
         <Panel title={`Attack action${data.attacksPerAction > 1 ? ` · ${data.attacksPerAction} attacks` : ""}`} icon={<SwordIcon className="size-4 text-amber-300" />}>
           <div className="grid gap-2 md:grid-cols-2">
-            {[...model.weapons, model.unarmed].map((w) => (
-              <WeaponCard key={w.name} ctx={ctx} weapon={w} slot="Attack" attacks={data.attacksPerAction} />
+            {[...model.weapons.filter((w) => w.equipped !== false), ...model.offHand.filter((w) => w.equipped !== false && model.offHandAction[w.name] === "Attack"), model.unarmed].map((w) => (
+              <WeaponCard key={`${w.name}|${w.mode ?? ""}`} ctx={ctx} weapon={w} slot="Attack" attacks={w.mode === "Off hand" ? 1 : data.attacksPerAction} />
             ))}
           </div>
+          {model.weapons.some((w) => w.equipped === false) && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-white/60">Weapons in your pack ({new Set(model.weapons.filter((w) => w.equipped === false).map((w) => w.name)).size}): drawing one is your free object interaction</summary>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                {[...model.weapons, ...model.offHand].filter((w) => w.equipped === false).map((w) => (
+                  <WeaponCard key={`${w.name}|${w.mode ?? ""}`} ctx={ctx} weapon={w} slot="Attack" attacks={data.attacksPerAction} />
+                ))}
+              </div>
+            </details>
+          )}
           <p className="mt-2 text-xs text-white/60">Grapple or shove: {model.grapple}</p>
           {bySlot("Attack").length > 0 && <FeatureList ctx={ctx} features={bySlot("Attack")} note="Part of the Attack action" />}
         </Panel>
@@ -713,12 +724,12 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
       </TabsContent>
 
       <TabsContent value="bonus" className="space-y-3">
-        {model.offHand.length > 0 && (
+        {model.offHand.some((w) => w.equipped !== false && model.offHandAction[w.name] !== "Attack") && (
           <Panel title="Two-weapon fighting" icon={<SwordIcon className="size-4 text-amber-300" />}>
             <p className="mb-2 text-xs text-white/60">After attacking with a light melee weapon, attack with the other one as a bonus action{model.edition === "2024" ? " (with the Nick mastery it is part of the Attack action instead)" : ""}. No ability modifier to its damage unless it is negative or you have the Two-Weapon Fighting style.</p>
             <div className="grid gap-2 md:grid-cols-2">
-              {model.offHand.map((w) => (
-                <WeaponCard key={w.name} ctx={ctx} weapon={w} slot="Bonus Action" attacks={1} />
+              {model.offHand.filter((w) => w.equipped !== false && model.offHandAction[w.name] !== "Attack").map((w) => (
+                <WeaponCard key={`${w.name}|off`} ctx={ctx} weapon={w} slot="Bonus Action" attacks={1} />
               ))}
             </div>
           </Panel>
@@ -806,17 +817,23 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
   const lookup = useLoreLookup();
   const bonus = weapon.bonus - ctx.d20Penalty;
   const { hit, crit } = hitChance(bonus, ctx.targetAc, ctx.advantage);
-  const avg = average(weapon.roll);
-  const expected = expectedDamage(bonus, ctx.targetAc, weapon.roll, ctx.advantage);
+  // Great Weapon Fighting raises the average of the dice
+  const avgOf = (r: typeof weapon.roll) => (weapon.greatWeapon ? averageGreatWeapon(r, weapon.greatWeapon) : average(r));
+  const avg = avgOf(weapon.roll);
+  const critAvg = avgOf(critical(weapon.roll));
+  const expected = weapon.greatWeapon ? (hit - crit) * avg + crit * critAvg : expectedDamage(bonus, ctx.targetAc, weapon.roll, ctx.advantage);
   const [lo, hi] = rollRange(weapon.roll);
-  const itemKey = weapon.kind === "item" ? lookup("items", weapon.name.replace(/ \(off hand\)$/, ""), ctx.model.edition) : null;
+  const itemKey = weapon.kind === "item" ? lookup("items", weapon.name, ctx.model.edition) : null;
   const field = SLOT_FIELD[slot];
   const spent = field ? ctx.turn[field] : false;
   return (
     <div className="rounded-lg border border-white/10 bg-black/35 p-3">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold text-white">{itemKey ? <LoreLink category="items" k={itemKey}>{weapon.name}</LoreLink> : weapon.name}</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="truncate font-semibold text-white">{itemKey ? <LoreLink category="items" k={itemKey}>{weapon.name}</LoreLink> : weapon.name}</span>
+            {weapon.mode && <Chip tone={weapon.current ? "gold" : "neutral"}>{weapon.mode}{weapon.current ? " · held now" : ""}</Chip>}
+          </div>
           <div className="text-xs text-white/60">{weapon.range}{weapon.properties.length ? ` · ${weapon.properties.join(", ")}` : ""}</div>
         </div>
         <Button size="sm" variant="secondary" className="h-7" disabled={(ctx.incapacitated && slot !== "Reaction") || spent} onClick={() => ctx.use(slot)}>
@@ -825,8 +842,8 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
       </div>
       <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
         <Mini label="To hit" value={signed(bonus)} />
-        <Mini label="Damage" value={formatRoll(weapon.roll, false)} sub={`${avg} avg · ${lo}–${hi}`} />
-        <Mini label="Critical" value={formatRoll(critical(weapon.roll), false)} sub={`${average(critical(weapon.roll))} avg`} />
+        <Mini label="Damage" value={formatRoll(weapon.roll, false)} sub={`${+avg.toFixed(1)} avg · ${lo}–${hi}`} />
+        <Mini label="Critical" value={formatRoll(critical(weapon.roll), false)} sub={`${+critAvg.toFixed(1)} avg`} />
         <Mini label={`vs AC ${ctx.targetAc}`} value={percent(hit)} sub={`${expected.toFixed(1)} dmg/attack`} />
       </div>
       <p className="mt-1.5 text-[11px] text-white/50">
@@ -834,7 +851,12 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
         {attacks > 1 ? ` · ${attacks} attacks: about ${(expected * attacks).toFixed(1)} damage per Attack action` : ""}
         {crit > 0.05 ? ` · critical ${percent(crit)}` : ""}
       </p>
-      {ctx.model.hasWeaponMastery && weapon.properties.filter((p) => MASTERY[p]).map((p) => (
+      {(weapon.notes ?? []).map((n) => (
+        <p key={n} className="mt-1 text-[11px] text-sky-100/80">
+          {n}
+        </p>
+      ))}
+      {(weapon.masteryKnown ?? ctx.model.hasWeaponMastery) && weapon.properties.filter((p) => MASTERY[p]).map((p) => (
         <p key={p} className="mt-1 text-[11px] text-amber-100/80">
           <span className="font-semibold">Mastery: {p}.</span> {MASTERY[p]}
         </p>

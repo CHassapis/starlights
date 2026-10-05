@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attackModes,
   armorClass,
   attacks,
   attunementMax,
@@ -256,6 +257,50 @@ describe("attacks", () => {
   it("lists equipped weapons first and leaves out stored ones", () => {
     const list = attacks(inv(entry("a", "dagger"), entry("b", "longsword", { equipped: "Main Hand" }), entry("c", "rapier", { stored: true })), catalog, facts({}));
     expect(list.map((a) => a.name)).toEqual(["Longsword", "Dagger"]);
+  });
+});
+
+describe("every way to attack with a weapon", () => {
+  const proficient = ["ID_PROFICIENCY_WEAPON_PROFICIENCY_MARTIAL_WEAPONS", "ID_PROFICIENCY_WEAPON_PROFICIENCY_SIMPLE_WEAPONS"];
+  const modes = (list: ReturnType<typeof attackModes>, name: string) => Object.fromEntries(list.filter((m) => m.name === name).map((m) => [m.mode, m]));
+
+  it("a versatile weapon one- and two-handed, with the grip in use marked", () => {
+    const m = modes(attackModes(inv(entry("s", "longsword", { equipped: "Two-Handed" })), catalog, facts({ STR: 16 }, {}, proficient)), "Longsword");
+    expect(Object.keys(m)).toEqual(["One hand", "Two hands"]);
+    expect([m["One hand"].damage, m["One hand"].current]).toEqual(["1d8+3 slashing", false]);
+    expect([m["Two hands"].damage, m["Two hands"].current]).toEqual(["1d10+3 slashing", true]);
+  });
+
+  it("a dagger in hand, thrown and off-hand", () => {
+    const m = modes(attackModes(inv(entry("d", "dagger", { equipped: "Main Hand" })), catalog, facts({ STR: 8, DEX: 16 }, {}, proficient)), "Dagger");
+    expect(Object.keys(m)).toEqual(["One hand", "Thrown", "Off hand"]);
+    expect([m.Thrown.range, m.Thrown.damage]).toEqual(["20/60", "1d4+3 piercing"]);
+    expect([m["Off hand"].damage, m["Off hand"].action]).toEqual(["1d4+0 piercing", "Bonus Action"]);
+  });
+
+  it("Dueling +2 only when no other weapon is held; Two-Weapon Fighting keeps the off-hand modifier", () => {
+    const dueling = ["ID_WOTC_PHB24_FEAT_DUELING", ...proficient];
+    const alone = modes(attackModes(inv(entry("r", "rapier", { equipped: "Main Hand" })), catalog, facts({ DEX: 16 }, {}, dueling)), "Rapier");
+    expect(alone["One hand"].damage).toBe("1d8+5 piercing");
+    const both = attackModes(inv(entry("r", "rapier", { equipped: "Main Hand" }), entry("d", "dagger", { equipped: "Off Hand" })), catalog, facts({ DEX: 16 }, {}, dueling));
+    expect(modes(both, "Rapier")["One hand"].damage).toBe("1d8+3 piercing");
+    const twf = modes(attackModes(inv(entry("d", "dagger", { equipped: "Off Hand" })), catalog, facts({ DEX: 16 }, {}, ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_TWOWEAPON_FIGHTING", ...proficient])), "Dagger");
+    expect(twf["Off hand"].damage).toBe("1d4+3 piercing");
+  });
+
+  it("the Nick mastery makes the off-hand attack part of the Attack action only when the character picked it", () => {
+    const nicked = new Map(catalog);
+    nicked.set("dagger", { ...catalog.get("dagger")!, weapon: { ...catalog.get("dagger")!.weapon!, mastery: "Nick" } });
+    const without = modes(attackModes(inv(entry("d", "dagger", { equipped: "Main Hand" })), nicked, facts({ DEX: 16 }, {}, proficient)), "Dagger");
+    expect([without["Off hand"].action, without["Off hand"].masteryKnown]).toEqual(["Bonus Action", false]);
+    const picked = modes(attackModes(inv(entry("d", "dagger", { equipped: "Main Hand" })), nicked, facts({ DEX: 16 }, {}, ["ID_WOTC_PHB24_CLASS_FEATURE_MASTERY_PROPERTY_DAGGER_NICK", ...proficient])), "Dagger");
+    expect([picked["Off hand"].action, picked["Off hand"].masteryKnown]).toEqual(["Attack", true]);
+  });
+
+  it("Archery and per-weapon bonuses from the character's statistics, as Aurora names them", () => {
+    const list = attacks(inv(entry("b", "longbow"), entry("s", "longsword")), catalog, facts({ STR: 10, DEX: 16 }, { "ranged:attack": 2, "longsword:attack": 1, "longbow:damage": 2 }, proficient));
+    expect(list.find((a) => a.name === "Longbow")).toMatchObject({ attack: "+8 vs AC", damage: "1d8+5 piercing" });
+    expect(list.find((a) => a.name === "Longsword")).toMatchObject({ attack: "+4 vs AC", damage: "1d8+0 slashing" });
   });
 });
 

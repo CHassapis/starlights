@@ -11,6 +11,15 @@ export type Slot = "Action" | "Bonus Action" | "Reaction" | "Attack" | "Other";
 
 export interface WeaponAttack {
   name: string;
+  /** how it is used ("Two hands", "Thrown"), when the weapon can be used more than one way */
+  mode?: string;
+  /** held this way now; an item weapon not equipped must be drawn first */
+  current?: boolean;
+  equipped?: boolean;
+  notes?: string[];
+  greatWeapon?: "2014" | "2024";
+  /** the character picked this weapon's mastery; without modes (no inventory data), whether it has Weapon Mastery */
+  masteryKnown?: boolean;
   range: string;
   bonus: number;
   roll: Roll;
@@ -57,6 +66,8 @@ export interface BattleModel {
   weapons: WeaponAttack[];
   unarmed: WeaponAttack;
   offHand: WeaponAttack[];
+  /** whether each off-hand attack takes a bonus action, or is part of the Attack action (Nick) */
+  offHandAction: Record<string, "Attack" | "Bonus Action">;
   opportunity: WeaponAttack | null;
   features: BattleFeature[];
   standard: StandardAction[];
@@ -159,7 +170,32 @@ export function buildBattleModel(data: SheetData): BattleModel {
   const dex = mod("DEX");
   const has = (title: RegExp) => [...data.features, ...data.speciesTraits].some((f) => title.test(f.title));
 
-  const weapons = data.attacks.map(weaponFrom).filter((w): w is WeaponAttack => w !== null);
+  // every way each carried weapon can attack (one hand, two hands, thrown); the sheet's lines when there are none
+  const byWeapon = new Map<string, number>();
+  for (const m of data.attackModes ?? []) byWeapon.set(m.entryId, (byWeapon.get(m.entryId) ?? 0) + (m.mode === "Off hand" ? 0 : 1));
+  const fromMode = (m: SheetData["attackModes"][number]): WeaponAttack | null => {
+    const roll = parseRoll(m.damage);
+    if (!roll) return null;
+    return {
+      name: m.name,
+      mode: (byWeapon.get(m.entryId) ?? 0) > 1 || m.mode === "Thrown" || m.mode === "Off hand" ? m.mode : undefined,
+      current: m.current,
+      equipped: m.equipped,
+      notes: m.notes,
+      greatWeapon: m.greatWeapon,
+      masteryKnown: m.masteryKnown,
+      range: m.range,
+      bonus: m.toHit,
+      roll,
+      properties: m.properties,
+      melee: m.mode !== "Ranged" && m.mode !== "Thrown",
+      kind: "item",
+    };
+  };
+  const modes = data.attackModes ?? [];
+  const weapons = modes.length
+    ? modes.filter((m) => m.mode !== "Off hand").map(fromMode).filter((w): w is WeaponAttack => w !== null)
+    : data.attacks.map(weaponFrom).filter((w): w is WeaponAttack => w !== null);
 
   // unarmed strike: 1 + Strength bludgeoning; a monk's Martial Arts die and Dexterity
   const martialArts = data.features.find((f) => /^Martial Arts\b/i.test(f.title));
@@ -175,19 +211,12 @@ export function buildBattleModel(data: SheetData): BattleModel {
     kind: "unarmed",
   };
 
-  // two light weapons: the other one's attack as a bonus action, without the ability modifier unless the fighting
-  // style adds it (2024's Nick mastery makes it part of the Attack action instead)
-  const light = weapons.filter((w) => w.melee && w.properties.includes("Light"));
-  const twoWeaponStyle = has(/^Two-Weapon Fighting$/i) || has(/Fighting Style.*Two-Weapon/i);
-  const offHand = light.length >= 2
-    ? light.slice(0, 2).map((w) => {
-        const ability = w.properties.includes("Finesse") ? Math.max(str, dex) : str;
-        return { ...w, name: `${w.name} (off hand)`, roll: { ...w.roll, bonus: twoWeaponStyle || ability < 0 ? w.roll.bonus : w.roll.bonus - ability } };
-      })
-    : [];
+  // the extra attack of the Light property, with what the fighting styles and Nick change (lib/rules/items)
+  const offHand = modes.filter((m) => m.mode === "Off hand").map(fromMode).filter((w): w is WeaponAttack => w !== null);
+  const offHandAction = Object.fromEntries(modes.filter((m) => m.mode === "Off hand").map((m) => [m.name, m.action]));
 
-  const meleeWeapons = weapons.filter((w) => w.melee);
-  const opportunity = [...meleeWeapons].sort((a, b) => b.bonus + avgOf(b.roll) - (a.bonus + avgOf(a.roll)))[0] ?? unarmed;
+  const meleeWeapons = weapons.filter((w) => w.melee && w.equipped !== false);
+  const opportunity = [...(meleeWeapons.length ? meleeWeapons : weapons.filter((w) => w.melee))].sort((a, b) => b.bonus + avgOf(b.roll) - (a.bonus + avgOf(a.roll)))[0] ?? unarmed;
 
   const features: BattleFeature[] = [...data.features, ...data.speciesTraits, ...(data.backgroundFeature ? [data.backgroundFeature] : [])].map((f) => ({
     ...f,
@@ -239,6 +268,7 @@ export function buildBattleModel(data: SheetData): BattleModel {
     weapons,
     unarmed,
     offHand,
+    offHandAction,
     opportunity,
     features,
     standard: standardActions(edition, data, data.speeds.walk),
