@@ -66,6 +66,14 @@ public sealed class PlayerAccess
     /// <summary>Whether the header opens the campaign: its token, or the admin's (the DM).</summary>
     public bool HasCampaignToken(string? tokensHeader, Guid campaignId) => HasToken(tokensHeader, CampaignTokenName(campaignId), allowAdmin: true);
 
+    /// <summary>The token of a campaign's DM (given for its DM password); like the other reserved names, no player can take it.</summary>
+    public static string CampaignDmTokenName(Guid campaignId) => $"#dm:{campaignId:N}";
+
+    public string IssueCampaignDmToken(Guid campaignId) => IssueToken(CampaignDmTokenName(campaignId));
+
+    /// <summary>Whether the reader is this campaign's DM: they hold its DM token, or the admin token.</summary>
+    public bool HasCampaignDmToken(string? tokensHeader, Guid campaignId) => HasToken(tokensHeader, CampaignDmTokenName(campaignId), allowAdmin: true);
+
     public static string HashPassword(string password) => Hash(password);
 
     public static bool VerifyPassword(string password, string stored) => Verify(password, stored);

@@ -58,4 +58,21 @@ public class CampaignAccessTests
         campaign.Leave(mira);
         campaign.Party.Should().HaveCount(19);
     }
+
+    [TestMethod]
+    public void ADmToken_RunsOnlyItsCampaign_AndIsNotAPlayerOrViewerToken()
+    {
+        var access = Access();
+        var mine = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var dm = access.IssueCampaignDmToken(mine);
+
+        access.HasCampaignDmToken(dm, mine).Should().BeTrue();
+        access.HasCampaignDmToken(dm, other).Should().BeFalse();
+        access.HasAdminToken(dm).Should().BeFalse();
+        // a campaign's password (viewer) token does not make anyone its DM, but the admin is DM everywhere
+        access.HasCampaignDmToken(access.IssueCampaignToken(mine), mine).Should().BeFalse();
+        access.HasCampaignDmToken(access.IssueToken("*admin*"), other).Should().BeTrue();
+        PlayerAccess.IsReservedName(PlayerAccess.CampaignDmTokenName(mine)).Should().BeTrue();
+    }
 }

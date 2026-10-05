@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftIcon, CoinsIcon, EyeIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon, CoinsIcon, CrownIcon, EyeIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, Trash2Icon, UsersIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiClient } from "@/lib/api-client";
-import { CampaignLockedError, useCampaign, useCampaignActions, type CampaignEntry, type CampaignView, type EntryKind, type PartyMember } from "@/lib/api/campaigns";
+import { CampaignLockedError, unlockCampaignDm, useCampaign, useCampaignActions, type CampaignEntry, type CampaignView, type EntryKind, type PartyMember } from "@/lib/api/campaigns";
 import { shrinkImage } from "@/lib/image";
 import { formatCoins, gpValue, ledgerRows, partyFund, totalsByRecipient, type LedgerLine } from "@/lib/rules/ledger";
 import { normalizeText } from "@/lib/rules/picker";
@@ -66,8 +66,10 @@ export function CampaignPage() {
               {view.campaign.name}
               {view.campaign.locked && <LockIcon className="size-5 text-muted-foreground" aria-label="Has a password" />}
             </h1>
+            {view.campaign.dmName && <p className="text-sm text-muted-foreground">DM: {view.campaign.dmName}</p>}
             <Prose text={view.campaign.description} className="mt-1 text-muted-foreground" />
           </div>
+          {!dm && view.campaign.hasDmPassword && <BecomeDm campaignId={id} onDone={() => void own.refetch()} />}
           {dm && (
             <div className="flex flex-wrap gap-2">
               <Button variant={asPlayer ? "default" : "outline"} size="sm" onClick={() => setAsPlayer(!asPlayer)} aria-pressed={asPlayer}>
@@ -667,6 +669,53 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
 }
 
 /** Name, description, cover, party, password; deleting the campaign. */
+/** The campaign's DM on another device: their DM password makes this browser run the campaign too. */
+function BecomeDm({ campaignId, onDone }: { campaignId: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    setBusy(true);
+    try {
+      await unlockCampaignDm(campaignId, password);
+      toast.success("You run this campaign on this device now");
+      setOpen(false);
+      onDone();
+    } catch {
+      toast.error("That is not the DM password");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <CrownIcon /> I'm the DM
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Run this campaign here</DialogTitle>
+            <DialogDescription>Give the DM password chosen when the campaign was started.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+          >
+            <Input type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} aria-label="DM password" />
+            <Button type="submit" className="w-full" disabled={!password || busy}>
+              Open as the DM
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function CampaignSettings({ view, onClose }: { view: CampaignView; onClose: () => void }) {
   const navigate = useNavigate();
   const actions = useCampaignActions(view.campaign.id);
@@ -675,6 +724,8 @@ function CampaignSettings({ view, onClose }: { view: CampaignView; onClose: () =
   const [coverUrl, setCoverUrl] = useState(view.campaign.coverUrl ?? null);
   const [party, setParty] = useState<string[]>(view.campaign.party);
   const [password, setPassword] = useState("");
+  const [dmName, setDmName] = useState(view.campaign.dmName ?? "");
+  const [dmPassword, setDmPassword] = useState("");
   const characters = useQuery({
     queryKey: ["campaign-settings-characters"],
     queryFn: () => apiClient.get<{ characters: { characterId: string; name: string; playerName: string }[] }>("/api/characters"),
@@ -772,6 +823,26 @@ function CampaignSettings({ view, onClose }: { view: CampaignView; onClose: () =
                 Remove the password
               </Button>
             )}
+          </div>
+
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="flex items-center gap-1.5 text-sm font-medium">
+              <CrownIcon className="size-4" /> The DM
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Whoever has the DM password runs this campaign (“I'm the DM” on its page). Change it to hand the campaign over, or if a player has seen it.
+              {view.campaign.hasDmPassword ? "" : " There is none yet: only the site's admin runs it."}
+            </p>
+            <Input value={dmName} onChange={(e) => setDmName(e.target.value)} maxLength={100} placeholder="The DM's name (everyone sees it)" aria-label="The DM's name" />
+            <Input type="password" autoComplete="new-password" value={dmPassword} onChange={(e) => setDmPassword(e.target.value)} placeholder="New DM password (6+ characters; empty keeps it)" aria-label="New DM password" />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={(dmPassword.length > 0 && dmPassword.length < 6) || actions.setDm.isPending}
+              onClick={() => actions.setDm.mutate({ name: dmName, password: dmPassword }, { onSuccess: () => (toast.success("Saved"), setDmPassword("")), onError: failed })}
+            >
+              Save the DM
+            </Button>
           </div>
 
           <Button

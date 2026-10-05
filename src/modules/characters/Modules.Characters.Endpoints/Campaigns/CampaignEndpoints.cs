@@ -32,7 +32,7 @@ public class CampaignsGroup : Group
 /// A campaign in the list. A password-protected one the reader has not opened shows only its name: no
 /// description, cover or party.
 /// </summary>
-public sealed record CampaignSummaryModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, bool CanOpen, DateTimeOffset UpdatedAt);
+public sealed record CampaignSummaryModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, bool CanOpen, DateTimeOffset UpdatedAt, string? DmName = null, bool Dm = false);
 
 public sealed record CampaignsResponse(List<CampaignSummaryModel> Campaigns, bool Dm);
 
@@ -42,19 +42,25 @@ public sealed record CampaignsResponse(List<CampaignSummaryModel> Campaigns, boo
 /// </summary>
 public sealed record PartyMemberModel(Guid CharacterId, string Name, string? PlayerName, int? Level, string? Build, string? PortraitUrl, bool Locked, bool Missing);
 
-public sealed record CampaignModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, DateTimeOffset UpdatedAt);
+/// <summary>A campaign; DmToken only in the answer to its creation (the creator's DM token).</summary>
+public sealed record CampaignModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, DateTimeOffset UpdatedAt, string? DmName = null, bool HasDmPassword = false, string? DmToken = null);
 
 public sealed record CampaignResponse(CampaignModel Campaign, List<PartyMemberModel> Party, List<CampaignEntryModel> Entries, bool Dm);
 
-public sealed record SaveCampaignRequest(string? Name, string? Description, string? CoverUrl, List<Guid>? Party);
+public sealed record SaveCampaignRequest(string? Name, string? Description, string? CoverUrl, List<Guid>? Party, string? DmName = null, string? DmPassword = null);
 
 public sealed record SaveEntryRequest(string? Kind, string? Title, int? Number, string? OccurredOn, bool Visible, string? Body, string? DmNotes, string? ImageUrl, JsonElement? Data, int Sort);
 
 /// <summary>Who is the DM: whoever holds the admin token (the master password), checked on every request.</summary>
 internal static class CampaignAccess
 {
-    public static bool IsDm(HttpContext context, PlayerAccess access) =>
+    /// <summary>The site's admin (the master password): DM of every campaign.</summary>
+    public static bool IsAdmin(HttpContext context, PlayerAccess access) =>
         access.HasAdminToken(context.Request.Headers[PlayerAccess.TokenHeader]);
+
+    /// <summary>Whether the reader is this campaign's DM: its DM token (from its DM password), or the admin token.</summary>
+    public static bool IsDm(HttpContext context, PlayerAccess access, Guid campaignId) =>
+        access.HasCampaignDmToken(context.Request.Headers[PlayerAccess.TokenHeader], campaignId);
 
     public static string Folder(IConfiguration config, Guid campaignId) =>
         Path.Combine(PortraitFiles.Folder(config), "campaigns", campaignId.ToString("N"));
@@ -71,7 +77,7 @@ internal static class CampaignAccess
         }
     }
 
-    public static CampaignModel Model(Campaign c) => new(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.PasswordHash is not null, c.UpdatedAt);
+    public static CampaignModel Model(Campaign c) => new(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.PasswordHash is not null, c.UpdatedAt, c.DmName, c.DmPasswordHash is not null);
 
     /// <summary>Whether the reader may read the campaign: it is open, or they gave its password, or they are the DM.</summary>
     public static bool CanOpen(HttpContext context, PlayerAccess access, Campaign c) =>
@@ -108,10 +114,10 @@ public sealed class GetCampaignsEndpoint : EndpointWithoutRequest<CampaignsRespo
     {
         var campaigns = await _persistence.GetRepository<ICampaignsRepository>().GetCampaignsAsync();
         await Send.OkAsync(new CampaignsResponse(
-            campaigns.Select(c => CampaignAccess.CanOpen(HttpContext, _access, c)
-                ? new CampaignSummaryModel(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.PasswordHash is not null, true, c.UpdatedAt)
-                : new CampaignSummaryModel(c.Id, c.Name, string.Empty, null, [], true, false, c.UpdatedAt)).ToList(),
-            CampaignAccess.IsDm(HttpContext, _access)), ct);
+            campaigns.Select(c => CampaignAccess.CanOpen(HttpContext, _access, c) || CampaignAccess.IsDm(HttpContext, _access, c.Id)
+                ? new CampaignSummaryModel(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.PasswordHash is not null, true, c.UpdatedAt, c.DmName, CampaignAccess.IsDm(HttpContext, _access, c.Id))
+                : new CampaignSummaryModel(c.Id, c.Name, string.Empty, null, [], true, false, c.UpdatedAt, c.DmName)).ToList(),
+            CampaignAccess.IsAdmin(HttpContext, _access)), ct);
     }
 }
 
@@ -147,14 +153,14 @@ public sealed class GetCampaignEndpoint : EndpointWithoutRequest<CampaignRespons
             return;
         }
 
-        if (!CampaignAccess.CanOpen(HttpContext, _access, campaign))
+        if (!CampaignAccess.CanOpen(HttpContext, _access, campaign) && !CampaignAccess.IsDm(HttpContext, _access, campaign.Id))
         {
             HttpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await HttpContext.Response.WriteAsJsonAsync(new { locked = campaign.Name }, ct);
             return;
         }
 
-        var dm = CampaignAccess.IsDm(HttpContext, _access);
+        var dm = CampaignAccess.IsDm(HttpContext, _access, campaign.Id);
         var entries = await campaigns.GetEntriesAsync(campaign.Id);
 
         var characters = _persistence.GetRepository<ICharactersRepository>();
@@ -192,7 +198,7 @@ public sealed class GetCampaignEndpoint : EndpointWithoutRequest<CampaignRespons
     }
 }
 
-/// <summary>Starts a campaign (the DM only).</summary>
+/// <summary>Starts a campaign: anyone can, choosing a DM password; its DM token comes back with it.</summary>
 public sealed class CreateCampaignEndpoint : Endpoint<SaveCampaignRequest, CampaignModel>
 {
     private readonly IPersistence _persistence;
@@ -213,24 +219,27 @@ public sealed class CreateCampaignEndpoint : Endpoint<SaveCampaignRequest, Campa
 
     public override async Task HandleAsync(SaveCampaignRequest req, CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
-        {
-            await Send.ForbiddenAsync(ct);
-            return;
-        }
+        // anyone can start a campaign and run it: the DM password they choose makes them its DM on any device
+        var admin = CampaignAccess.IsAdmin(HttpContext, _access);
+        var dmPassword = req.DmPassword ?? string.Empty;
         var campaigns = _persistence.GetRepository<ICampaignsRepository>();
-        if (Campaign.Validate(req.Name, req.Description, req.CoverUrl, req.Party) is { } problem || (await campaigns.GetCampaignsAsync()).Count >= 50)
+        var problem = Campaign.Validate(req.Name, req.Description, req.CoverUrl, req.Party)
+            ?? ((dmPassword.Length is > 0 and < 6 || dmPassword.Length > 200 || (dmPassword.Length == 0 && !admin)) ? "Choose a DM password of 6 to 200 characters: it lets you run the campaign from any device." : null)
+            ?? ((req.DmName?.Trim().Length ?? 0) > 100 ? "The DM's name is too long (100 characters at most)." : null)
+            ?? ((await campaigns.GetCampaignsAsync()).Count >= 200 ? "At most 200 campaigns." : null);
+        if (problem is not null)
         {
-            AddError(Campaign.Validate(req.Name, req.Description, req.CoverUrl, req.Party) ?? "At most 50 campaigns.");
+            AddError(problem);
             await Send.ErrorsAsync(cancellation: ct);
             return;
         }
 
         var campaign = Campaign.Create(req.Name!);
         campaign.Update(req.Name!, req.Description ?? string.Empty, req.CoverUrl, req.Party ?? []);
+        campaign.SetDm(req.DmName, dmPassword.Length > 0 ? PlayerAccess.HashPassword(dmPassword) : null);
         campaigns.Add(campaign);
         await _persistence.SaveChangesAsync();
-        await Send.OkAsync(CampaignAccess.Model(campaign), ct);
+        await Send.OkAsync(CampaignAccess.Model(campaign) with { DmToken = _access.IssueCampaignDmToken(campaign.Id) }, ct);
     }
 }
 
@@ -255,7 +264,7 @@ public sealed class UpdateCampaignEndpoint : Endpoint<SaveCampaignRequest, Campa
 
     public override async Task HandleAsync(SaveCampaignRequest req, CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -304,7 +313,7 @@ public sealed class DeleteCampaignEndpoint : EndpointWithoutRequest
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -349,7 +358,7 @@ public sealed class CreateCampaignEntryEndpoint : Endpoint<SaveEntryRequest, Cam
 
     public override async Task HandleAsync(SaveEntryRequest req, CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -404,7 +413,7 @@ public sealed class UpdateCampaignEntryEndpoint : Endpoint<SaveEntryRequest, Cam
 
     public override async Task HandleAsync(SaveEntryRequest req, CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -455,7 +464,7 @@ public sealed class DeleteCampaignEntryEndpoint : EndpointWithoutRequest
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -496,7 +505,7 @@ public sealed class UploadCampaignImageEndpoint : Endpoint<UploadPortraitRequest
 
     public override async Task HandleAsync(UploadPortraitRequest req, CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -609,7 +618,7 @@ public sealed class SetCampaignPasswordEndpoint : Endpoint<CampaignPasswordReque
 
     public override async Task HandleAsync(CampaignPasswordRequest req, CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -708,7 +717,7 @@ public sealed class LeaveCampaignEndpoint : EndpointWithoutRequest
             return;
         }
         var characterId = Route<Guid>("characterId");
-        if (!CampaignAccess.IsDm(HttpContext, _access) && !await CampaignAccess.CanEditCharacter(HttpContext, _access, characterId))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")) && !await CampaignAccess.CanEditCharacter(HttpContext, _access, characterId))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -751,7 +760,7 @@ public sealed class GiveEndpoint : Endpoint<GiveRequest, GiveResponse>
 
     public override async Task HandleAsync(GiveRequest req, CancellationToken ct)
     {
-        if (!CampaignAccess.IsDm(HttpContext, _access))
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
         {
             await Send.ForbiddenAsync(ct);
             return;
@@ -890,5 +899,88 @@ public sealed class GiveEndpoint : Endpoint<GiveRequest, GiveResponse>
         }
         await _persistence.SaveChangesAsync();
         await Send.OkAsync(new GiveResponse(given, CampaignView.Entry(line, dm: true)), ct);
+    }
+}
+
+public sealed record CampaignDmRequest(string? Name, string? Password);
+
+/// <summary>Becomes a campaign's DM on this device: the right DM password gives its DM token.</summary>
+public sealed class UnlockCampaignDmEndpoint : Endpoint<CampaignPasswordRequest, CampaignUnlockResponse>
+{
+    private readonly IPersistence _persistence;
+    private readonly PlayerAccess _access;
+
+    public UnlockCampaignDmEndpoint(IPersistence persistence, PlayerAccess access)
+    {
+        _persistence = persistence;
+        _access = access;
+    }
+
+    public override void Configure()
+    {
+        Post("{campaignId:guid}/dm-unlock");
+        Group<CampaignsGroup>();
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(CampaignPasswordRequest req, CancellationToken ct)
+    {
+        var campaign = await _persistence.GetRepository<ICampaignsRepository>().GetCampaignAsync(Route<Guid>("campaignId"));
+        if (campaign is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+        if (campaign.DmPasswordHash is null || string.IsNullOrEmpty(req.Password) || !PlayerAccess.VerifyPassword(req.Password, campaign.DmPasswordHash))
+        {
+            await Send.UnauthorizedAsync(ct);
+            return;
+        }
+        await Send.OkAsync(new CampaignUnlockResponse(_access.IssueCampaignDmToken(campaign.Id)), ct);
+    }
+}
+
+/// <summary>Changes who runs a campaign (shown name) and its DM password (empty keeps it) — the DM only.</summary>
+public sealed class SetCampaignDmEndpoint : Endpoint<CampaignDmRequest, CampaignModel>
+{
+    private readonly IPersistence _persistence;
+    private readonly PlayerAccess _access;
+
+    public SetCampaignDmEndpoint(IPersistence persistence, PlayerAccess access)
+    {
+        _persistence = persistence;
+        _access = access;
+    }
+
+    public override void Configure()
+    {
+        Put("{campaignId:guid}/dm");
+        Group<CampaignsGroup>();
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(CampaignDmRequest req, CancellationToken ct)
+    {
+        if (!CampaignAccess.IsDm(HttpContext, _access, Route<Guid>("campaignId")))
+        {
+            await Send.ForbiddenAsync(ct);
+            return;
+        }
+        var password = req.Password ?? string.Empty;
+        if (password.Length is > 0 and < 6 || password.Length > 200 || (req.Name?.Trim().Length ?? 0) > 100)
+        {
+            AddError("A DM password has 6 to 200 characters (empty keeps the current one); a name at most 100.");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
+        var campaign = await _persistence.GetRepository<ICampaignsRepository>().GetCampaignAsync(Route<Guid>("campaignId"));
+        if (campaign is null)
+        {
+            await Send.NotFoundAsync(ct);
+            return;
+        }
+        campaign.SetDm(req.Name, password.Length > 0 ? PlayerAccess.HashPassword(password) : campaign.DmPasswordHash);
+        await _persistence.SaveChangesAsync();
+        await Send.OkAsync(CampaignAccess.Model(campaign), ct);
     }
 }

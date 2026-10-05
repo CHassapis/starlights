@@ -58,12 +58,18 @@ export function forgetAdminToken() {
 /** The X-Player-Token header value: every token this browser holds (without the DM's, to see what players see). */
 export function unlockTokenHeader(includeAdmin = true): string {
   return Object.entries(readTokens())
-    .filter(([name]) => includeAdmin || name !== ADMIN)
+    // seeing as a player leaves out the admin's token and every campaign DM token
+    .filter(([name]) => includeAdmin || (name !== ADMIN && !name.startsWith("#dm:")))
     .map(([, token]) => token)
     .join(",");
 }
 
 const campaignKey = (campaignId: string) => `#campaign:${campaignId}`;
+
+/** Remembers the token a campaign's DM password gave (or its creation): this browser runs that campaign. */
+export function saveCampaignDmToken(campaignId: string, token: string) {
+  saveUnlockToken(`#dm:${campaignId}`, token);
+}
 
 /** Remembers the token a campaign's password gave. */
 export function saveCampaignToken(campaignId: string, token: string) {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import { saveCampaignToken, unlockTokenHeader } from "@/lib/player";
+import { saveCampaignDmToken, saveCampaignToken, unlockTokenHeader } from "@/lib/player";
 
 export type EntryKind = "session" | "npc" | "encounter" | "place" | "faction" | "item" | "handout" | "quest" | "ledger" | "map" | "magicitem";
 
@@ -27,6 +27,10 @@ export interface CampaignSummary {
   locked: boolean;
   canOpen: boolean;
   updatedAt: string;
+  /** who runs it */
+  dmName?: string | null;
+  /** whether this browser runs it */
+  dm?: boolean;
 }
 
 export interface Campaign {
@@ -37,6 +41,10 @@ export interface Campaign {
   party: string[];
   locked: boolean;
   updatedAt: string;
+  dmName?: string | null;
+  hasDmPassword?: boolean;
+  /** only in the answer to creating it */
+  dmToken?: string | null;
 }
 
 export interface PartyMember {
@@ -111,7 +119,16 @@ export function useCampaignActions(campaignId?: string) {
   const base = `/api/campaigns/${campaignId}`;
   return {
     create: useMutation({
-      mutationFn: (body: { name: string; description: string; party: string[] }) => apiClient.post<typeof body, Campaign>("/api/campaigns", body),
+      mutationFn: async (body: { name: string; description: string; party: string[]; dmName?: string; dmPassword?: string }) => {
+        const created = await apiClient.post<typeof body, Campaign>("/api/campaigns", body);
+        // whoever starts a campaign runs it, from this browser straight away
+        if (created.dmToken) saveCampaignDmToken(created.id, created.dmToken);
+        return created;
+      },
+      onSettled: refresh,
+    }),
+    setDm: useMutation({
+      mutationFn: (body: { name: string; password: string }) => apiClient.put<typeof body, Campaign>(`${base}/dm`, body),
       onSettled: refresh,
     }),
     update: useMutation({
@@ -140,6 +157,12 @@ export function useCampaignActions(campaignId?: string) {
       },
     }),
   };
+}
+
+/** Gives a campaign's DM password: this browser then runs the campaign. */
+export async function unlockCampaignDm(campaignId: string, password: string) {
+  const { token } = await apiClient.post<{ password: string }, { token: string }>(`/api/campaigns/${campaignId}/dm-unlock`, { password });
+  saveCampaignDmToken(campaignId, token);
 }
 
 /** Gives a campaign's password; the token is kept like a player's. */

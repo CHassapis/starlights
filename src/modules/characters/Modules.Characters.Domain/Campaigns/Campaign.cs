@@ -42,6 +42,21 @@ public sealed class Campaign : EntityBase<Guid>
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    /// <summary>
+    /// Who runs the campaign (shown to everyone), and the salted hash of the DM password: whoever gives it is this
+    /// campaign's DM (the site's admin is the DM of every campaign). Null: only the admin.
+    /// </summary>
+    public string? DmName { get; private set; }
+
+    public string? DmPasswordHash { get; private set; }
+
+    public void SetDm(string? name, string? passwordHash)
+    {
+        DmName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        DmPasswordHash = passwordHash;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>Adds a character to the party (a player joining); false when the party is full.</summary>
     public bool Join(Guid characterId)
     {
