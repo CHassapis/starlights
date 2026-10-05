@@ -328,7 +328,8 @@ function EntryPane({ meta, category, k, backTo }: { meta: LoreMeta; category: st
   useEffect(() => {
     if (loaded.isSuccess && !entry) {
       const to = redirectKey(meta, category, k);
-      if (to) navigate(`/lore/${category}/${to}`, { replace: true });
+      // a redirect to a page elsewhere (a book section) is a path of its own
+      if (to) navigate(to.startsWith("/") ? to : `/lore/${category}/${to}`, { replace: true });
     }
   }, [loaded.isSuccess, entry, meta, category, k, navigate]);
 

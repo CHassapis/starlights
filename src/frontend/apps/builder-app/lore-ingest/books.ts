@@ -67,6 +67,9 @@ function searchOf(chapter: Json, ch: number) {
 /** A place or section of a book, for linking from a campaign: [name, kind, book key, chapter, section id, book name]. */
 export type SectionRow = [string, "books" | "adventures", string, number, string, string];
 
+/** Every book section with an id, filled by ingestBooks (rules links the data lacks can point at them). */
+export const bookSections: SectionRow[] = [];
+
 export function ingestBooks(ctx: Context, writer: Writer) {
   const out: Record<"books" | "adventures", BookRow[]> = { books: [], adventures: [] };
   const sections: SectionRow[] = [];
@@ -127,6 +130,7 @@ export function ingestBooks(ctx: Context, writer: Writer) {
     out[kind].sort((a, b) => (b.published ?? "").localeCompare(a.published ?? "") || a.name.localeCompare(b.name));
   }
   writer.write("sections.json", sections);
+  bookSections.splice(0, bookSections.length, ...sections);
   return out;
 }
 

@@ -20,11 +20,11 @@ import { ingestBestiary } from "./bestiary.ts";
 import { ingestItems } from "./items.ts";
 import { ingestClasses } from "./classes.ts";
 import { ingestSimple, ingestSpecies } from "./simple.ts";
-import { ingestBooks, ingestMaps } from "./books.ts";
+import { bookSections, ingestBooks, ingestMaps } from "./books.ts";
 import { ingestSpells } from "./spells.ts";
 
 /** Goes up whenever the generated files change shape, so the app never reads old files with new code. */
-const FORMAT = 6;
+const FORMAT = 7;
 const DEFAULT_IMAGE_BASE = "https://raw.githubusercontent.com/5etools-mirror-3/5etools-img/main/";
 
 /** 5etools page names of the redirect table → our categories. */
@@ -151,6 +151,14 @@ function main() {
           m[1] === "deity"
             ? entryKey(`${parts[0].trim()} (${parts[1]?.trim() || "Forgotten Realms"})`, parts[2]?.trim() || tagDefaults.deity || "")
             : entryKey(parts[0].trim(), parts[1]?.trim() || tagDefaults[m[1]] || "");
+        // a rule the data has no entry for, but a book of that source has a section of that name (the 2024
+        // Player's Handbook's "Mastery Properties"): the link opens the book there
+        if (category === "rules" && !keys.get(category)!.has(key) && !redirects[category]?.[key]) {
+          const name = (parts[2] ?? parts[0]).trim().toLowerCase();
+          const book = (parts[1]?.trim() || tagDefaults[m[1]] || "").toLowerCase();
+          const section = bookSections.find((x) => x[2] === book && x[0].toLowerCase() === name) ?? bookSections.find((x) => x[2] === book && x[0].toLowerCase() === parts[0].trim().toLowerCase());
+          if (section) (redirects[category] ??= {})[key] = `/lore/${section[1]}/${section[2]}?ch=${section[3]}#e-${section[4]}`;
+        }
         if (!keys.get(category)!.has(key) && !redirects[category]?.[key]) {
           unresolved[category] = (unresolved[category] ?? 0) + 1;
           const list = (examples[category] ??= []);
