@@ -88,6 +88,8 @@ export interface SheetSpell {
   description: string;
   origin: string;
   source: string;
+  /** for a spell outside a class's spellcasting (a feat's, a species'), the ability it is cast with */
+  ability?: string;
 }
 
 export interface SheetSpellcasting {
@@ -347,6 +349,12 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
     const grandparent = parent?.parentRegistrationId ? byRegistration.get(parent.parentRegistrationId) : undefined;
     if (owner && s.origin && !s.origin.includes(owner.casting.name)) s.origin = `${s.origin} (${owner.casting.name})`;
     else if (!owner && grandparent && ABILITY_NAMES.includes(s.origin)) s.origin = `${s.origin} (${grandparent.name})`;
+    // a feat's or species' spells are cast with the ability chosen for them: an ability-named element next to the
+    // spell (Magic Initiate's "Wisdom") or above it (a lineage's "Wisdom (High Elf)")
+    if (!owner) {
+      const named = (x?: Registration) => (x ? ABILITY_NAMES.find((a) => x.name.replace(/^Level \d+:\s*/, "") === a) : undefined);
+      s.ability = named(parent) ?? named(all.find((x) => x.parentRegistrationId === parent?.registrationId && x.type !== "Spell" && named(x))) ?? named(grandparent);
+    }
     (owner ? owner.casting.spells : otherSpells).push(s);
   }
   function isUnder(registrationId: string, ancestorId: string): boolean {

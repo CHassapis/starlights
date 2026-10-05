@@ -113,7 +113,7 @@ function castingFor(data: SheetData, spell: SheetSpell): { attackBonus: number; 
     const m = mod(ABBREVIATION[pick.ability] ?? pick.ability.slice(0, 3).toUpperCase());
     return { attackBonus: pick.attackBonus, saveDc: pick.saveDc, modifier: m, castingName: pick.name };
   }
-  const ability = ABILITIES.find((a) => spell.origin.startsWith(a) || spell.origin.includes(`(${a})`));
+  const ability = ABILITIES.find((a) => spell.ability === a) ?? ABILITIES.find((a) => spell.origin.startsWith(a) || spell.origin.includes(`(${a})`));
   if (ability) {
     const m = mod(ABBREVIATION[ability]);
     return { attackBonus: data.proficiencyBonus + m, saveDc: 8 + data.proficiencyBonus + m, modifier: m, castingName: ability };
