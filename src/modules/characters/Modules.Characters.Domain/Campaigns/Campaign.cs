@@ -127,8 +127,14 @@ public sealed class CampaignEntry : EntityBase<Guid>
     /// <summary>A magic item of the DM's own, given to characters from the campaign (never offered when building).</summary>
     public const string MagicItem = "magicitem";
 
+    /// <summary>
+    /// A note: a player's own (scope "private", only its author reads it, not even the DM), one shared with the
+    /// party ("party"), or the DM's notebook ("dm"). Data: {"scope", "author"}.
+    /// </summary>
+    public const string Note = "note";
+
     /// <summary>The kinds of entries.</summary>
-    public static readonly IReadOnlySet<string> Kinds = new HashSet<string>(["session", "npc", "encounter", "place", "faction", "item", "handout", "quest", "ledger", "map", MagicItem]);
+    public static readonly IReadOnlySet<string> Kinds = new HashSet<string>(["session", "npc", "encounter", "place", "faction", "item", "handout", "quest", "ledger", "map", MagicItem, Note]);
 
     private CampaignEntry(Guid id, Guid campaignId, string kind)
         : base(id)

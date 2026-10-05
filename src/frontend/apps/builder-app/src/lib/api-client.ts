@@ -1,5 +1,5 @@
 import { createHttpClient } from "@starlights/api-client";
-import { unlockTokenHeader } from "@/lib/player";
+import { playerNameHeader, unlockTokenHeader } from "@/lib/player";
 
 /**
  * Singleton HTTP client instance for builder-app.
@@ -18,6 +18,6 @@ export const apiClient = createHttpClient({
   // unlock tokens of password-locked players (see lib/player.tsx)
   getHeaders: (): Record<string, string> => {
     const tokens = unlockTokenHeader();
-    return tokens ? { "X-Player-Token": tokens } : {};
+    return { ...(tokens ? { "X-Player-Token": tokens } : {}), ...playerNameHeader() };
   },
 });

@@ -73,4 +73,22 @@ public class CampaignViewTests
         Campaign.Validate("", "", null, []).Should().NotBeNull();
         Campaign.Validate("x", "", null, Enumerable.Range(0, 21).Select(_ => Guid.NewGuid()).ToList()).Should().NotBeNull();
     }
+
+    [TestMethod]
+    public void Notes_PrivateToTheirAuthor_PartyForAll_DmForTheDm()
+    {
+        var campaign = Guid.NewGuid();
+        CampaignEntry Note(string scope, string author)
+        {
+            var e = CampaignEntry.Create(campaign, CampaignEntry.Note);
+            e.Update($"{scope} of {author}", null, null, scope == "party", "text", "", null, $$"""{"scope":"{{scope}}","author":"{{author}}"}""", 0);
+            return e;
+        }
+        var notes = new[] { Note("private", "Ada"), Note("party", "Ada"), Note("dm", "DM"), Note("private", "Ben") };
+
+        CampaignView.Entries(notes, dm: false, reader: "ada").Select(e => e.Title).Should().BeEquivalentTo(["private of Ada", "party of Ada"]);
+        CampaignView.Entries(notes, dm: false, reader: null).Select(e => e.Title).Should().BeEquivalentTo(["party of Ada"]);
+        // the DM reads the party's notes and their own notebook, never a player's private note
+        CampaignView.Entries(notes, dm: true, reader: null).Select(e => e.Title).Should().BeEquivalentTo(["party of Ada", "dm of DM"]);
+    }
 }

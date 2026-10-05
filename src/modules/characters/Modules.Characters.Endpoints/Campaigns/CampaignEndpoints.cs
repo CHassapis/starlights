@@ -83,6 +83,23 @@ internal static class CampaignAccess
     public static bool CanOpen(HttpContext context, PlayerAccess access, Campaign c) =>
         c.PasswordHash is null || access.HasCampaignToken(context.Request.Headers[PlayerAccess.TokenHeader], c.Id);
 
+    /// <summary>The header a reader names their player in (for their own notes).</summary>
+    public const string PlayerHeader = "X-Player-Name";
+
+    /// <summary>
+    /// The player the reader says they are, if they may act as that player: the player is not locked, or the reader
+    /// holds its token. Null otherwise (or for reserved names).
+    /// </summary>
+    public static async Task<string?> VerifiedPlayer(HttpContext context, PlayerAccess access)
+    {
+        var name = Uri.UnescapeDataString(context.Request.Headers[PlayerHeader].ToString()).Trim();
+        if (name.Length == 0 || name.Length > 100 || PlayerAccess.IsReservedName(name))
+        {
+            return null;
+        }
+        return !await access.IsLockedAsync(name) || access.HasToken(context.Request.Headers[PlayerAccess.TokenHeader], name) ? name : null;
+    }
+
     /// <summary>Whether the reader may change the character: its player is not locked, or they hold the player's token.</summary>
     public static async Task<bool> CanEditCharacter(HttpContext context, PlayerAccess access, Guid characterId)
     {
@@ -194,7 +211,8 @@ public sealed class GetCampaignEndpoint : EndpointWithoutRequest<CampaignRespons
                 build.ToString(), character.GetRequiredComponent<AppearanceComponent>().PortraitUrl, false, false));
         }
 
-        await Send.OkAsync(new CampaignResponse(CampaignAccess.Model(campaign), party, CampaignView.Entries(entries, dm), dm), ct);
+        var reader = await CampaignAccess.VerifiedPlayer(HttpContext, _access);
+        await Send.OkAsync(new CampaignResponse(CampaignAccess.Model(campaign), party, CampaignView.Entries(entries, dm, reader), dm), ct);
     }
 }
 

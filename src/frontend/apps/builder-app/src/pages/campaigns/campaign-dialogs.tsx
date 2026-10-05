@@ -24,6 +24,7 @@ export const KIND_NAMES: Record<EntryKind, string> = {
   ledger: "Gold line",
   map: "Map",
   magicitem: "Magic item",
+  note: "Note",
 };
 
 export const RARITIES = ["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"];

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftIcon, CoinsIcon, CrownIcon, EyeIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon, CoinsIcon, CrownIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, Trash2Icon, UsersIcon } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { ItemPicker } from "@/components/item-picker";
 import { CODEX_KINDS, DmNotes, EntryDialog, GiveDialog, KIND_NAMES, Prose, ShareOutDialog, textareaClass, UnlockCampaign } from "./campaign-dialogs";
 import { PartySummary } from "./party-summary";
+import { CampaignNotes } from "./campaign-notes";
 
 type Editing = { kind: EntryKind; entry?: CampaignEntry | null } | null;
 
@@ -36,6 +37,7 @@ export function CampaignPage() {
   const [editing, setEditing] = useState<Editing>(null);
   const [settings, setSettings] = useState(false);
   const [tab, setTab] = useState("sessions");
+  const [unlocking, setUnlocking] = useState(false);
 
   if (query.error instanceof CampaignLockedError) {
     return (
@@ -70,19 +72,43 @@ export function CampaignPage() {
             {view.campaign.dmName && <p className="text-sm text-muted-foreground">DM: {view.campaign.dmName}</p>}
             <Prose text={view.campaign.description} className="mt-1 text-muted-foreground" />
           </div>
-          {!dm && view.campaign.hasDmPassword && <BecomeDm campaignId={id} onDone={() => void own.refetch()} />}
-          {dm && (
-            <div className="flex flex-wrap gap-2">
-              <Button variant={asPlayer ? "default" : "outline"} size="sm" onClick={() => setAsPlayer(!asPlayer)} aria-pressed={asPlayer}>
-                {asPlayer ? <EyeIcon /> : <EyeOffIcon />} {asPlayer ? "Seeing it as a player" : "View as player"}
-              </Button>
-              {!asPlayer && (
-                <Button variant="outline" size="sm" onClick={() => setSettings(true)}>
-                  <SettingsIcon /> Campaign settings
-                </Button>
-              )}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Player | DM: the DM side asks for the DM password (or the site's admin password) the first time */}
+            <div role="tablist" aria-label="Whose view" className="inline-flex rounded-md border p-0.5">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!dm || asPlayer}
+                onClick={() => setAsPlayer(true)}
+                className={cn("rounded px-3 py-1 text-sm", !dm || asPlayer ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground")}
+              >
+                <UsersIcon className="mr-1 inline size-3.5" /> Player
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={dm && !asPlayer}
+                onClick={() => (dm ? setAsPlayer(false) : setUnlocking(true))}
+                className={cn("rounded px-3 py-1 text-sm", dm && !asPlayer ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground")}
+              >
+                {dm ? <CrownIcon className="mr-1 inline size-3.5" /> : <LockIcon className="mr-1 inline size-3.5" />} DM
+              </button>
             </div>
-          )}
+            {dm && !asPlayer && (
+              <Button variant="outline" size="sm" onClick={() => setSettings(true)}>
+                <SettingsIcon /> Campaign settings
+              </Button>
+            )}
+          </div>
+          <BecomeDm
+            campaignId={id}
+            open={unlocking}
+            onOpenChange={setUnlocking}
+            onDone={() => {
+              setAsPlayer(false);
+              void own.refetch();
+            }}
+          />
         </div>
         <Party party={view.party} />
       </header>
@@ -98,6 +124,7 @@ export function CampaignPage() {
           <TabsTrigger value="maps">Maps</TabsTrigger>
           <TabsTrigger value="items">Magic items</TabsTrigger>
           <TabsTrigger value="gold">Gold</TabsTrigger>
+          <TabsTrigger value="notes">Notes</TabsTrigger>
         </TabsList>
         {canEdit && (
           <TabsContent value="party" className="mt-4">
@@ -127,6 +154,9 @@ export function CampaignPage() {
         </TabsContent>
         <TabsContent value="gold" className="mt-4">
           <Ledger view={view} canEdit={canEdit} onEdit={edit} />
+        </TabsContent>
+        <TabsContent value="notes" className="mt-4">
+          <CampaignNotes view={view} dmSide={canEdit} />
         </TabsContent>
       </Tabs>
 
@@ -689,17 +719,17 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
 }
 
 /** Name, description, cover, party, password; deleting the campaign. */
-/** The campaign's DM on another device: their DM password makes this browser run the campaign too. */
-function BecomeDm({ campaignId, onDone }: { campaignId: string; onDone: () => void }) {
-  const [open, setOpen] = useState(false);
+/** The DM side, locked: the campaign's DM password (or the site's admin password) opens it on this device. */
+function BecomeDm({ campaignId, open, onOpenChange, onDone }: { campaignId: string; open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit() {
     setBusy(true);
     try {
       await unlockCampaignDm(campaignId, password);
-      toast.success("You run this campaign on this device now");
-      setOpen(false);
+      toast.success("DM side open on this device");
+      setPassword("");
+      onOpenChange(false);
       onDone();
     } catch {
       toast.error("That is not the DM password");
@@ -708,31 +738,26 @@ function BecomeDm({ campaignId, onDone }: { campaignId: string; onDone: () => vo
     }
   }
   return (
-    <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <CrownIcon /> I'm the DM
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Run this campaign here</DialogTitle>
-            <DialogDescription>Give the DM password chosen when the campaign was started.</DialogDescription>
-          </DialogHeader>
-          <form
-            className="space-y-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submit();
-            }}
-          >
-            <Input type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} aria-label="DM password" />
-            <Button type="submit" className="w-full" disabled={!password || busy}>
-              Open as the DM
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>The DM side is locked</DialogTitle>
+          <DialogDescription>Give the DM password. Players stay on the Player side, which shows only what the DM has revealed.</DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <Input type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} aria-label="DM password" />
+          <Button type="submit" className="w-full" disabled={!password || busy}>
+            Open the DM side
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

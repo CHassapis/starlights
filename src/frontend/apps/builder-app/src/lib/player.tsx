@@ -29,6 +29,12 @@ function writeTokens(tokens: Record<string, string>) {
   }
 }
 
+/** Who this browser says is playing, for the X-Player-Name header (the server trusts it only for an unlocked player or with its token). */
+export function playerNameHeader(): Record<string, string> {
+  const player = readStoredPlayer();
+  return player ? { "X-Player-Name": encodeURIComponent(player) } : {};
+}
+
 /** Remembers the unlock token of a password-locked player. */
 export function saveUnlockToken(player: string, token: string) {
   writeTokens({ ...readTokens(), [player.toLowerCase()]: token });

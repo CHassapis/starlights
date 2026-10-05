@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import { saveCampaignDmToken, saveCampaignToken, unlockTokenHeader } from "@/lib/player";
+import { playerNameHeader, saveAdminToken, saveCampaignDmToken, saveCampaignToken, unlockTokenHeader } from "@/lib/player";
 
-export type EntryKind = "session" | "npc" | "encounter" | "place" | "faction" | "item" | "handout" | "quest" | "ledger" | "map" | "magicitem";
+export type EntryKind = "session" | "npc" | "encounter" | "place" | "faction" | "item" | "handout" | "quest" | "ledger" | "map" | "magicitem" | "note";
+
+/** A note: a player's own, shared with the party, or the DM's notebook. */
+export type NoteScope = "private" | "party" | "dm";
 
 /** What the DM gives a party member: one of the campaign's magic items, an item of the books, and/or coins. */
 export interface GiveInput {
@@ -104,7 +107,7 @@ export function useCampaign(id: string, asPlayer: boolean) {
     queryKey: ["campaigns", id, asPlayer ? "player" : "own"],
     queryFn: async () => {
       const tokens = unlockTokenHeader(!asPlayer);
-      const response = await fetch(`${BASE}/api/campaigns/${id}`, { headers: tokens ? { "X-Player-Token": tokens } : {} });
+      const response = await fetch(`${BASE}/api/campaigns/${id}`, { headers: { ...(tokens ? { "X-Player-Token": tokens } : {}), ...playerNameHeader() } });
       if (response.status === 401) throw new CampaignLockedError("This campaign has a password.");
       if (!response.ok) throw new Error(response.status === 404 ? "There is no such campaign." : `The campaign could not be loaded (${response.status}).`);
       return (await response.json()) as CampaignView;
@@ -147,6 +150,12 @@ export function useCampaignActions(campaignId?: string) {
     }),
     removeEntry: useMutation({ mutationFn: (id: string) => apiClient.delete(`${base}/entries/${id}`), onSettled: refresh }),
     uploadImage: (data: string) => apiClient.post<{ data: string }, { url: string }>(`${base}/images`, { data }),
+    saveNote: useMutation({
+      mutationFn: ({ id, ...note }: { id?: string; title: string; body: string; scope: NoteScope }) =>
+        id ? apiClient.put<typeof note, CampaignEntry>(`${base}/notes/${id}`, note) : apiClient.post<typeof note, CampaignEntry>(`${base}/notes`, note),
+      onSettled: refresh,
+    }),
+    removeNote: useMutation({ mutationFn: (id: string) => apiClient.delete(`${base}/notes/${id}`), onSettled: refresh }),
     give: useMutation({
       mutationFn: (input: GiveInput) => apiClient.post<GiveInput, { given: string }>(`${base}/give`, input),
       onSettled: (_r, _e, input) => {
@@ -159,10 +168,19 @@ export function useCampaignActions(campaignId?: string) {
   };
 }
 
-/** Gives a campaign's DM password: this browser then runs the campaign. */
+/**
+ * Opens a campaign's DM side: its DM password makes this browser run that campaign; the site's admin password
+ * (tried when the DM password does not fit) makes it the DM of every campaign.
+ */
 export async function unlockCampaignDm(campaignId: string, password: string) {
-  const { token } = await apiClient.post<{ password: string }, { token: string }>(`/api/campaigns/${campaignId}/dm-unlock`, { password });
-  saveCampaignDmToken(campaignId, token);
+  try {
+    const { token } = await apiClient.post<{ password: string }, { token: string }>(`/api/campaigns/${campaignId}/dm-unlock`, { password });
+    saveCampaignDmToken(campaignId, token);
+  } catch (e) {
+    const admin = await apiClient.post<{ password: string }, { token: string }>("/api/admin/unlock", { password }).catch(() => null);
+    if (!admin) throw e;
+    saveAdminToken(admin.token);
+  }
 }
 
 /** Gives a campaign's password; the token is kept like a player's. */
