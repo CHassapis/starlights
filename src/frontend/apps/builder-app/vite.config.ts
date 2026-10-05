@@ -2,7 +2,29 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { env as nodeEnv } from "process";
-import { defineConfig, loadEnv } from "vite";
+import { readdirSync, readFileSync } from "fs";
+import { createRequire } from "module";
+import { defineConfig, loadEnv, type Plugin } from "vite";
+
+/** pdf.js's standard fonts (for PDFs that use a font without embedding it), served at /pdfjs/standard_fonts/. */
+function pdfjsStandardFonts(): Plugin {
+  const dir = path.join(path.dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json")), "standard_fonts");
+  const prefix = "/pdfjs/standard_fonts/";
+  return {
+    name: "pdfjs-standard-fonts",
+    configureServer(server) {
+      server.middlewares.use(prefix, (req, res, next) => {
+        const file = path.basename(decodeURIComponent((req.url ?? "").split("?")[0]));
+        if (!readdirSync(dir).includes(file)) return next();
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.end(readFileSync(path.join(dir, file)));
+      });
+    },
+    generateBundle() {
+      for (const file of readdirSync(dir)) this.emitFile({ type: "asset", fileName: `${prefix.slice(1)}${file}`, source: readFileSync(path.join(dir, file)) });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const viteEnv = loadEnv(mode, process.cwd(), "");
@@ -22,7 +44,7 @@ export default defineConfig(({ mode }) => {
   console.log("================================");
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), pdfjsStandardFonts()],
     resolve: {
       tsconfigPaths: true,
       alias: {
