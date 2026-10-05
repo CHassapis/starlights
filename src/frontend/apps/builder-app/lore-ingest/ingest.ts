@@ -20,10 +20,11 @@ import { ingestBestiary } from "./bestiary.ts";
 import { ingestItems } from "./items.ts";
 import { ingestClasses } from "./classes.ts";
 import { ingestSimple, ingestSpecies } from "./simple.ts";
+import { ingestBooks } from "./books.ts";
 import { ingestSpells } from "./spells.ts";
 
 /** Goes up whenever the generated files change shape, so the app never reads old files with new code. */
-const FORMAT = 3;
+const FORMAT = 4;
 const DEFAULT_IMAGE_BASE = "https://raw.githubusercontent.com/5etools-mirror-3/5etools-img/main/";
 
 /** 5etools page names of the redirect table → our categories. */
@@ -113,6 +114,10 @@ function main() {
   write("classes", ingestClasses(ctx));
   write("species", ingestSpecies(ctx));
   for (const [id, built] of Object.entries(ingestSimple(ctx, src))) write(id, built);
+  for (const [id, rows] of Object.entries(ingestBooks(ctx, writer))) {
+    writer.write(`index/${id}.json`, { rows });
+    categories[id] = { id, count: rows.length, sources: report.counts[id] ?? {} };
+  }
 
   const redirectTable = readJson(join(data, "generated", "gendata-tag-redirects.json")) as Record<string, Record<string, string>>;
   const redirects: Record<string, Record<string, string>> = {};

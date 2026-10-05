@@ -114,6 +114,40 @@ export interface SimpleRow extends IndexRow {
   group2?: string[];
 }
 
+export interface BookRow extends IndexRow {
+  group: string;
+  published?: string;
+  storyline?: string;
+  /** an adventure's levels, "1–10" */
+  level?: string;
+  cover?: string;
+  chapters: number;
+}
+
+export interface BookHeader {
+  name: string;
+  id?: string;
+  depth: number;
+}
+
+export interface BookToc {
+  id: string;
+  name: string;
+  source: string;
+  kind: "books" | "adventures";
+  toc: { name: string; ordinal?: string; id?: string; headers: BookHeader[] }[];
+  /** section and map-area ids → chapter */
+  ids: Record<string, number>;
+  cover: string | null;
+}
+
+export interface BookSearchSection {
+  ch: number;
+  id: string;
+  name: string;
+  text: string;
+}
+
 export interface CategoryIndex<Row extends IndexRow = IndexRow> {
   rows: Row[];
 }

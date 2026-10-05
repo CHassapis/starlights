@@ -76,6 +76,10 @@ const router = createBrowserRouter([
     element: <AppWide />,
     children: [
       { index: true, lazy: () => import("./pages/lore/lore-home.tsx").then((m) => ({ Component: m.LoreHome })) },
+      { path: "books", lazy: () => import("./pages/lore/library-page.tsx").then((m) => ({ Component: m.BooksPage })) },
+      { path: "adventures", lazy: () => import("./pages/lore/library-page.tsx").then((m) => ({ Component: m.AdventuresPage })) },
+      { path: "books/:id", lazy: () => import("./pages/lore/book-reader.tsx").then((m) => ({ Component: m.BookReader })) },
+      { path: "adventures/:id", lazy: () => import("./pages/lore/book-reader.tsx").then((m) => ({ Component: m.BookReader })) },
       { path: ":category", lazy: () => import("./pages/lore/category-page.tsx").then((m) => ({ Component: m.CategoryPage })) },
       { path: ":category/:key", lazy: () => import("./pages/lore/category-page.tsx").then((m) => ({ Component: m.CategoryPage })) },
     ],
