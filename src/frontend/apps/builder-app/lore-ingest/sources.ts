@@ -20,15 +20,44 @@ interface BookEntry {
   author?: string;
 }
 
-/** Parser.SRC_X = "Abc"; and Parser.SOURCE_JSON_TO_*[Parser.SRC_X] = "…"; from js/parser.js. */
+/**
+ * Parser.SRC_X = "Abc"; and Parser.SOURCE_JSON_TO_*[Parser.SRC_X] = "…"; from js/parser.js. Values may be template
+ * strings built from other constants (`${Parser.SRC_MCVX_PREFIX}2DC`), which are expanded.
+ */
 export function parserTables(parserJs: string) {
+  const named = new Map<string, string>();
+  const literal = /^(?:"([^"]*)"|`([^`]*)`)$/;
+  const expand = (raw: string): string | null => {
+    const ref = raw.trim().match(/^Parser\.([A-Za-z0-9_]+)$/);
+    if (ref) return named.get(ref[1]) ?? null;
+    const m = raw.trim().match(literal);
+    if (!m) return null;
+    if (m[1] !== undefined) return m[1];
+    let ok = true;
+    const out = m[2].replace(/\$\{Parser\.([A-Za-z0-9_]+)\}/g, (_, name: string) => {
+      const v = named.get(name);
+      if (v === undefined) ok = false;
+      return v ?? "";
+    });
+    return ok ? out : null;
+  };
+  // constants first (several passes, as some are built from others)
+  const assignments = [...parserJs.matchAll(/^Parser\.([A-Za-z0-9_]+)\s*=\s*("[^"\n]*"|`[^`\n]*`|Parser\.[A-Za-z0-9_]+);/gm)];
+  for (let pass = 0; pass < 4; pass++) {
+    for (const [, name, raw] of assignments) {
+      if (named.has(name)) continue;
+      const v = expand(raw);
+      if (v !== null) named.set(name, v);
+    }
+  }
   const constants = new Map<string, string>();
-  for (const m of parserJs.matchAll(/^Parser\.SRC_([A-Za-z0-9_]+)\s*=\s*"([^"]+)";/gm)) constants.set(m[1], m[2]);
+  for (const [name, value] of named) if (name.startsWith("SRC_")) constants.set(name.slice(4), value);
   const table = (name: string) => {
     const out = new Map<string, string>();
-    for (const m of parserJs.matchAll(new RegExp(`^Parser\\.${name}\\[Parser\\.SRC_([A-Za-z0-9_]+)\\]\\s*=\\s*"([^"]+)";`, "gm"))) {
+    for (const m of parserJs.matchAll(new RegExp(`^Parser\\.${name}\\[Parser\\.SRC_([A-Za-z0-9_]+)\\]\\s*=\\s*("[^"\\n]*"|\`[^\`\\n]*\`|Parser\\.[A-Za-z0-9_]+);`, "gm"))) {
       const abbr = constants.get(m[1]);
-      if (abbr) out.set(abbr, m[2]);
+      const value = expand(m[2]);
+      if (abbr && value !== null) out.set(abbr, value);
     }
     return out;
   };

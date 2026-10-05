@@ -68,6 +68,25 @@ export interface SpellRow extends IndexRow {
   cond?: string[];
 }
 
+export interface BestiaryRow extends IndexRow {
+  cr: string;
+  /** challenge as a number, for sorting (-1 unknown) */
+  crn: number;
+  size: string[];
+  type: string[];
+  /** "fey (goblinoid)" */
+  typeText: string;
+  env?: string[];
+  align?: string[];
+  speed?: string[];
+  /** legendary, mythic, lair, spellcaster, swarm, named, version */
+  misc?: string[];
+  immune?: string[];
+  resist?: string[];
+  vuln?: string[];
+  condImm?: string[];
+}
+
 export interface CategoryIndex<Row extends IndexRow = IndexRow> {
   rows: Row[];
 }

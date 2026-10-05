@@ -1,8 +1,9 @@
 /** Each category's list: its filters, the line under each name, and its sort orders. */
-import { SPELL_FACETS } from "@/lib/lore/facets";
+import { BESTIARY_FACETS, SPELL_FACETS } from "@/lib/lore/facets";
+import { SIZES } from "@/lib/lore/monster-text";
 import type { Facet } from "@/lib/lore/search";
 import { SCHOOLS } from "@/lib/lore/spell-text";
-import type { IndexRow, SpellRow } from "@/lib/lore/types";
+import type { BestiaryRow, IndexRow, SpellRow } from "@/lib/lore/types";
 
 export interface SortOption<Row> {
   id: string;
@@ -29,7 +30,13 @@ const spells: ListConfig<SpellRow> = {
   sorts: [NAME_SORT, { id: "level", label: "Level", compare: (a, b) => a.lvl - b.lvl || byName(a, b) }, SOURCE_SORT],
 };
 
+const bestiary: ListConfig<BestiaryRow> = {
+  facets: BESTIARY_FACETS,
+  summary: (r) => `${r.size.map((s) => SIZES[s] ?? s).join("/")} ${r.typeText} · CR ${r.cr}`,
+  sorts: [NAME_SORT, { id: "cr", label: "Challenge", compare: (a, b) => a.crn - b.crn || byName(a, b) }, SOURCE_SORT],
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const LIST_CONFIG: Record<string, ListConfig<any>> = { spells };
+export const LIST_CONFIG: Record<string, ListConfig<any>> = { spells, bestiary };
 
 export const DEFAULT_CONFIG: ListConfig<IndexRow> = { facets: [], summary: () => "", sorts: [NAME_SORT, SOURCE_SORT] };

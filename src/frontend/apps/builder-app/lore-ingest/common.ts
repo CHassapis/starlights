@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { entryKey } from "../src/lib/lore/keys.ts";
+import { resolveCopies } from "./copy.ts";
 import type { Edition, Fluff, IndexRow, LoreEntry, SourceInfo } from "../src/lib/lore/types.ts";
 
 export type Json = Record<string, unknown>;
@@ -66,23 +67,13 @@ export function baseRow(ctx: Context, e: Json): IndexRow {
   };
 }
 
-/** Fluff (descriptions and pictures) by key, from fluff entries; a fluff entry's own _copy is resolved by name. */
-export function fluffByKey(entries: Json[]): Map<string, Fluff> {
-  const byKey = new Map<string, Json>();
-  for (const f of entries) byKey.set(entryKey(str(f.name) ?? "", str(f.source) ?? ""), f);
+/** Fluff (descriptions and pictures) by key; fluff that copies other fluff (with changes) is resolved. */
+export function fluffByKey(entries: Json[], report: Report): Map<string, Fluff> {
+  const resolved = resolveCopies(entries, (f) => entryKey(str(f.name) ?? "", str(f.source) ?? ""), { problem: (m) => report.problem(`fluff ${m}`) });
   const out = new Map<string, Fluff>();
-  const resolve = (f: Json, depth = 0): Fluff => {
-    const copy = f._copy as Json | undefined;
-    const base = copy && depth < 5 ? byKey.get(entryKey(str(copy.name) ?? "", str(copy.source) ?? "")) : undefined;
-    const inherited = base ? resolve(base, depth + 1) : {};
-    return {
-      ...(Array.isArray(f.entries) ? { entries: f.entries } : inherited.entries ? { entries: inherited.entries } : {}),
-      ...(Array.isArray(f.images) ? { images: f.images } : inherited.images ? { images: inherited.images } : {}),
-    };
-  };
-  for (const [key, f] of byKey) {
-    const fluff = resolve(f);
-    if (fluff.entries || fluff.images) out.set(key, fluff);
+  for (const f of resolved) {
+    const fluff: Fluff = { ...(Array.isArray(f.entries) ? { entries: f.entries } : {}), ...(Array.isArray(f.images) ? { images: f.images } : {}) };
+    if (fluff.entries || fluff.images) out.set(entryKey(str(f.name) ?? "", str(f.source) ?? ""), fluff);
   }
   return out;
 }

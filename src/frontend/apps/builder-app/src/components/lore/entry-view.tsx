@@ -7,10 +7,12 @@ import { Fragment, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { useLoreEntry, useLoreMeta } from "@/lib/lore/data";
+import { monsterSubtitle } from "@/lib/lore/monster-text";
 import { componentsText, durationText, levelSchoolText, rangeText, timeText } from "@/lib/lore/spell-text";
 import type { LoreEntry, LoreMeta } from "@/lib/lore/types";
 import { cn } from "@/lib/utils";
 import { Entries, LoreRenderProvider, Picture, RichText } from "./render";
+import { StatBlock } from "./stat-block";
 
 type Obj = Record<string, unknown>;
 
@@ -75,6 +77,7 @@ function SpellBlock({ entry }: { entry: LoreEntry }) {
 }
 
 function subtitle(category: string, entry: LoreEntry): string | null {
+  if (category === "bestiary") return monsterSubtitle(entry);
   if (category === "spells") {
     const level = typeof entry.level === "number" ? entry.level : 0;
     const ritual = (entry.meta as Obj | undefined)?.ritual;
@@ -83,10 +86,26 @@ function subtitle(category: string, entry: LoreEntry): string | null {
   return null;
 }
 
-function Body({ category, entry }: { category: string; entry: LoreEntry }) {
+function Body({ meta, category, entry }: { meta: LoreMeta; category: string; entry: LoreEntry }) {
   switch (category) {
     case "spells":
       return <SpellBlock entry={entry} />;
+    case "bestiary": {
+      const versionOf = entry._versionOf as { name: string; source: string } | undefined;
+      return (
+        <>
+          {versionOf && (
+            <p className="text-sm text-muted-foreground">
+              A version of <RichText text={`{@creature ${versionOf.name}|${versionOf.source}}`} />.
+            </p>
+          )}
+          <StatBlock meta={meta} m={entry} />
+          {Array.isArray(entry.environment) && (
+            <p className="text-xs text-muted-foreground">Found in: {(entry.environment as string[]).join(", ")}</p>
+          )}
+        </>
+      );
+    }
     default:
       return (
         <div className="text-[0.95rem]">
@@ -131,7 +150,7 @@ export function EntryView({ meta, category, entry, compact = false }: { meta: Lo
           <SourceLine meta={meta} entry={entry} />
         </header>
         {compact && <Lore entry={entry} compact />}
-        <Body category={category} entry={entry} />
+        <Body meta={meta} category={category} entry={entry} />
         {!compact && <Lore entry={entry} compact={false} />}
       </article>
     </LoreRenderProvider>

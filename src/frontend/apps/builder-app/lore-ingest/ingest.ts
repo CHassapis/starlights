@@ -14,14 +14,15 @@ import { join, resolve } from "node:path";
 import type { CategoryMeta, LoreMeta } from "../src/lib/lore/types.ts";
 import { readJson, Report, Writer, type Context } from "./common.ts";
 import { readSources } from "./sources.ts";
+import { ingestBestiary } from "./bestiary.ts";
 import { ingestSpells } from "./spells.ts";
 
 /** Goes up whenever the generated files change shape, so the app never reads old files with new code. */
-const FORMAT = 1;
+const FORMAT = 2;
 const DEFAULT_IMAGE_BASE = "https://raw.githubusercontent.com/5etools-mirror-3/5etools-img/main/";
 
 /** 5etools page names of the redirect table → our categories. */
-const REDIRECT_PAGES: Record<string, string> = { "spells.html": "spells" };
+const REDIRECT_PAGES: Record<string, string> = { "spells.html": "spells", "bestiary.html": "bestiary" };
 
 function args() {
   const a = process.argv.slice(2);
@@ -78,10 +79,13 @@ function main() {
   const writer = new Writer(building);
   const categories: Record<string, CategoryMeta> = {};
 
-  const spells = ingestSpells(ctx);
-  writer.write("index/spells.json", { rows: spells.rows });
-  for (const [source, entries] of Object.entries(spells.chunks)) writer.write(`data/spells/${source.toLowerCase()}.json`, { entries });
-  categories.spells = { id: "spells", count: spells.rows.length, sources: report.counts.spells ?? {} };
+  const write = (id: string, built: { rows: unknown[]; chunks: Record<string, Record<string, unknown>> }) => {
+    writer.write(`index/${id}.json`, { rows: built.rows });
+    for (const [source, entries] of Object.entries(built.chunks)) writer.write(`data/${id}/${source.toLowerCase()}.json`, { entries });
+    categories[id] = { id, count: built.rows.length, sources: report.counts[id] ?? {} };
+  };
+  write("spells", ingestSpells(ctx));
+  write("bestiary", ingestBestiary(ctx));
 
   const redirectTable = readJson(join(data, "generated", "gendata-tag-redirects.json")) as Record<string, Record<string, string>>;
   const redirects: Record<string, Record<string, string>> = {};

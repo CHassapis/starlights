@@ -1,7 +1,8 @@
 /** The filters of each category's list. */
 import type { Facet } from "./search.ts";
 import { SCHOOLS } from "./spell-text.ts";
-import type { IndexRow, LoreMeta, SpellRow } from "./types.ts";
+import { SIZES, SIZE_ORDER, XP_BY_CR } from "./monster-text.ts";
+import type { BestiaryRow, IndexRow, LoreMeta, SpellRow } from "./types.ts";
 
 const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -57,4 +58,34 @@ export const SPELL_FACETS: Facet<SpellRow>[] = [
   { id: "dmg", label: "Damage type", values: (r) => r.dmg ?? [], folded: true },
   { id: "save", label: "Saving throw", values: (r) => r.save ?? [], options: ABILITIES.map((a) => ({ value: a, label: title(a) })), folded: true },
   { id: "cond", label: "Condition inflicted", values: (r) => r.cond ?? [], folded: true },
+];
+
+const CR_OPTIONS = Object.keys(XP_BY_CR).map((cr) => ({ value: cr, label: `CR ${cr}` }));
+const TYPES = ["aberration", "beast", "celestial", "construct", "dragon", "elemental", "fey", "fiend", "giant", "humanoid", "monstrosity", "ooze", "plant", "undead"];
+
+export const BESTIARY_FACETS: Facet<BestiaryRow>[] = [
+  { id: "cr", label: "Challenge", values: (r) => [r.cr], options: CR_OPTIONS },
+  { id: "type", label: "Type", values: (r) => r.type, options: TYPES.map((t) => ({ value: t, label: title(t) })) },
+  { id: "size", label: "Size", values: (r) => r.size, options: SIZE_ORDER.map((s) => ({ value: s, label: SIZES[s] })) },
+  { id: "env", label: "Environment", values: (r) => r.env ?? [] },
+  {
+    id: "misc",
+    label: "Legendary, lair and more",
+    values: (r) => r.misc ?? [],
+    options: [
+      { value: "legendary", label: "Legendary" },
+      { value: "mythic", label: "Mythic" },
+      { value: "lair", label: "Has a lair" },
+      { value: "spellcaster", label: "Spellcaster" },
+      { value: "swarm", label: "Swarm" },
+      { value: "named", label: "Named NPC" },
+      { value: "version", label: "Version of another" },
+    ],
+  },
+  { id: "align", label: "Alignment", values: (r) => r.align ?? [], folded: true },
+  { id: "speed", label: "Movement", values: (r) => r.speed ?? [], options: ["burrow", "climb", "fly", "swim"].map((v) => ({ value: v, label: title(v) })), folded: true },
+  { id: "immune", label: "Damage immunity", values: (r) => r.immune ?? [], folded: true },
+  { id: "resist", label: "Damage resistance", values: (r) => r.resist ?? [], folded: true },
+  { id: "vuln", label: "Damage vulnerability", values: (r) => r.vuln ?? [], folded: true },
+  { id: "condImm", label: "Condition immunity", values: (r) => r.condImm ?? [], folded: true },
 ];

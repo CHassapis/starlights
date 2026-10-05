@@ -22,7 +22,7 @@ function spellClasses(lookup: ClassLookup, name: string, source: string) {
 export function ingestSpells(ctx: Context) {
   const folder = join(ctx.data, "spells");
   const spells = list(readIndexed(folder), "spell");
-  const fluff = fluffByKey(list(readIndexed(folder, "fluff-index.json"), "spellFluff"));
+  const fluff = fluffByKey(list(readIndexed(folder, "fluff-index.json"), "spellFluff"), ctx.report);
   const lookup = readJson(join(ctx.data, "generated", "gendata-spell-source-lookup.json")) as unknown as ClassLookup;
 
   const rows: SpellRow[] = [];
