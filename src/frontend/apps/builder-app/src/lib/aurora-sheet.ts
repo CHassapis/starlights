@@ -92,7 +92,7 @@ class SheetBuilder {
     // subsetting garbles it, and its "ti" ligature came out as a gap
     const plain = { features: { liga: false, clig: false, dlig: false, calt: false, rlig: false } };
     const fonts: Fonts = {
-      field: await doc.embedFont(field),
+      field: await doc.embedFont(field, plain),
       regular: await doc.embedFont(regular, plain),
       bold: await doc.embedFont(bold, plain),
       italic: await doc.embedFont(italic, plain),
@@ -225,6 +225,8 @@ interface Placed {
   text: string;
   font: PDFFont;
   x: number;
+  /** a space came before it in the text (kept to rebuild the rest of a paragraph cut at a box's end) */
+  spaced: boolean;
 }
 
 /** Word-wraps paragraphs of runs to a width; returns the lines of placed words. */
@@ -233,6 +235,7 @@ function wrap(paragraphs: Paragraph[], fonts: Fonts, width: number, size: number
     const lines: Placed[][] = [];
     let line: Placed[] = [];
     let x = 0;
+    let spaced = false;
     for (const run of paragraph) {
       const font = fonts[run.font];
       const words = run.text.split(/(\s+)/).filter((w) => w.length > 0);
@@ -241,6 +244,7 @@ function wrap(paragraphs: Paragraph[], fonts: Fonts, width: number, size: number
         const w = widthOf(isSpace ? " " : word, font, size);
         if (isSpace) {
           if (line.length > 0) x += w;
+          spaced = true;
           continue;
         }
         if (x + w > width && line.length > 0) {
@@ -248,7 +252,8 @@ function wrap(paragraphs: Paragraph[], fonts: Fonts, width: number, size: number
           line = [];
           x = 0;
         }
-        line.push({ text: word, font, x });
+        line.push({ text: word, font, x, spaced });
+        spaced = false;
         x += w;
       }
     }
@@ -285,8 +290,8 @@ function drawParagraphs(page: PDFPage, box: Box, paragraphs: Paragraph[], fonts:
   let y = box.y + box.h - pad - size * 0.85;
   const bottom = box.y + pad;
   for (let p = 0; p < laid.length; p++) {
-    for (const line of laid[p]) {
-      if (y < bottom) return paragraphs.slice(p);
+    for (const [l, line] of laid[p].entries()) {
+      if (y < bottom) return l === 0 ? paragraphs.slice(p) : [unplace(laid[p].slice(l).flat(), fonts), ...paragraphs.slice(p + 1)];
       for (const word of line) {
         page.drawText(word.text, { x: box.x + pad + word.x, y, size, font: word.font, color: options.color ?? BLACK });
       }
@@ -295,6 +300,12 @@ function drawParagraphs(page: PDFPage, box: Box, paragraphs: Paragraph[], fonts:
     y -= gap;
   }
   return [];
+}
+
+/** Placed words back into a paragraph of runs (the part of a paragraph that did not fit). */
+function unplace(words: Placed[], fonts: Fonts): Paragraph {
+  const keys: Run["font"][] = ["regular", "bold", "italic", "boldItalic"];
+  return words.map((w, i) => ({ text: `${i > 0 && w.spaced ? " " : ""}${w.text}`, font: keys.find((k) => fonts[k] === w.font) ?? "regular" }));
 }
 
 /** Aurora's feature style: "Title (usage). Text", the title in bold italic. */
@@ -614,12 +625,17 @@ async function equipmentPage(b: SheetBuilder, data: SheetData) {
 
 async function notesPage(b: SheetBuilder, data: SheetData, backstoryOverflow: Paragraph[]) {
   const notes = [...backstoryOverflow, ...textParagraphs(data.story.notes ?? "")];
-  if (notes.length === 0) return;
-  const { page, fields } = await b.page("Aurora.Pages.notes_page.pdf");
-  const left = field(fields, "notes_page_left");
-  const right = field(fields, "notes_page_right");
-  let rest = left ? drawParagraphs(page, left, notes, b.fonts, { size: 7, minSize: 7 }) : notes;
-  if (right && rest.length) rest = drawParagraphs(page, right, rest, b.fonts, { size: 7, minSize: 7 });
+  // as many notes pages as the text needs (capped, and stopping should a page take nothing)
+  let rest = notes;
+  for (let pages = 0; rest.length > 0 && pages < 20; pages++) {
+    const first = rest[0];
+    const { page, fields } = await b.page("Aurora.Pages.notes_page.pdf");
+    const left = field(fields, "notes_page_left");
+    const right = field(fields, "notes_page_right");
+    if (left) rest = drawParagraphs(page, left, rest, b.fonts, { size: 7, minSize: 7 });
+    if (right && rest.length) rest = drawParagraphs(page, right, rest, b.fonts, { size: 7, minSize: 7 });
+    if (rest[0] === first) break;
+  }
 }
 
 // spellcasting pages: a header strip, then per spell level a top strip (the level's label, first row), middle
