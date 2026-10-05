@@ -469,7 +469,8 @@ export function resolveCopies(entries: Json[], keyOf: (e: Json) => string, optio
     if (!e._copy) return e;
     if (done.has(key)) return done.get(key)!;
     const meta = e._copy as Json;
-    const originalKey = keyOf({ name: meta.name, source: meta.source } as Json);
+    // the original is found by the same key as the copy (name and source, plus class and short name for subclasses)
+    const originalKey = keyOf(meta);
     const original = byKey.get(originalKey);
     if (!original || resolving.has(key)) {
       options.problem(`copy ${String(e.name)} (${String(e.source)}): original ${String(meta.name)} (${String(meta.source)}) not found`);

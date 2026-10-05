@@ -12,17 +12,38 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { CategoryMeta, LoreMeta } from "../src/lib/lore/types.ts";
+import { TAG_CATEGORY } from "../src/lib/lore/categories.ts";
+import { entryKey } from "../src/lib/lore/keys.ts";
 import { readJson, Report, Writer, type Context } from "./common.ts";
 import { readSources } from "./sources.ts";
 import { ingestBestiary } from "./bestiary.ts";
+import { ingestItems } from "./items.ts";
+import { ingestClasses } from "./classes.ts";
+import { ingestSimple, ingestSpecies } from "./simple.ts";
 import { ingestSpells } from "./spells.ts";
 
 /** Goes up whenever the generated files change shape, so the app never reads old files with new code. */
-const FORMAT = 2;
+const FORMAT = 3;
 const DEFAULT_IMAGE_BASE = "https://raw.githubusercontent.com/5etools-mirror-3/5etools-img/main/";
 
 /** 5etools page names of the redirect table → our categories. */
-const REDIRECT_PAGES: Record<string, string> = { "spells.html": "spells", "bestiary.html": "bestiary" };
+const REDIRECT_PAGES: Record<string, string> = {
+  "spells.html": "spells",
+  "bestiary.html": "bestiary",
+  "items.html": "items",
+  "backgrounds.html": "backgrounds",
+  "feats.html": "feats",
+  "optionalfeatures.html": "optionalfeatures",
+  "conditionsdiseases.html": "conditions",
+  "variantrules.html": "rules",
+  "actions.html": "actions",
+  "races.html": "species",
+  "rewards.html": "rewards",
+  "objects.html": "objects",
+  "trapshazards.html": "traps",
+  "languages.html": "languages",
+  "charcreationoptions.html": "charoptions",
+};
 
 function args() {
   const a = process.argv.slice(2);
@@ -79,17 +100,51 @@ function main() {
   const writer = new Writer(building);
   const categories: Record<string, CategoryMeta> = {};
 
+  const builtAll: Record<string, { rows: unknown[]; chunks: Record<string, Record<string, unknown>> }> = {};
   const write = (id: string, built: { rows: unknown[]; chunks: Record<string, Record<string, unknown>> }) => {
+    builtAll[id] = built;
     writer.write(`index/${id}.json`, { rows: built.rows });
     for (const [source, entries] of Object.entries(built.chunks)) writer.write(`data/${id}/${source.toLowerCase()}.json`, { entries });
     categories[id] = { id, count: built.rows.length, sources: report.counts[id] ?? {} };
   };
   write("spells", ingestSpells(ctx));
   write("bestiary", ingestBestiary(ctx));
+  write("items", ingestItems(ctx));
+  write("classes", ingestClasses(ctx));
+  write("species", ingestSpecies(ctx));
+  for (const [id, built] of Object.entries(ingestSimple(ctx, src))) write(id, built);
 
   const redirectTable = readJson(join(data, "generated", "gendata-tag-redirects.json")) as Record<string, Record<string, string>>;
   const redirects: Record<string, Record<string, string>> = {};
   for (const [page, category] of Object.entries(REDIRECT_PAGES)) if (redirectTable[page]) redirects[category] = redirectTable[page];
+
+  // links into the built categories that lead nowhere: the regression gate for updates
+  const keys = new Map<string, Set<string>>();
+  for (const id of Object.keys(categories)) keys.set(id, new Set());
+  for (const [id, built] of Object.entries(builtAll)) for (const r of built.rows as { k: string }[]) keys.get(id)!.add(r.k);
+  const unresolved: Record<string, number> = {};
+  const examples: Record<string, string[]> = {};
+  const walk = (v: unknown) => {
+    if (typeof v === "string") {
+      for (const m of v.matchAll(/\{@(\w+) ([^{}]*?)\}/g)) {
+        const category = TAG_CATEGORY[m[1]];
+        if (!category || !keys.has(category)) continue;
+        const parts = m[2].split("|");
+        const key =
+          m[1] === "deity"
+            ? entryKey(`${parts[0].trim()} (${parts[1]?.trim() || "Forgotten Realms"})`, parts[2]?.trim() || tagDefaults.deity || "")
+            : entryKey(parts[0].trim(), parts[1]?.trim() || tagDefaults[m[1]] || "");
+        if (!keys.get(category)!.has(key) && !redirects[category]?.[key]) {
+          unresolved[category] = (unresolved[category] ?? 0) + 1;
+          const list = (examples[category] ??= []);
+          if (list.length < 3) list.push(`${m[1]} ${m[2]}`);
+        }
+      }
+    } else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") Object.values(v).forEach(walk);
+  };
+  for (const built of Object.values(builtAll)) walk(built.chunks);
+  for (const [category, n] of Object.entries(unresolved)) report.problem(`${n} links into ${category} lead nowhere (e.g. ${(examples[category] ?? []).join("; ")})`);
 
   const meta: LoreMeta = { version, built: new Date().toISOString(), imageBase, sources, tagDefaults, categories, redirects };
   writer.write("meta.json", meta);

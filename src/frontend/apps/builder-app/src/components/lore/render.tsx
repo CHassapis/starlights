@@ -154,7 +154,7 @@ function Tag({ node }: { node: TagNode }) {
       const category = TAG_CATEGORY[node.tag];
       const shown = <RichText text={displayText(node)} />;
       if (!category) return shown;
-      const key = tagKey(meta, node.tag, a, b);
+      const key = tagKey(meta, node.tag, a, b, node.args[2]);
       if (!meta.categories[category]) return <span className="underline decoration-muted-foreground/40 decoration-dotted underline-offset-4">{shown}</span>;
       return (
         <LoreLink category={category} k={key}>

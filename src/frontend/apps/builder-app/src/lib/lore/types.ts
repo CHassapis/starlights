@@ -87,6 +87,33 @@ export interface BestiaryRow extends IndexRow {
   condImm?: string[];
 }
 
+export interface ItemRow extends IndexRow {
+  /** item type name ("Melee Weapon", "Wondrous Item") */
+  type: string;
+  rarity: string;
+  attune?: boolean;
+  magic?: boolean;
+  /** base, generic variant, specific variant, or item */
+  kind: "base" | "generic" | "specific" | "item";
+  weapon?: string;
+  props?: string[];
+  dmgType?: string;
+  mastery?: string[];
+}
+
+export interface ClassRow extends IndexRow {
+  kind: "class" | "subclass";
+  /** the class's name (a subclass's class) */
+  cls: string;
+}
+
+/** A row of the simpler categories: a kind when the category mixes kinds, and up to two filter value lists. */
+export interface SimpleRow extends IndexRow {
+  kind?: string;
+  group?: string[];
+  group2?: string[];
+}
+
 export interface CategoryIndex<Row extends IndexRow = IndexRow> {
   rows: Row[];
 }

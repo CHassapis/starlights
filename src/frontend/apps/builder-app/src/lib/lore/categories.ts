@@ -33,6 +33,9 @@ export const CATEGORIES: CategoryInfo[] = [
   { id: "tables", label: "Tables", singular: "table", blurb: "Random and reference tables." },
   { id: "decks", label: "Decks", singular: "deck", blurb: "The Deck of Many Things and other decks." },
   { id: "bastions", label: "Bastions", singular: "facility", blurb: "Bastion facilities." },
+  { id: "charoptions", label: "Other options", singular: "option", blurb: "Other character creation options." },
+  { id: "psionics", label: "Psionics", singular: "psionic", blurb: "Psionic disciplines and talents (playtest)." },
+  { id: "recipes", label: "Recipes", singular: "recipe", blurb: "Recipes from Heroes' Feast." },
   { id: "books", label: "Books", singular: "book", blurb: "Rulebooks and supplements to read." },
   { id: "adventures", label: "Adventures", singular: "adventure", blurb: "Adventures to read and run." },
 ];
@@ -66,4 +69,7 @@ export const TAG_CATEGORY: Record<string, string> = {
   table: "tables",
   deck: "decks",
   facility: "bastions",
+  charoption: "charoptions",
+  psionic: "psionics",
+  recipe: "recipes",
 };

@@ -2,7 +2,7 @@
 import type { Facet } from "./search.ts";
 import { SCHOOLS } from "./spell-text.ts";
 import { SIZES, SIZE_ORDER, XP_BY_CR } from "./monster-text.ts";
-import type { BestiaryRow, IndexRow, LoreMeta, SpellRow } from "./types.ts";
+import type { BestiaryRow, IndexRow, ItemRow, LoreMeta, SpellRow } from "./types.ts";
 
 const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -88,4 +88,29 @@ export const BESTIARY_FACETS: Facet<BestiaryRow>[] = [
   { id: "resist", label: "Damage resistance", values: (r) => r.resist ?? [], folded: true },
   { id: "vuln", label: "Damage vulnerability", values: (r) => r.vuln ?? [], folded: true },
   { id: "condImm", label: "Condition immunity", values: (r) => r.condImm ?? [], folded: true },
+];
+
+const RARITY = ["none", "common", "uncommon", "rare", "very rare", "legendary", "artifact", "varies", "unknown (magic)"];
+
+export const ITEM_FACETS: Facet<ItemRow>[] = [
+  { id: "kind", label: "Kind", values: (r) => [r.magic ? "magic" : "mundane"], options: [{ value: "magic", label: "Magic items" }, { value: "mundane", label: "Mundane" }] },
+  { id: "rarity", label: "Rarity", values: (r) => [r.rarity], options: RARITY.map((v) => ({ value: v, label: v === "none" ? "Not magic" : title(v) })) },
+  { id: "type", label: "Type", values: (r) => [r.type] },
+  { id: "attune", label: "Attunement", values: (r) => [r.attune ? "yes" : "no"], options: [{ value: "yes", label: "Requires attunement" }, { value: "no", label: "No attunement" }] },
+  {
+    id: "variant",
+    label: "Generic and specific",
+    values: (r) => [r.kind],
+    options: [
+      { value: "item", label: "Named items" },
+      { value: "generic", label: "Generic variants (+1 Weapon)" },
+      { value: "specific", label: "Specific variants (+1 Longsword)" },
+      { value: "base", label: "Base items" },
+    ],
+    folded: true,
+  },
+  { id: "weapon", label: "Weapon category", values: (r) => (r.weapon ? [r.weapon] : []), folded: true },
+  { id: "props", label: "Property", values: (r) => r.props ?? [], folded: true },
+  { id: "dmgType", label: "Damage type", values: (r) => (r.dmgType ? [r.dmgType] : []), folded: true },
+  { id: "mastery", label: "Mastery", values: (r) => r.mastery ?? [], folded: true },
 ];

@@ -66,7 +66,9 @@ export function redirectKey(meta: LoreMeta, category: string, key: string): stri
 }
 
 /** The key a {@tag name|source} refers to, with the tag's default book when it names none. */
-export function tagKey(meta: LoreMeta, tag: string, name: string, source: string | undefined): string {
+export function tagKey(meta: LoreMeta, tag: string, name: string, source: string | undefined, third?: string): string {
+  // deity tags name the pantheon second: {@deity Lathander|Faerûnian|SCAG}
+  if (tag === "deity") return entryKey(`${name.trim()} (${source?.trim() || "Forgotten Realms"})`, third?.trim() || meta.tagDefaults.deity || "");
   return entryKey(name.trim(), source?.trim() || meta.tagDefaults[tag] || "");
 }
 

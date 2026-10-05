@@ -13,6 +13,9 @@ import type { LoreEntry, LoreMeta } from "@/lib/lore/types";
 import { cn } from "@/lib/utils";
 import { Entries, LoreRenderProvider, Picture, RichText } from "./render";
 import { StatBlock } from "./stat-block";
+import { ItemBlock } from "./item-block";
+import { OtherBody } from "./category-bodies";
+import { itemSubtitle } from "@/lib/lore/item-text";
 
 type Obj = Record<string, unknown>;
 
@@ -78,6 +81,10 @@ function SpellBlock({ entry }: { entry: LoreEntry }) {
 
 function subtitle(category: string, entry: LoreEntry): string | null {
   if (category === "bestiary") return monsterSubtitle(entry);
+  if (category === "items") return itemSubtitle(entry);
+  if (category === "classes") return entry._class ? "Subclass" : "Class";
+  if (typeof entry._kind === "string") return entry._kind;
+  if (category === "species" && entry._race) return "Subrace";
   if (category === "spells") {
     const level = typeof entry.level === "number" ? entry.level : 0;
     const ritual = (entry.meta as Obj | undefined)?.ritual;
@@ -90,6 +97,8 @@ function Body({ meta, category, entry }: { meta: LoreMeta; category: string; ent
   switch (category) {
     case "spells":
       return <SpellBlock entry={entry} />;
+    case "items":
+      return <ItemBlock entry={entry} />;
     case "bestiary": {
       const versionOf = entry._versionOf as { name: string; source: string } | undefined;
       return (
@@ -107,11 +116,7 @@ function Body({ meta, category, entry }: { meta: LoreMeta; category: string; ent
       );
     }
     default:
-      return (
-        <div className="text-[0.95rem]">
-          <Entries entries={entry.entries} depth={3} />
-        </div>
-      );
+      return <OtherBody category={category} entry={entry} />;
   }
 }
 
