@@ -54,7 +54,7 @@ public class CharacterTypeConfiguration : IEntityTypeConfiguration<Character>
                     v => new Dictionary<string, string>(v)));
         builder.Ignore(e => e.Story);
 
-        // inventory, extras and magic are JSON documents; a missing property reads as its default, so their shape
+        // inventory, extras, magic and combat are JSON documents; a missing property reads as its default, so their shape
         // can grow without migrations (each carries a version for when it has to change)
         JsonColumn<CharacterInventory>(builder, "_inventory", "inventory", "{}", () => new CharacterInventory());
         builder.Ignore(e => e.Inventory);
@@ -62,6 +62,8 @@ public class CharacterTypeConfiguration : IEntityTypeConfiguration<Character>
         builder.Ignore(e => e.Extras);
         JsonColumn<CharacterMagic>(builder, "_magic", "magic", "{}", () => new CharacterMagic());
         builder.Ignore(e => e.Magic);
+        JsonColumn<CharacterCombat>(builder, "_combat", "combat", "{}", () => new CharacterCombat());
+        builder.Ignore(e => e.Combat);
 
         builder.HasMany(x => x.Components)
             .WithOne()

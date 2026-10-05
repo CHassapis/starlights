@@ -91,6 +91,14 @@ const router = createBrowserRouter([
     ],
   },
   {
+    path: "/battle",
+    element: <AppWide />,
+    children: [
+      { index: true, lazy: () => import("./pages/battle/battle-index.tsx").then((m) => ({ Component: m.BattleIndexPage })) },
+      { path: ":id", lazy: () => import("./pages/battle/battle-page.tsx").then((m) => ({ Component: m.CharacterBattlePage })) },
+    ],
+  },
+  {
     path: "/campaigns",
     element: <AppWide />,
     children: [

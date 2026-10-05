@@ -135,6 +135,10 @@ export interface SheetData {
   /** damage resistances, immunities and vulnerabilities, for the sheet's box */
   defenses: Defenses;
   hitDice: string;
+  /** the primary class's hit die (8 for a d8), for short rests */
+  hitDie: number | null;
+  /** the rules the primary class comes from: 2024 for a revised Player's Handbook class, else 2014 */
+  edition: "2014" | "2024";
   hitPoints: number | null;
   proficiencies: { armor: string[]; weapons: string[]; tools: string[] };
   languages: string[];
@@ -507,6 +511,8 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       ),
       defenses: defenses.data ?? { resistances: [], immunities: [], vulnerabilities: [] },
       hitDice: hitDie ? `${level}d${hitDie}` : "",
+      hitDie,
+      edition: /\((2024|2025)\)/.test(classEntry?.source ?? "") ? "2024" : "2014",
       hitPoints: hitDie ? hitPointsFor(hitDie, level, con, stat("hp") ?? 0, story.data?.fields.hitPointRolls) : null,
       proficiencies: { armor: unique(proficiencies.armor), weapons: unique(proficiencies.weapons), tools: unique(proficiencies.tools) },
       languages: unique(all.filter((r) => r.type === "Language").map((r) => r.name)),

@@ -102,6 +102,18 @@ public sealed class Character : AggregateRoot<CharacterId>
     /// </summary>
     public void UpdateMagic(CharacterMagic magic) => _magic = magic;
 
+    private CharacterCombat _combat = new();
+
+    /// <summary>
+    /// Gets the character's state in a fight (hit points lost, features spent, conditions).
+    /// </summary>
+    public CharacterCombat Combat => _combat;
+
+    /// <summary>
+    /// Replaces the character's state in a fight.
+    /// </summary>
+    public void UpdateCombat(CharacterCombat combat) => _combat = combat;
+
     /// <summary>
     /// Replaces the switched-off source books.
     /// </summary>
