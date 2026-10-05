@@ -436,3 +436,16 @@ FodyWeavers.xsd
 /src/apps/Starlights.Application/*.http
 
 /src/frontend/**/package-lock.json
+# Private, never in this repository: Wizards of the Coast content and players' data
+# (Aurora Legacy content, 5etools data and the compendium built from it, Aurora's app and sheet templates,
+# character files, database backups, uploaded pictures)
+*.dnd5e
+*.bak
+*.mdf
+*.ldf
+lore-data/
+aurora-elements/
+aurora-app/
+5etools*/
+starlights-lore/
+*.htpasswd
