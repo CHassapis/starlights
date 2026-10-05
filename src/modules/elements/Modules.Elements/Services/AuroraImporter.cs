@@ -17,8 +17,14 @@ namespace Starlights.Modules.Elements.Services;
 /// Location of the local clone of the Aurora content repository, and top-level folders of it to leave out
 /// entirely (e.g. "unearthed-arcana"): never imported, not even to fill a choice.
 /// </summary>
-public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<string>? Exclude = null, string? HomebrewPath = null)
+public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<string>? Exclude = null, string? HomebrewPath = null, string? PullRequestsPath = null)
 {
+    /// <summary>
+    /// The index name that imports the content of Aurora Legacy's open pull requests (books not merged yet), which
+    /// scripts/starlights-aurora-prs.sh lays out in the pull-requests folder, one folder per pull request.
+    /// </summary>
+    public const string PullRequestsIndex = "pull-requests";
+
     /// <summary>The index name that imports every file in the homebrew folder.</summary>
     public const string HomebrewIndex = "homebrew";
 
@@ -82,6 +88,10 @@ internal sealed class AuroraImporter : IAuroraImporter
         else if (string.Equals(indexPath, AuroraImporterOptions.FiveEToolsIndex, StringComparison.OrdinalIgnoreCase))
         {
             files.AddRange(byFile.Keys.Where(f => f.StartsWith(FiveEToolsData.Prefix, StringComparison.Ordinal)));
+        }
+        else if (string.Equals(indexPath, AuroraImporterOptions.PullRequestsIndex, StringComparison.OrdinalIgnoreCase))
+        {
+            files.AddRange(byFile.Keys.Where(f => f.StartsWith(PullRequestsPrefix, StringComparison.Ordinal)));
         }
         else if (string.Equals(indexPath, AuroraImporterOptions.BuiltInIndex, StringComparison.OrdinalIgnoreCase))
         {
@@ -316,6 +326,9 @@ internal sealed class AuroraImporter : IAuroraImporter
     /// <summary>Folder name homebrew files are filed under (their "file" and their sources group).</summary>
     public const string HomebrewPrefix = "homebrew/";
 
+    /// <summary>Folder name the open pull requests' files are filed under (their "file" and their sources group).</summary>
+    public const string PullRequestsPrefix = "pull-requests/";
+
     /// <summary>
     /// Every element of the content repository and of the homebrew folder (under "homebrew/"), so grants and
     /// choices resolve across both.
@@ -330,6 +343,11 @@ internal sealed class AuroraImporter : IAuroraImporter
         if (_options.HomebrewPath is { } homebrew && Directory.Exists(homebrew))
         {
             folders.Add((Path.GetFullPath(homebrew), HomebrewPrefix));
+        }
+        // last, so the merged content wins wherever a pull request repeats an id: only what is new comes from them
+        if (_options.PullRequestsPath is { } pulls && Directory.Exists(pulls))
+        {
+            folders.Add((Path.GetFullPath(pulls), PullRequestsPrefix));
         }
 
         void AddDocument(string file, XDocument document)

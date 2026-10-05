@@ -21,7 +21,8 @@ public sealed class ElementsModule : IPlatformModule
         builder.Services.AddSingleton(new AuroraImporterOptions(
             builder.Configuration["Aurora:ContentPath"] ?? "/data/aurora-elements",
             builder.Configuration["Aurora:Exclude"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            builder.Configuration["Aurora:HomebrewPath"] ?? "/data/homebrew"));
+            builder.Configuration["Aurora:HomebrewPath"] ?? "/data/homebrew",
+            builder.Configuration["Aurora:PullRequestsPath"] ?? "/data/aurora-pull-requests"));
 
         builder.Services.AddSingleton<IItemCatalog, Services.Items.ItemCatalog>();
         builder.Services.AddSingleton<ISpellIndex, Services.Spells.SpellIndex>();

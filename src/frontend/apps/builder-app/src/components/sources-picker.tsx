@@ -11,6 +11,7 @@ const GROUP_LABELS: Record<string, { title: string; hint: string }> = {
   collaborations: { title: "Collaborations", hint: "Partner and third-party content" },
   "5etools": { title: "From 5etools", hint: "Deities the Aurora files lack" },
   homebrew: { title: "Homebrew", hint: "Your group's own content (Homebrew page)" },
+  "pull-requests": { title: "Not merged yet", hint: "Books from Aurora Legacy's open pull requests: may change or have mistakes" },
 };
 
 function Checkbox({ checked, indeterminate, onChange, label }: { checked: boolean; indeterminate?: boolean; onChange: (checked: boolean) => void; label: string }) {
