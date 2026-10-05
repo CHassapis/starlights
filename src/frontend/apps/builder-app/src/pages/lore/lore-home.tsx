@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { LoreMeta } from "@/lib/lore/types";
 import { Link } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
+import { LORE_BACKGROUND } from "@/lib/art";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/lore/categories";
 import { LoreMissingError, useLoreMeta } from "@/lib/lore/data";
 import { LoreMissing } from "./lore-missing";
@@ -83,9 +84,12 @@ export function LoreHome() {
   const built = CATEGORIES.filter((c) => meta.data.categories[c.id]);
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8">
-      <header className="space-y-1">
-        <h1 className="font-heading text-3xl tracking-wide sm:text-4xl">Compendium of Lore</h1>
-        <p className="text-muted-foreground">Rules, creatures, items and the books themselves. Search a list, or point at any link in the text for a preview.</p>
+      <header className="relative isolate overflow-hidden rounded-2xl border bg-neutral-950 px-5 py-10 text-white shadow-lg sm:px-8 sm:py-14">
+        <img src={LORE_BACKGROUND} alt="" aria-hidden className="absolute inset-0 -z-10 h-full w-full object-cover object-[50%_35%] opacity-70" onError={(e) => (e.currentTarget.style.display = "none")} />
+        <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/55 to-black/10" />
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/80">The great library</p>
+        <h1 className="mt-1 font-heading text-3xl tracking-wide drop-shadow sm:text-5xl">Compendium of Lore</h1>
+        <p className="mt-2 max-w-xl text-sm text-white/80 sm:text-base">Rules, creatures, items and the books themselves. Search a list, or point at any link in the text for a preview.</p>
       </header>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={() => setBooksOpen(true)}>

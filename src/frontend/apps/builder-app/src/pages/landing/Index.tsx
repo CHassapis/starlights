@@ -1,7 +1,7 @@
-import ProseSection from "@/components/prose-section";
 import { Badge } from "@/components/ui/badge";
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@starlights/ui/components/ui/carousel";
 import { Link } from "react-router-dom";
+import { HourlyBackdrop } from "@/components/hourly-backdrop";
+import { BATTLE_BACKGROUND, LORE_BACKGROUND } from "@/lib/art";
 
 function LandingTile({
   title,
@@ -82,130 +82,66 @@ const tiles = [
     description: "Craft and chronicle your adventurers with every Aurora book, 2014 and 2024 rules side by side.",
     url: "/characters",
     image: "/images/spiritdragon_olivierbernard_full.jpg",
-    tag: undefined,
-    enabled: true,
+  },
+  {
+    title: "Battle Action Simulator",
+    description: "Pick a character and see everything it can do this turn, with real numbers.",
+    url: "/battle",
+    image: BATTLE_BACKGROUND,
   },
   {
     title: "Campaign Ledger",
-    description: "Maintain the campaign ledger: plan quests, track NPCs and sessions, and steer your party through every chapter of the story.",
+    description: "Quests, NPCs, sessions, maps and loot for the whole table.",
     url: "/campaigns",
     image: "/images/drow.jpg",
-    tag: undefined,
-    enabled: true,
   },
   {
     title: "Compendium of Lore",
-    description: "A searchable archive of spells, items, lore, and beasts — a quick reference for everything in your adventure.",
+    description: "Spells, items, monsters and every book, searchable and linked together.",
     url: "/lore",
-    image: "/images/compendium.jpeg",
-    tag: undefined,
-    enabled: true,
+    image: LORE_BACKGROUND,
   },
 ];
-
-export function CarouselDemo() {
-  const images = [
-    "/portraits/portrait-1.jpg",
-    "/portraits/portrait-2.jpg",
-    "/portraits/portrait-3.jpg",
-    "/portraits/portrait-4.jpg",
-    "/portraits/portrait-5.jpg",
-    "/portraits/portrait-6.jpg",
-    "/portraits/portrait-7.jpg",
-    "/portraits/portrait-8.jpg",
-    "/portraits/portrait-9.jpg",
-    "/portraits/portrait-10.png",
-    "/portraits/portrait-11.png",
-    "/portraits/portrait-12.png",
-    "/portraits/portrait-13.png",
-    "/portraits/portrait-14.png",
-    "/portraits/portrait-15.png",
-    "/portraits/portrait-16.jpg",
-    "/portraits/portrait-17.jpg",
-    "/portraits/portrait-18.png",
-    "/portraits/portrait-19.png",
-    "/portraits/portrait-20.jpg",
-  ];
-
-  return (
-    <Carousel
-      className="w-full"
-      opts={{
-        align: "start",
-        loop: false,
-        slidesToScroll: 1,
-        containScroll: "trimSnaps",
-      }}
-    >
-      <CarouselContent>
-        {images.map((image, index) => (
-          <CarouselItem key={index} className="basis-1/9">
-            <div className="relative aspect-square overflow-hidden border-4 rounded-lg border-double">
-              <img
-                src={image}
-                alt="Demo"
-                className="absolute inset-0 w-full h-full object-cover hover:scale-125 transition-transform duration-300 ease-in-out"
-              />
-            </div>
-          </CarouselItem>
-        ))}
-      </CarouselContent>
-      <CarouselPrevious />
-      <CarouselNext />
-    </Carousel>
-  );
-}
 
 export function LandingPage2() {
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 h-140 sm:h-120">
-        <div className="col-span-1 sm:col-span-3">
-          <LandingTile
-            title={tiles[0].title}
-            description={tiles[0].description}
-            url={tiles[0].url}
-            image={tiles[0].image}
-            enabled={tiles[0].enabled}
-            tag={tiles[0].tag}
-          />
-        </div>
+      <HourlyBackdrop />
+      <header className="mb-8 max-w-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-starlights-purple-600 dark:text-starlights-purple-400">Your table's companion</p>
+        <h1 className="mt-2 font-heading text-4xl tracking-wide sm:text-5xl">Project Starlights</h1>
+        <p className="mt-3 text-muted-foreground sm:text-lg">Build characters, run campaigns, look anything up and play out every turn of a fight, all in one place.</p>
+      </header>
 
-        <div className="col-span-1 sm:col-span-2 grid grid-rows-2 gap-4">
-          <LandingTile
-            title={tiles[1].title}
-            description={tiles[1].description}
-            url={tiles[1].url}
-            size="sm"
-            image={tiles[1].image}
-            enabled={tiles[1].enabled}
-            tag={tiles[1].tag}
-          />
-          <div className="grid grid-cols-1 gap-4">
-            <LandingTile
-              title={tiles[2].title}
-              description={tiles[2].description}
-              url={tiles[2].url}
-              size="sm"
-              image={tiles[2].image}
-              enabled={tiles[2].enabled}
-              tag={tiles[2].tag}
-            />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-5 sm:grid-rows-2 sm:h-[34rem]">
+        <div className="h-72 sm:col-span-3 sm:row-span-2 sm:h-auto">
+          <LandingTile {...tiles[0]} />
+        </div>
+        <div className="h-44 sm:col-span-2 sm:h-auto">
+          <LandingTile {...tiles[1]} size="sm" />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2">
+          <div className="h-44 sm:h-auto">
+            <LandingTile {...tiles[2]} size="sm" />
+          </div>
+          <div className="h-44 sm:h-auto">
+            <LandingTile {...tiles[3]} size="sm" />
           </div>
         </div>
       </div>
 
-      <ProseSection className="my-12">
-        <h1>About</h1>
-        <p>
-          Project Starlights aims to be a comprehensive platform for managing and enhancing your tabletop role-playing game experience. With a focus on
-          user-friendly design and powerful features, it aims to streamline character creation, campaign management, and collaborative storytelling.
-        </p>
-      </ProseSection>
-
-      {/* <div className="my-12 ">
-        <CarouselDemo />
-      </div> */}
+      <section className="my-12 grid gap-6 sm:grid-cols-3">
+        {[
+          ["Characters", "Every Aurora book and Aurora Legacy's newest content; the sheet prints exactly like Aurora's."],
+          ["At the table", "Campaigns with a locked DM side, player notes, and the Battle Action Simulator for each turn."],
+          ["Reference", "The Compendium of Lore with every rule, monster and book, linked from wherever you are."],
+        ].map(([title, text]) => (
+          <div key={title} className="rounded-xl border bg-background/60 p-4 backdrop-blur-sm">
+            <h2 className="font-heading text-lg tracking-wide">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+          </div>
+        ))}
+      </section>
     </>
   );
 }

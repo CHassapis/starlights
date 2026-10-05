@@ -1,35 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import {
-  AnvilIcon,
-  CodeIcon,
-  CrownIcon,
-  Icon,
-  LibraryBigIcon,
-  LibraryIcon,
-  ScrollTextIcon,
-  MapIcon,
-  OrbitIcon,
-  PencilRulerIcon,
-  RouteIcon,
-  SwordIcon,
-  UserIcon,
-  WandIcon,
-} from "lucide-react";
-import { cauldron } from "@lucide/lab";
-import { Link } from "react-router-dom";
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-  navigationMenuTriggerStyle,
-} from "@/components/ui/navigation-menu";
-import { Outlet } from "react-router-dom";
+import { BookOpenIcon, CrownIcon, FlaskConicalIcon, LibraryBigIcon, OrbitIcon, ScrollTextIcon, SwordsIcon, UserIcon } from "lucide-react";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { ModeToggle } from "@/components/mode-toggle";
 import { GitHubIconButton } from "@/components/navigation/github-icon-button";
 import { usePlayer } from "@/lib/player";
@@ -154,7 +127,6 @@ function SizeIndicatorBadge({ className, ...props }: React.HTMLAttributes<HTMLDi
 }
 
 export function MainNavigation() {
-  const isMobile = useIsMobile();
   return (
     <>
       <nav className="flex items-center justify-between h-16 ">
@@ -162,244 +134,15 @@ export function MainNavigation() {
           <Link to="/" className=" flex items-center font-heading relative">
             <OrbitIcon className="size-6 mr-3 stroke-starlights-purple-600" />
             <span className="hidden lg:inline tracking-widest mt-0.5">Project Starlights</span>
-            <span className="lg:hidden tracking-widest mt-0.5">Starlights</span>
+            <span className="hidden sm:inline lg:hidden tracking-widest mt-0.5">Starlights</span>
           </Link>
 
-          <div className="hidden md:flex items-center justify-start gap-2 ms-4">
-            <NavigationMenu viewport={isMobile} className="z-10 ">
-              <NavigationMenuList className="hidden md:flex">
-                <NavigationMenuItem className="hidden md:block ">
-                  <NavigationMenuTrigger className={cn(navigationMenuTriggerStyle(), "bg-transparent")}>Collections</NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <ul className="grid w-[300px] gap-1">
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/characters" className="flex flex-row items-center gap-3 font-overpass leading-snug">
-                              <CrownIcon size={16} className=" size-9 rounded-sm p-2 stroke-starlights-indigo-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Character Collection</div>
-                                <div className="text-muted-foreground text-xs">The characters in your collection.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/campaigns" className="flex flex-row items-center gap-3 font-overpass leading-snug">
-                              <ScrollTextIcon size={16} className=" size-9 rounded-sm p-2 stroke-amber-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Campaigns</div>
-                                <div className="text-muted-foreground text-xs">Sessions, codex, maps, magic items and gold.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/campaigns" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
-                              <MapIcon size={16} className=" size-9 rounded-sm p-2 stroke-starlights-indigo-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Campaign Ledger</div>
-                                <div className="text-muted-foreground text-xs ">Campaign notes, trackers and documents.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/compendium" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
-                              <LibraryBigIcon size={16} className=" size-9 rounded-sm p-2 stroke-starlights-indigo-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Compendium</div>
-                                <div className="text-muted-foreground text-xs ">A searchable archive of player options.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <Separator className="mx-3 max-w-[276px]" />
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/lore" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
-                              <Icon iconNode={cauldron} size={16} className=" size-9 rounded-sm p-2 stroke-starlights-purple-600"></Icon>
-                              <div>
-                                <div className="font-medium mt-0.5">Compendium of Lore</div>
-                                <div className="text-muted-foreground text-xs ">Books, adventures, monsters and lore.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/homebrew" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
-                              <Icon iconNode={cauldron} size={16} className=" size-9 rounded-sm p-2 stroke-starlights-indigo-600"></Icon>
-                              <div>
-                                <div className="font-medium mt-0.5">Homebrew</div>
-                                <div className="text-muted-foreground text-xs ">Your group's own content.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                    </ul>
-                  </NavigationMenuContent>
-                </NavigationMenuItem>
-
-                <NavigationMenuItem className="hidden md:block ">
-                  <NavigationMenuTrigger className={cn(navigationMenuTriggerStyle(), "bg-transparent")}>Character Builder</NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <ul className="grid w-[300px] gap-1">
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div className=" ">
-                            <Link to="/characters" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
-                              <RouteIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">My Characters</div>
-                                <div className="text-muted-foreground text-xs">Pick up where you left off.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div className=" ">
-                            <Link to="/characters/create" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
-                              <AnvilIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">New Character</div>
-                                <div className="text-muted-foreground text-xs ">Build a new hero from scratch.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/compendium?type=Spell" className="flex flex-row items-center gap-3 font-overpass leading-snug ">
-                              <WandIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
-                              <div>
-                                <div className="font-medium mt-0.5 upper">Spells</div>
-                                <div className="text-muted-foreground text-xs ">Browse every spell.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/compendium?type=Magic+Item" className="flex flex-row items-center gap-3 font-overpass leading-snug">
-                              <SwordIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Magic Items</div>
-                                <div className="text-muted-foreground text-xs ">Browse magic items.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div className=" ">
-                            <Link to="/compendium" className="flex flex-row items-center gap-3 font-overpass leading-snug">
-                              <PencilRulerIcon size={16} className=" size-9 rounded-sm p-2 stroke-yellow-500 dark:stroke-yellow-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Compendium</div>
-                                <div className="text-muted-foreground text-xs ">Species, classes, feats and more.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                    </ul>
-                  </NavigationMenuContent>
-                </NavigationMenuItem>
-
-                {/* upstream's developer and demo pages: only in development builds */}
-                {import.meta.env.DEV && (
-                <NavigationMenuItem className="hidden lg:block ">
-                  <NavigationMenuTrigger className={cn(navigationMenuTriggerStyle(), "bg-transparent")}>Developer</NavigationMenuTrigger>
-                  <NavigationMenuContent>
-                    <ul className="grid w-[300px] gap-1">
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div className="">
-                            <Link to="/development" className="flex flex-row items-center gap-3 font-overpass leading-snug">
-                              <CodeIcon size={16} className=" size-9 rounded-sm p-2 stroke-starlights-purple-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Development</div>
-                                <div className="text-muted-foreground text-xs">Lorem ipsum dolor sit amet consectetur.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/lib" className="flex flex-row items-center gap-3 font-overpass leading-snug">
-                              <LibraryIcon size={16} className=" size-9 rounded-sm p-2 stroke-starlights-purple-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Library Page</div>
-                                <div className="text-muted-foreground text-xs ">Lorem ipsum dolor sit amet.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                      <li>
-                        <Separator className="mx-3 max-w-[276px]" />
-                      </li>
-                      <li>
-                        <NavigationMenuLink asChild>
-                          <div>
-                            <Link to="/app2" className="flex flex-row items-center gap-3 font-overpass leading-snug">
-                              <LibraryIcon size={16} className=" size-9 rounded-sm p-2 stroke-starlights-purple-600" />
-                              <div>
-                                <div className="font-medium mt-0.5">Builder Layout Demo Page</div>
-                                <div className="text-muted-foreground text-xs ">Lorem ipsum dolor sit amet.</div>
-                              </div>
-                            </Link>
-                          </div>
-                        </NavigationMenuLink>
-                      </li>
-                    </ul>
-                  </NavigationMenuContent>
-                </NavigationMenuItem>
-                )}
-              </NavigationMenuList>
-            </NavigationMenu>
-          </div>
+          <MainLinks className="ms-6 hidden md:flex" />
         </div>
 
         <div className="flex items-center justify-end gap-2">
-          {/* phones get no dropdown menus, so the two main pages are one tap away */}
-          <div className="flex items-center gap-1 md:hidden">
-            <Link to="/characters" aria-label="Characters" className="rounded-md p-2 hover:bg-muted">
-              <CrownIcon className="size-5" />
-            </Link>
-            <Link to="/campaigns" aria-label="Campaigns" className="rounded-md p-2 hover:bg-muted">
-              <ScrollTextIcon className="size-5" />
-            </Link>
-            <Link to="/lore" aria-label="Compendium of Lore" className="rounded-md p-2 hover:bg-muted">
-              <LibraryBigIcon className="size-5" />
-            </Link>
-          </div>
+          {/* phones: the same places as icons */}
+          <MainLinks className="md:hidden" compact />
           <PlayerChip />
           <AdminButton />
           <div className="flex items-center justify-end gap-2">
@@ -423,6 +166,42 @@ export function MainNavigation() {
         </div>
       </nav>
     </>
+  );
+}
+
+/** The app's main places, as plain links (icons only on a phone); the current one is highlighted. */
+const MAIN_LINKS = [
+  { to: "/characters", label: "Characters", icon: CrownIcon },
+  { to: "/campaigns", label: "Campaigns", icon: ScrollTextIcon },
+  { to: "/battle", label: "Battle", icon: SwordsIcon },
+  { to: "/lore", label: "Lore", icon: LibraryBigIcon },
+  { to: "/compendium", label: "Compendium", icon: BookOpenIcon },
+  { to: "/homebrew", label: "Homebrew", icon: FlaskConicalIcon },
+];
+
+function MainLinks({ className, compact }: { className?: string; compact?: boolean }) {
+  return (
+    <nav aria-label="Main" className={cn("items-center gap-0.5", compact ? "flex" : "", className)}>
+      {MAIN_LINKS.map(({ to, label, icon: LinkIcon }) => (
+        <NavLink
+          key={to}
+          to={to}
+          aria-label={compact ? label : undefined}
+          title={compact ? label : undefined}
+          className={({ isActive }) =>
+            cn(
+              "flex items-center gap-1.5 rounded-md text-sm transition-colors hover:bg-muted hover:text-foreground",
+              compact ? "p-2" : "px-2.5 py-1.5",
+              isActive ? "text-foreground bg-muted/60" : "text-muted-foreground",
+              compact && (to === "/compendium" || to === "/homebrew") && "hidden sm:flex",
+            )
+          }
+        >
+          <LinkIcon className={compact ? "size-5" : "size-4"} />
+          {!compact && <span className={cn(to === "/compendium" || to === "/homebrew" ? "hidden lg:inline" : "")}>{label}</span>}
+        </NavLink>
+      ))}
+    </nav>
   );
 }
 
