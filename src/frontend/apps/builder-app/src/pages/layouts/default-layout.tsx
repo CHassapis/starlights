@@ -7,6 +7,9 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { GitHubIconButton } from "@/components/navigation/github-icon-button";
 import { usePlayer } from "@/lib/player";
 import { AdminButton } from "@/components/admin-button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PlayerChooser } from "@/pages/characters/player-picker";
+import { useState } from "react";
 
 export function LandingBackground() {
   return (
@@ -205,14 +208,32 @@ function MainLinks({ className, compact }: { className?: string; compact?: boole
   );
 }
 
+/** Who is playing, in the top bar: opens "Who's playing?" to switch to another player or add a new one. */
 function PlayerChip() {
   const { player } = usePlayer();
-  if (!player) return null;
+  const [open, setOpen] = useState(false);
   return (
-    <Link to="/characters" title="Your characters" className="hidden items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-muted sm:flex">
-      <UserIcon className="size-3.5" />
-      {player}
-    </Link>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title={player ? `Playing as ${player}: change player` : "Who's playing?"}
+        aria-label={player ? `Playing as ${player}: change player` : "Who's playing?"}
+        className="flex items-center gap-1.5 rounded-md border p-2 text-xs hover:bg-muted sm:px-2 sm:py-1"
+      >
+        <UserIcon className="size-4 sm:size-3.5" />
+        <span className="hidden max-w-36 truncate sm:inline">{player ?? "Who's playing?"}</span>
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-2xl tracking-wide">Who's playing?</DialogTitle>
+            <DialogDescription>Switch to another player, or add a new one. This browser remembers the choice.</DialogDescription>
+          </DialogHeader>
+          <PlayerChooser onChosen={() => setOpen(false)} />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
