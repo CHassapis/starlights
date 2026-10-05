@@ -193,7 +193,7 @@ function Reader({ meta }: { meta: LoreMeta }) {
         <span>/</span>
         <span className="text-foreground">{book.name}</span>
       </nav>
-      <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] print:block">
         <aside className="hidden lg:block print:hidden">
           <div className="sticky top-20 max-h-[calc(100dvh-6rem)] space-y-3 overflow-y-auto pr-1">
             <BookSearch meta={meta} kind={kind} id={id} toc={book} />
@@ -210,7 +210,7 @@ function Reader({ meta }: { meta: LoreMeta }) {
             </div>
           </div>
           {pager}
-          <article className="@container max-w-3xl rounded-lg border bg-background/60 p-4 text-[0.97rem] sm:p-8">
+          <article className="@container max-w-3xl rounded-lg border print:max-w-none print:border-0 print:p-0 bg-background/60 p-4 text-[0.97rem] sm:p-8">
             {content.isLoading ? (
               <Spinner className="mx-auto my-8 size-6" />
             ) : content.error ? (

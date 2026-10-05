@@ -112,7 +112,7 @@ function CategoryList({ meta, category, openKey }: { meta: LoreMeta; category: s
         </Link>
       </nav>
 
-      <div className={cn("grid gap-4 md:grid-cols-[minmax(17rem,24rem)_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(17rem,24rem)_minmax(0,1fr)]")}>
+      <div className={cn("grid gap-4 md:grid-cols-[minmax(17rem,24rem)_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(17rem,24rem)_minmax(0,1fr)] print:block")}>
         <aside className="hidden max-h-[calc(100dvh-9rem)] overflow-y-auto pr-1 xl:block print:hidden" aria-label="Filters">
           {filterPanel}
         </aside>
@@ -201,7 +201,7 @@ function CategoryList({ meta, category, openKey }: { meta: LoreMeta; category: s
                     <span className="truncate font-medium">{row.name}</span>
                     <span className="ml-auto shrink-0 text-[11px] text-muted-foreground" title={meta.sources[row.src]?.name}>
                       {meta.sources[row.src]?.short ?? row.src}
-                      {row.ed === "2014" && <span className="ml-1 opacity-70">’14</span>}
+                      {row.ed === "2014" && !/['’]14/.test(meta.sources[row.src]?.short ?? "") && <span className="ml-1 opacity-70">’14</span>}
                     </span>
                   </span>
                   <span className="truncate text-xs text-muted-foreground">{config.summary(row)}</span>
