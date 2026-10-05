@@ -148,8 +148,27 @@ function Reader({ meta }: { meta: LoreMeta }) {
       const header = toc.data.toc[chapter]?.headers.find((h) => h.name.toLowerCase() === hash.toLowerCase());
       if (header?.id) target = document.getElementById(`e-${header.id}`);
     }
-    if (target) target.scrollIntoView({ block: "start" });
-    else window.scrollTo({ top: 0 });
+    if (!target) {
+      window.scrollTo({ top: 0 });
+      return;
+    }
+    // pictures above the section load later and push it down: keep it in place as they load, until the reader
+    // scrolls themselves (or a few seconds pass)
+    const section = target;
+    section.scrollIntoView({ block: "start" });
+    const follow = () => section.scrollIntoView({ block: "start" });
+    const images = [...document.images].filter((img) => !img.complete && section.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING);
+    images.forEach((img) => img.addEventListener("load", follow, { once: true }));
+    const stop = () => images.forEach((img) => img.removeEventListener("load", follow));
+    const timer = setTimeout(stop, 5000);
+    window.addEventListener("wheel", stop, { once: true, passive: true });
+    window.addEventListener("touchmove", stop, { once: true, passive: true });
+    return () => {
+      clearTimeout(timer);
+      stop();
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchmove", stop);
+    };
   }, [content.data, toc.data, chapter, location.hash]);
 
   if (toc.error) return <p className="p-8 text-center text-destructive">{toc.error.message}</p>;
