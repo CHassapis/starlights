@@ -1,13 +1,17 @@
 /** The Compendium of Lore's front page: its categories with their sizes, and what you pinned and opened lately. */
-import { BookOpenIcon, ClockIcon, PinIcon } from "lucide-react";
+import { BookOpenIcon, BookMarkedIcon, ClockIcon, ColumnsIcon, PinIcon } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { LoreMeta } from "@/lib/lore/types";
 import { Link } from "react-router-dom";
 import { Spinner } from "@/components/ui/spinner";
 import { CATEGORIES, CATEGORY_BY_ID } from "@/lib/lore/categories";
 import { LoreMissingError, useLoreMeta } from "@/lib/lore/data";
 import { LoreMissing } from "./lore-missing";
-import { usePins, useRecent, type EntryRef } from "./lore-storage";
+import { setHiddenSources, useHiddenSources, usePins, useRecent, type EntryRef } from "./lore-storage";
 
-function RefList({ title, icon, refs }: { title: string; icon: React.ReactNode; refs: EntryRef[] }) {
+function RefList({ title, icon, refs }: { title: string; icon: ReactNode; refs: EntryRef[] }) {
   if (refs.length === 0) return null;
   return (
     <section className="space-y-2">
@@ -28,7 +32,48 @@ function RefList({ title, icon, refs }: { title: string; icon: React.ReactNode; 
   );
 }
 
+/** "My books": the books to leave out of every list and search (kept in this browser, per player). */
+function MyBooks({ meta, open, onOpenChange }: { meta: LoreMeta; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const hidden = useHiddenSources();
+  const used = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of Object.values(meta.categories)) for (const [src, n] of Object.entries(c.sources)) counts.set(src, (counts.get(src) ?? 0) + n);
+    return [...counts.keys()].map((s) => meta.sources[s] ?? { abbr: s, name: s, edition: "2014", date: null }).sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+  }, [meta]);
+  const toggle = (abbr: string) => setHiddenSources(hidden.includes(abbr) ? hidden.filter((h) => h !== abbr) : [...hidden, abbr]);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>My books</DialogTitle>
+          <DialogDescription>Untick the books you don't use: they are left out of every list and of search. Kept in this browser, for whoever is playing on it.</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => setHiddenSources([])}>Use all</Button>
+          <Button size="sm" variant="outline" onClick={() => setHiddenSources(used.filter((s) => s.edition === "2014").map((s) => s.abbr))}>Only 2024 books</Button>
+          <Button size="sm" variant="outline" onClick={() => setHiddenSources(used.filter((s) => s.edition === "2024").map((s) => s.abbr))}>Only 2014 books</Button>
+        </div>
+        {(["2024", "2014"] as const).map((ed) => (
+          <fieldset key={ed} className="space-y-1">
+            <legend className="mb-1 text-sm font-medium">{ed} rules</legend>
+            <div className="grid gap-x-4 sm:grid-cols-2">
+              {used.filter((s) => s.edition === ed).map((s) => (
+                <label key={s.abbr} className="flex items-center gap-2 py-0.5 text-sm">
+                  <input type="checkbox" checked={!hidden.includes(s.abbr)} onChange={() => toggle(s.abbr)} />
+                  <span className="truncate">{s.name}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ))}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function LoreHome() {
+  const [booksOpen, setBooksOpen] = useState(false);
+  const hiddenCount = useHiddenSources().length;
   const meta = useLoreMeta();
   const pins = usePins();
   const recent = useRecent();
@@ -42,6 +87,19 @@ export function LoreHome() {
         <h1 className="font-heading text-3xl tracking-wide sm:text-4xl">Compendium of Lore</h1>
         <p className="text-muted-foreground">Rules, creatures, items and the books themselves. Search a list, or point at any link in the text for a preview.</p>
       </header>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => setBooksOpen(true)}>
+          <BookMarkedIcon /> My books{hiddenCount ? ` (${hiddenCount} hidden)` : ""}
+        </Button>
+        {pins.filter((p) => p.category !== "books" && p.category !== "adventures").length >= 2 && (
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/lore/compare">
+              <ColumnsIcon /> Compare pinned
+            </Link>
+          </Button>
+        )}
+      </div>
+      <MyBooks meta={meta.data} open={booksOpen} onOpenChange={setBooksOpen} />
       <RefList title="Pinned" icon={<PinIcon className="size-4" />} refs={pins} />
       <RefList title="Recently opened" icon={<ClockIcon className="size-4" />} refs={recent} />
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -56,7 +114,11 @@ export function LoreHome() {
         ))}
       </section>
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <BookOpenIcon className="size-3.5" /> Data: 5etools {meta.data.version.split("-")[0]}, built {new Date(meta.data.built).toLocaleDateString()}.
+        <BookOpenIcon className="size-3.5" /> Data: 5etools {meta.data.version.split("-")[0]}, built {new Date(meta.data.built).toLocaleDateString()}. The character builder's own options are in{" "}
+        <Link to="/compendium" className="underline underline-offset-2">
+          the Aurora compendium
+        </Link>
+        .
       </p>
     </div>
   );

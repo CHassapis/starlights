@@ -3,7 +3,7 @@
  * open entry beside it, or on its own page on a phone. Everything is in the address (search, filters, sort and the
  * open entry), so a link shows the same thing. Keys: "/" to search, ↑ ↓ to move, Enter to open, Esc to clear.
  */
-import { ArrowLeftIcon, ChevronDownIcon, FilterIcon, LibraryBigIcon, PrinterIcon, SearchIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, ChevronDownIcon, FilterIcon, LibraryBigIcon, PinIcon, PinOffIcon, PrinterIcon, SearchIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,7 @@ import type { IndexRow, LoreMeta } from "@/lib/lore/types";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CONFIG, LIST_CONFIG, type ListConfig } from "./list-config";
 import { LoreMissing } from "./lore-missing";
-import { rememberRecent } from "./lore-storage";
+import { isPinned, rememberRecent, togglePin, useHiddenSources, usePins } from "./lore-storage";
 
 const ROW = 56;
 
@@ -52,7 +52,9 @@ function CategoryList({ meta, category, openKey }: { meta: LoreMeta; category: s
   const info = CATEGORY_BY_ID[category];
   const config = (LIST_CONFIG[category] ?? DEFAULT_CONFIG) as ListConfig<IndexRow>;
   const index = useCategoryIndex(meta, category);
-  const rows = useMemo(() => index.data?.rows ?? [], [index.data]);
+  const hidden = useHiddenSources();
+  // "my books": the books this player hides are left out of every list
+  const rows = useMemo(() => (index.data?.rows ?? []).filter((r) => !hidden.includes(r.src)), [index.data, hidden]);
   const facets = useMemo(() => [...config.facets, ...commonFacets(meta, rows)], [config, meta, rows]);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -320,6 +322,7 @@ function EntryPane({ meta, category, k, backTo }: { meta: LoreMeta; category: st
   const loaded = useLoreEntry(meta, category, k);
   const navigate = useNavigate();
   const entry = loaded.data?.entry;
+  const pinned = isPinned(usePins(), category, k);
 
   // a key that was renamed or reprinted goes to its current page
   useEffect(() => {
@@ -347,7 +350,19 @@ function EntryPane({ meta, category, k, backTo }: { meta: LoreMeta; category: st
           </Link>
         </Button>
         {entry && (
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => window.print()} aria-label="Print">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            aria-pressed={pinned}
+            onClick={() => togglePin({ category, key: k, name: entry.name, source: entry.source })}
+            title={pinned ? "Unpin" : "Pin, to find it again and to compare"}
+          >
+            {pinned ? <PinOffIcon /> : <PinIcon />} <span className="hidden sm:inline">{pinned ? "Pinned" : "Pin"}</span>
+          </Button>
+        )}
+        {entry && (
+          <Button variant="ghost" size="sm" onClick={() => window.print()} aria-label="Print">
             <PrinterIcon /> <span className="hidden sm:inline">Print</span>
           </Button>
         )}

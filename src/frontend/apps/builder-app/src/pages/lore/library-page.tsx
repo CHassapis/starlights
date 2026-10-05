@@ -10,6 +10,7 @@ import { matchScore } from "@/lib/lore/search";
 import type { BookRow } from "@/lib/lore/types";
 import { cn } from "@/lib/utils";
 import { LoreMissing } from "./lore-missing";
+import { useHiddenSources } from "./lore-storage";
 
 const GROUPS: Record<string, string> = { core: "Core rules", supplement: "Supplements", setting: "Settings", "supplement-alt": "Other supplements", "homebrew": "Homebrew", screen: "DM screens", other: "Other", organized: "Organized play", prerelease: "Playtest" };
 
@@ -28,7 +29,8 @@ export function LibraryPage({ kind }: { kind: "books" | "adventures" }) {
   const query = params.get("q") ?? "";
   const ed = params.get("ed") ?? "";
   const group = params.get("group") ?? "";
-  const rows = useMemo(() => index.data?.rows ?? [], [index.data]);
+  const hidden = useHiddenSources();
+  const rows = useMemo(() => (index.data?.rows ?? []).filter((r) => !hidden.includes(r.src)), [index.data, hidden]);
   const groups = useMemo(() => [...new Set(rows.map((r) => r.group))], [rows]);
   const shown = useMemo(() => rows.filter((r) => (!ed || r.ed === ed) && (!group || r.group === group) && matchScore(`${r.name} ${r.src} ${r.storyline ?? ""}`, query) > 0), [rows, ed, group, query]);
   const set = (k: string, v: string) => {

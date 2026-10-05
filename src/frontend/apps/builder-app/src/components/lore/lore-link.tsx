@@ -6,7 +6,7 @@
 import { ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { useCanHover } from "@/components/info-card";
+import { useCanHover } from "@/hooks/use-can-hover";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { loreHref } from "@/lib/lore/data";

@@ -1,5 +1,6 @@
 import DOMPurify from "dompurify";
-import { ArrowLeftIcon, SparklesIcon } from "lucide-react";
+import { ArrowLeftIcon, LibraryBigIcon, SparklesIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useMemo, useState, type MouseEvent } from "react";
 import DescriptionProseSection from "@/components/description-section";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,12 @@ export function effectsHeading(item: ItemInfo): string {
  * class, and what it does while active) and its description. Spell names in a description open that spell here
  * too, with a Back button.
  */
+/** The Compendium of Lore's list for an Aurora element's type, if it has one. */
+function loreCategory(type: string, isItem: boolean): string | null {
+  if (isItem) return "items";
+  return ({ Spell: "spells", Feat: "feats", Race: "species", "Sub Race": "species", Background: "backgrounds", Class: "classes", Archetype: "classes", Language: "languages", Deity: "deities" } as Record<string, string>)[type] ?? null;
+}
+
 export function ElementDetails({ id, emptyHint, compact = false }: { id: string | null; emptyHint?: string; compact?: boolean }) {
   const [stack, setStack] = useState<string[]>([]);
   const [forId, setForId] = useState(id);
@@ -119,6 +126,11 @@ function Details({ id, compact, onOpen }: { id: string; compact: boolean; onOpen
           {isSpell && setters.isConcentration === "true" && <Badge variant="secondary">Concentration</Badge>}
           {data.source && <Badge variant="outline">{data.source}</Badge>}
         </div>
+        {loreCategory(data.type, !!item) && (
+          <Link to={`/lore/${loreCategory(data.type, !!item)}?q=${encodeURIComponent(data.name)}`} className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <LibraryBigIcon className="size-3.5" /> Open in the Compendium of Lore
+          </Link>
+        )}
       </div>
 
       {isSpell && (

@@ -24,7 +24,7 @@ import { ingestBooks } from "./books.ts";
 import { ingestSpells } from "./spells.ts";
 
 /** Goes up whenever the generated files change shape, so the app never reads old files with new code. */
-const FORMAT = 4;
+const FORMAT = 5;
 const DEFAULT_IMAGE_BASE = "https://raw.githubusercontent.com/5etools-mirror-3/5etools-img/main/";
 
 /** 5etools page names of the redirect table → our categories. */
@@ -114,10 +114,21 @@ function main() {
   write("classes", ingestClasses(ctx));
   write("species", ingestSpecies(ctx));
   for (const [id, built] of Object.entries(ingestSimple(ctx, src))) write(id, built);
+  const bookRows: Record<string, unknown[]> = {};
   for (const [id, rows] of Object.entries(ingestBooks(ctx, writer))) {
+    bookRows[id] = rows;
     writer.write(`index/${id}.json`, { rows });
     categories[id] = { id, count: rows.length, sources: report.counts[id] ?? {} };
   }
+
+  // the search across everything: [name, category, key, source] for every entry, book and adventure
+  const everything: [string, string, string, string][] = [];
+  for (const [id, built] of Object.entries(builtAll)) for (const r of built.rows as { name: string; k: string; src: string }[]) everything.push([r.name, id, r.k, r.src]);
+  for (const id of ["books", "adventures"]) {
+    const rows = (bookRows[id] ?? []) as { name: string; k: string; src: string }[];
+    for (const r of rows) everything.push([r.name, id, r.k, r.src]);
+  }
+  writer.write("search.json", everything);
 
   const redirectTable = readJson(join(data, "generated", "gendata-tag-redirects.json")) as Record<string, Record<string, string>>;
   const redirects: Record<string, Record<string, string>> = {};

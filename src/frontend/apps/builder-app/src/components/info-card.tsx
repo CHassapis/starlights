@@ -4,18 +4,7 @@ import { ElementDetails } from "@/components/element-details";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-
-/** Whether the device has a mouse (hover cards) rather than touch (bottom sheets). */
-export function useCanHover(): boolean {
-  const [canHover, setCanHover] = useState(() => typeof window !== "undefined" && window.matchMedia("(hover: hover) and (pointer: fine)").matches);
-  useEffect(() => {
-    const query = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const update = () => setCanHover(query.matches);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-  return canHover;
-}
+import { useCanHover } from "@/hooks/use-can-hover";
 
 /**
  * Explains an element where it is named: point at it (or focus it with the keyboard) for a card with what it does;

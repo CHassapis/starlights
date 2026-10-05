@@ -396,7 +396,7 @@ export function MainNavigation() {
             <Link to="/campaigns" aria-label="Campaigns" className="rounded-md p-2 hover:bg-muted">
               <ScrollTextIcon className="size-5" />
             </Link>
-            <Link to="/compendium" aria-label="Compendium" className="rounded-md p-2 hover:bg-muted">
+            <Link to="/lore" aria-label="Compendium of Lore" className="rounded-md p-2 hover:bg-muted">
               <LibraryBigIcon className="size-5" />
             </Link>
           </div>
@@ -439,7 +439,7 @@ function PlayerChip() {
 
 export function Header() {
   return (
-    <div className="sticky top-0 bg-background/80 backdrop-blur-md z-20 border-b ">
+    <div className="sticky top-0 bg-background/80 backdrop-blur-md z-20 border-b print:hidden">
       <header className="container mx-auto px-4 ">
         <MainNavigation />
       </header>
