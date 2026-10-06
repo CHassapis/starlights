@@ -49,7 +49,8 @@ public sealed class GetHomebrewEndpoint : EndpointWithoutRequest<GetHomebrewResp
         var files = new List<HomebrewFileModel>();
         if (Directory.Exists(folder))
         {
-            foreach (var path in Directory.EnumerateFiles(folder, "*.xml").Order())
+            // the magic items made on the page are edited there, not as a file
+            foreach (var path in Directory.EnumerateFiles(folder, "*.xml").Where(p => Path.GetFileName(p) != HomebrewContent.ItemsFile).Order())
             {
                 try
                 {
@@ -125,6 +126,12 @@ public sealed class UploadHomebrewEndpoint : Endpoint<UploadHomebrewRequest>
         var folder = HomebrewFiles.Folder(Config);
         Directory.CreateDirectory(folder);
         var name = HomebrewFiles.SafeName(req.FileName);
+        if (name == HomebrewContent.ItemsFile)
+        {
+            AddError(r => r.FileName, "That name is kept for the magic items made on the Homebrew page; rename the file.");
+            await Send.ErrorsAsync(cancellation: ct);
+            return;
+        }
         document.Save(Path.Combine(folder, name));
 
         var result = await _importer.ImportAsync(AuroraImporterIndex.Homebrew, replace: false, update: true, ct);
@@ -152,7 +159,7 @@ public sealed class DeleteHomebrewEndpoint : EndpointWithoutRequest
     {
         var name = HomebrewFiles.SafeName(Route<string>("file") ?? string.Empty);
         var path = Path.Combine(HomebrewFiles.Folder(Config), name);
-        if (!File.Exists(path))
+        if (!File.Exists(path) || name == HomebrewContent.ItemsFile)
         {
             await Send.NotFoundAsync(ct);
             return;

@@ -1,5 +1,6 @@
 /** Names and styles the campaign pages share. */
 import type { EntryKind } from "@/lib/api/campaigns";
+import { homebrewSources, useSources } from "@/lib/api/sources";
 
 export const KIND_NAMES: Record<EntryKind, string> = {
   session: "Session",
@@ -21,3 +22,9 @@ export const CODEX_KINDS: EntryKind[] = ["place", "faction", "item", "handout"];
 
 export const textareaClass =
   "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
+/** The books a campaign's item pickers leave out: the homebrew ones, unless the DM switched on "Use homebrew". */
+export function useCampaignRestricted(useHomebrew: boolean | undefined): string[] {
+  const { data } = useSources();
+  return useHomebrew || !data ? [] : homebrewSources(data.sources);
+}

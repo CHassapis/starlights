@@ -18,7 +18,7 @@ import { normalizeText } from "@/lib/rules/picker";
 import { cn } from "@/lib/utils";
 import { ItemPicker } from "@/components/item-picker";
 import { DmNotes, EntryDialog, GiveDialog, Prose, ShareOutDialog, UnlockCampaign } from "./campaign-dialogs";
-import { CODEX_KINDS, KIND_NAMES, textareaClass } from "./campaign-shared";
+import { CODEX_KINDS, KIND_NAMES, textareaClass, useCampaignRestricted } from "./campaign-shared";
 import { PartySummary } from "./party-summary";
 import { CampaignNotes } from "./campaign-notes";
 
@@ -172,6 +172,7 @@ export function CampaignPage() {
           party={view.party}
           nextNumber={nextSession}
           sort={view.entries.length}
+          useHomebrew={view.campaign.useHomebrew}
         />
       )}
       {settings && <CampaignSettings view={view} onClose={() => setSettings(false)} />}
@@ -644,6 +645,7 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
   const [picking, setPicking] = useState(false);
   const [book, setBook] = useState<{ elementId: string; baseElementId?: string | null; name: string } | null>(null);
   const [open, setOpen] = useState<CampaignEntry | null>(null);
+  const restricted = useCampaignRestricted(view.campaign.useHomebrew);
   return (
     <div className="space-y-3">
       {canEdit && (
@@ -710,7 +712,7 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
       <ItemPicker
         open={picking}
         onOpenChange={setPicking}
-        restrictedSources={[]}
+        restrictedSources={restricted}
         onAdd={(add) => {
           if (!add.item) {
             toast.info("Make your own items with \"New magic item\": they get a picture and stay in this campaign.");
@@ -724,7 +726,6 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
   );
 }
 
-/** Name, description, cover, party, password; deleting the campaign. */
 /** The DM side, locked: the campaign's DM password (or the site's admin password) opens it on this device. */
 function BecomeDm({ campaignId, open, onOpenChange, onDone }: { campaignId: string; open: boolean; onOpenChange: (o: boolean) => void; onDone: () => void }) {
   const [password, setPassword] = useState("");
@@ -767,6 +768,7 @@ function BecomeDm({ campaignId, open, onOpenChange, onDone }: { campaignId: stri
   );
 }
 
+/** Name, description, cover, party, homebrew, password; deleting the campaign. */
 function CampaignSettings({ view, onClose }: { view: CampaignView; onClose: () => void }) {
   const navigate = useNavigate();
   const actions = useCampaignActions(view.campaign.id);
@@ -774,6 +776,7 @@ function CampaignSettings({ view, onClose }: { view: CampaignView; onClose: () =
   const [description, setDescription] = useState(view.campaign.description);
   const [coverUrl, setCoverUrl] = useState(view.campaign.coverUrl ?? null);
   const [party, setParty] = useState<string[]>(view.campaign.party);
+  const [useHomebrew, setUseHomebrew] = useState(view.campaign.useHomebrew ?? false);
   const [password, setPassword] = useState("");
   const [dmName, setDmName] = useState(view.campaign.dmName ?? "");
   const [dmPassword, setDmPassword] = useState("");
@@ -835,12 +838,21 @@ function CampaignSettings({ view, onClose }: { view: CampaignView; onClose: () =
               ))}
             </div>
           </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" checked={useHomebrew} onChange={(e) => setUseHomebrew(e.target.checked)} />
+            <span>
+              <span className="font-medium">Use homebrew</span>
+              <span className="block text-xs text-muted-foreground">
+                Homebrew magic items and monsters (Homebrew page) can be given and added to encounters in this campaign.
+              </span>
+            </span>
+          </label>
           <Button
             className="w-full"
             disabled={!name.trim() || actions.update.isPending}
             onClick={() =>
               actions.update.mutate(
-                { name, description, coverUrl, party },
+                { name, description, coverUrl, party, useHomebrew },
                 {
                   onSuccess: () => {
                     toast.success("Saved");

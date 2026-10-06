@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FlaskConicalIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { useRef } from "react";
+import { HomebrewItems, HomebrewMonsters } from "./homebrew-tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +20,7 @@ interface HomebrewFile {
  * The group's own content: Aurora element files (.xml). Everyone can see what is there; adding or removing files
  * needs the master admin password (key button in the header).
  */
-export function HomebrewPage() {
+function FilesTab() {
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const admin = isAdmin();
@@ -48,15 +50,12 @@ export function HomebrewPage() {
   });
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="font-heading text-3xl tracking-wide">Homebrew</h1>
-          <p className="text-muted-foreground">
-            Your group's own races, classes, subclasses, backgrounds and feats, as Aurora element files. They appear in the builder under the
-            Homebrew sources.
-          </p>
-        </div>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Your group's own species, classes, subclasses, backgrounds and feats, as Aurora element files (.xml). They appear in the builder under the
+          Homebrew books, for characters that tick Homebrew in their Sources.
+        </p>
         {admin ? (
           <>
             <Button onClick={() => input.current?.click()} disabled={upload.isPending}>
@@ -120,6 +119,40 @@ export function HomebrewPage() {
           </section>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The group's homebrew: magic items and monsters made here, and uploaded Aurora files for anything else. Homebrew is
+ * off unless switched on: a character ticks Homebrew in its Sources; a campaign switches on "Use homebrew".
+ */
+export function HomebrewPage() {
+  return (
+    <div className="space-y-6 pb-16">
+      <header className="space-y-1">
+        <h1 className="font-heading text-3xl tracking-wide">Homebrew</h1>
+        <p className="max-w-3xl text-muted-foreground">
+          Your group's own items, monsters, classes and more. Homebrew stays hidden until it's switched on: a player ticks Homebrew in their character's
+          Sources, and a DM switches on Use homebrew in the campaign's settings.
+        </p>
+      </header>
+      <Tabs defaultValue="items">
+        <TabsList>
+          <TabsTrigger value="items">Magic items</TabsTrigger>
+          <TabsTrigger value="monsters">Monsters</TabsTrigger>
+          <TabsTrigger value="files">Classes, species & more (files)</TabsTrigger>
+        </TabsList>
+        <TabsContent value="items" className="mt-4">
+          <HomebrewItems />
+        </TabsContent>
+        <TabsContent value="monsters" className="mt-4">
+          <HomebrewMonsters />
+        </TabsContent>
+        <TabsContent value="files" className="mt-4">
+          <FilesTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

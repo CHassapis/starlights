@@ -46,6 +46,8 @@ export interface Campaign {
   updatedAt: string;
   dmName?: string | null;
   hasDmPassword?: boolean;
+  /** the DM's switch: homebrew items and monsters show in this campaign */
+  useHomebrew?: boolean;
   /** only in the answer to creating it */
   dmToken?: string | null;
 }
@@ -135,7 +137,8 @@ export function useCampaignActions(campaignId?: string) {
       onSettled: refresh,
     }),
     update: useMutation({
-      mutationFn: (body: { name: string; description: string; coverUrl?: string | null; party: string[] }) => apiClient.put<typeof body, Campaign>(base, body),
+      mutationFn: (body: { name: string; description: string; coverUrl?: string | null; party: string[]; useHomebrew?: boolean }) =>
+        apiClient.put<typeof body, Campaign>(base, body),
       onSettled: refresh,
     }),
     remove: useMutation({ mutationFn: () => apiClient.delete(base), onSettled: refresh }),

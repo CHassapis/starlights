@@ -43,11 +43,11 @@ public sealed record CampaignsResponse(List<CampaignSummaryModel> Campaigns, boo
 public sealed record PartyMemberModel(Guid CharacterId, string Name, string? PlayerName, int? Level, string? Build, string? PortraitUrl, bool Locked, bool Missing);
 
 /// <summary>A campaign; DmToken only in the answer to its creation (the creator's DM token).</summary>
-public sealed record CampaignModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, DateTimeOffset UpdatedAt, string? DmName = null, bool HasDmPassword = false, string? DmToken = null);
+public sealed record CampaignModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, DateTimeOffset UpdatedAt, string? DmName = null, bool HasDmPassword = false, string? DmToken = null, bool UseHomebrew = false);
 
 public sealed record CampaignResponse(CampaignModel Campaign, List<PartyMemberModel> Party, List<CampaignEntryModel> Entries, bool Dm);
 
-public sealed record SaveCampaignRequest(string? Name, string? Description, string? CoverUrl, List<Guid>? Party, string? DmName = null, string? DmPassword = null);
+public sealed record SaveCampaignRequest(string? Name, string? Description, string? CoverUrl, List<Guid>? Party, string? DmName = null, string? DmPassword = null, bool? UseHomebrew = null);
 
 public sealed record SaveEntryRequest(string? Kind, string? Title, int? Number, string? OccurredOn, bool Visible, string? Body, string? DmNotes, string? ImageUrl, JsonElement? Data, int Sort);
 
@@ -77,7 +77,7 @@ internal static class CampaignAccess
         }
     }
 
-    public static CampaignModel Model(Campaign c) => new(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.PasswordHash is not null, c.UpdatedAt, c.DmName, c.DmPasswordHash is not null);
+    public static CampaignModel Model(Campaign c) => new(c.Id, c.Name, c.Description, c.CoverUrl, c.Party, c.PasswordHash is not null, c.UpdatedAt, c.DmName, c.DmPasswordHash is not null, UseHomebrew: c.UseHomebrew);
 
     /// <summary>Whether the reader may read the campaign: it is open, or they gave its password, or they are the DM.</summary>
     public static bool CanOpen(HttpContext context, PlayerAccess access, Campaign c) =>
@@ -305,6 +305,11 @@ public sealed class UpdateCampaignEndpoint : Endpoint<SaveCampaignRequest, Campa
             CampaignAccess.DeleteImage(Config, campaign.Id, campaign.CoverUrl);
         }
         campaign.Update(req.Name!, req.Description ?? string.Empty, req.CoverUrl, req.Party ?? []);
+        // left out (an older page): unchanged
+        if (req.UseHomebrew is bool useHomebrew)
+        {
+            campaign.SetUseHomebrew(useHomebrew);
+        }
         await _persistence.SaveChangesAsync();
         await Send.OkAsync(CampaignAccess.Model(campaign), ct);
     }

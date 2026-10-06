@@ -9,15 +9,18 @@ import { ArrowLeftIcon, DicesIcon, EyeIcon, EyeOffIcon, HeartIcon, PlayIcon, Plu
 import { lazy, Suspense, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { HomebrewStatBlock } from "@/components/homebrew-stat-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { CampaignLockedError, useCampaign } from "@/lib/api/campaigns";
 import { useChangeFight, useFight } from "@/lib/api/encounters";
+import { useHomebrewMonsters } from "@/lib/api/homebrew";
 import { creatureStats, type CompendiumLink } from "@/lib/lore/campaign-links";
 import { useLoreMeta } from "@/lib/lore/data";
 import { health, inOrder, MARKS, nextTurn, type Combatant, type Fight } from "@/lib/rules/encounter";
+import { modifier, saveBonuses, type HomebrewMonster } from "@/lib/rules/homebrew";
 import { cn } from "@/lib/utils";
 import { UnlockCampaign } from "./campaign-dialogs";
 
@@ -34,6 +37,7 @@ export function EncounterPage() {
   const lore = useLoreMeta();
   const [picking, setPicking] = useState(false);
   const [adding, setAdding] = useState(false);
+  const homebrew = useHomebrewMonsters(!!campaign.data?.campaign.useHomebrew && !!campaign.data.dm);
 
   if (campaign.error instanceof CampaignLockedError) {
     return (
@@ -94,6 +98,26 @@ export function EncounterPage() {
     });
   }
 
+  function addHomebrew(m: HomebrewMonster, count: number) {
+    apply((x) => {
+      const same = x.combatants.filter((c) => c.link?.key === m.id).length;
+      const added: Combatant[] = Array.from({ length: count }, (_, i) => ({
+        id: newId(),
+        kind: "monster",
+        name: count + same > 1 ? `${m.name} ${same + i + 1}` : m.name,
+        link: { category: "homebrew", key: m.id ?? m.name, name: m.name },
+        hp: m.hp,
+        maxHp: m.hp,
+        ac: m.ac,
+        saves: saveBonuses(m),
+        initiativeBonus: modifier(m.abilities.dex ?? 10),
+        initiative: null,
+        conditions: [],
+      }));
+      return { ...x, combatants: [...x.combatants, ...added] };
+    });
+  }
+  const homebrewOf = (c: Combatant) => (c.link?.category === "homebrew" ? homebrew.data?.find((m) => m.id === c.link?.key) : undefined);
   const addParty = () =>
     apply((x) => ({
       ...x,
@@ -150,6 +174,7 @@ export function EncounterPage() {
             <Button size="sm" variant="outline" onClick={() => setPicking(true)}>
               <PlusIcon /> A creature from the Compendium
             </Button>
+            {view.campaign.useHomebrew && homebrew.data && homebrew.data.length > 0 && <AddHomebrew monsters={homebrew.data} onAdd={addHomebrew} />}
             <Button size="sm" variant="outline" onClick={() => setAdding((a) => !a)}>
               <PlusIcon /> Your own
             </Button>
@@ -186,7 +211,7 @@ export function EncounterPage() {
       ) : (
         <ol className="space-y-2">
           {order.map((c) => (
-            <Row key={c.id} c={c} dm={dm} current={f.active && f.turn === c.id} shareStats={f.shareStats} update={(patch) => update(c.id, patch)} remove={() => apply((x) => ({ ...x, combatants: x.combatants.filter((y) => y.id !== c.id), turn: x.turn === c.id ? null : x.turn }))} />
+            <Row key={c.id} c={c} stats={dm ? homebrewOf(c) : undefined} dm={dm} current={f.active && f.turn === c.id} shareStats={f.shareStats} update={(patch) => update(c.id, patch)} remove={() => apply((x) => ({ ...x, combatants: x.combatants.filter((y) => y.id !== c.id), turn: x.turn === c.id ? null : x.turn }))} />
           ))}
         </ol>
       )}
@@ -216,6 +241,31 @@ function AddLinked({ link, onAdd }: { link: CompendiumLink; onAdd: (count: numbe
       <Input aria-label={`How many ${link.name}`} inputMode="numeric" value={count} onChange={(e) => setCount(Math.min(20, Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1)))} className="h-7 w-10 px-1 text-center" />
       <Button size="sm" variant="ghost" className="h-7" onClick={() => onAdd(count)}>
         <PlusIcon /> {link.name}
+      </Button>
+    </span>
+  );
+}
+
+/** A homebrew monster (Homebrew page), when the campaign uses homebrew: its HP, AC, saves and initiative filled in. */
+function AddHomebrew({ monsters, onAdd }: { monsters: HomebrewMonster[]; onAdd: (m: HomebrewMonster, count: number) => void }) {
+  const [id, setId] = useState("");
+  const [count, setCount] = useState(1);
+  const sorted = [...monsters].sort((a, b) => a.name.localeCompare(b.name));
+  const chosen = sorted.find((m) => m.id === id);
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-sm">
+      <select aria-label="A homebrew monster" value={id} onChange={(e) => setId(e.target.value)} className="h-7 max-w-44 rounded-md bg-transparent px-1 text-sm">
+        <option value="">A homebrew monster…</option>
+        {sorted.map((m) => (
+          <option key={m.id} value={m.id ?? ""}>
+            {m.name}
+            {m.cr ? ` (CR ${m.cr})` : ""}
+          </option>
+        ))}
+      </select>
+      <Input aria-label="How many" inputMode="numeric" value={count} onChange={(e) => setCount(Math.min(20, Math.max(1, Number(e.target.value.replace(/\D/g, "")) || 1)))} className="h-7 w-10 px-1 text-center" />
+      <Button size="sm" variant="ghost" className="h-7" disabled={!chosen} onClick={() => chosen && onAdd(chosen, count)}>
+        <PlusIcon /> Add
       </Button>
     </span>
   );
@@ -261,8 +311,9 @@ function OwnCreature({ onAdd }: { onAdd: (c: Combatant) => void }) {
 
 const HEALTH_TONE: Record<string, string> = { unhurt: "text-emerald-600", hurt: "text-amber-600", bloodied: "text-red-600", down: "text-muted-foreground line-through" };
 
-function Row({ c, dm, current, shareStats, update, remove }: { c: Combatant; dm: boolean; current: boolean; shareStats: boolean; update: (p: Partial<Combatant>) => void; remove: () => void }) {
+function Row({ c, stats, dm, current, shareStats, update, remove }: { c: Combatant; stats?: HomebrewMonster; dm: boolean; current: boolean; shareStats: boolean; update: (p: Partial<Combatant>) => void; remove: () => void }) {
   const [amount, setAmount] = useState("");
+  const [showStats, setShowStats] = useState(false);
   const looks = c.kind === "pc" ? null : dm && c.hp !== undefined && c.maxHp !== undefined ? health(c.hp, c.maxHp) : c.health;
   const n = Number(amount) || 0;
   return (
@@ -304,6 +355,11 @@ function Row({ c, dm, current, shareStats, update, remove }: { c: Combatant; dm:
             </Button>
           </span>
         )}
+        {stats && (
+          <Button size="sm" variant="ghost" className="h-7" onClick={() => setShowStats((v) => !v)}>
+            {showStats ? "Hide stats" : "Stats"}
+          </Button>
+        )}
         {dm && (
           <>
             <Button size="icon" variant="ghost" className="size-7" aria-label={c.hidden ? `Show ${c.name} to players` : `Hide ${c.name} from players`} onClick={() => update({ hidden: !c.hidden })}>
@@ -343,6 +399,11 @@ function Row({ c, dm, current, shareStats, update, remove }: { c: Combatant; dm:
         )}
         {dm && c.notes !== undefined && <span className="text-xs text-muted-foreground">{c.notes}</span>}
       </div>
+      {stats && showStats && (
+        <div className="mt-2 rounded-md border bg-background/60 p-2">
+          <HomebrewStatBlock monster={stats} />
+        </div>
+      )}
     </li>
   );
 }

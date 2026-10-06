@@ -21,6 +21,7 @@ public class CampaignTypeConfiguration : IEntityTypeConfiguration<Campaign>
         builder.Property(e => e.PasswordHash).HasColumnName("password_hash");
         builder.Property(e => e.DmName).HasColumnName("dm_name").HasMaxLength(100);
         builder.Property(e => e.DmPasswordHash).HasColumnName("dm_password_hash");
+        builder.Property(e => e.UseHomebrew).HasColumnName("use_homebrew").HasDefaultValue(false);
 
         // the party as a JSON list of character ids
         builder.Property<List<Guid>>("_party")

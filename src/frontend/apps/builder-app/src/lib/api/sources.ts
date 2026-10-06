@@ -16,9 +16,14 @@ export function useSources() {
   });
 }
 
-/** New characters start with everything except the Unearthed Arcana playtest material. */
+/** New characters start with everything except the Unearthed Arcana playtest material and the group's homebrew. */
 export function defaultRestrictedSources(sources: SourceBook[]): string[] {
-  return sources.filter((s) => s.group === "unearthed-arcana").map((s) => s.name);
+  return sources.filter((s) => s.group === "unearthed-arcana" || s.group === "homebrew").map((s) => s.name);
+}
+
+/** The homebrew books, which a campaign shows only when its DM switches on "Use homebrew". */
+export function homebrewSources(sources: SourceBook[]): string[] {
+  return sources.filter((s) => s.group === "homebrew").map((s) => s.name);
 }
 
 /** Which rules a character is built with; both editions work together, so "mixed" allows everything. */
@@ -33,7 +38,7 @@ function isOriginalCore(s: SourceBook) {
 }
 
 /**
- * The books switched off for an edition. Unearthed Arcana always starts off. 2014 turns off the revised core books;
+ * The books switched off for an edition. Unearthed Arcana and homebrew always start off. 2014 turns off the revised core books;
  * 2024 turns off the 2014 core books and keeps every supplement (they work with the 2024 rules).
  */
 export function restrictedForEdition(edition: RulesEdition, sources: SourceBook[]): string[] {

@@ -12,7 +12,7 @@ import { creatureDetails, type CompendiumLink } from "@/lib/lore/campaign-links"
 import { useLoreMeta } from "@/lib/lore/data";
 import { COIN_KINDS, formatCoins, isEmpty, shareOut, type Coins } from "@/lib/rules/ledger";
 import { cn } from "@/lib/utils";
-import { CODEX_KINDS, KIND_NAMES, textareaClass } from "./campaign-shared";
+import { CODEX_KINDS, KIND_NAMES, textareaClass, useCampaignRestricted } from "./campaign-shared";
 
 const RARITIES = ["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"];
 
@@ -101,6 +101,7 @@ export function EntryDialog({
   party,
   nextNumber,
   sort,
+  useHomebrew,
 }: {
   campaignId: string;
   open: boolean;
@@ -110,8 +111,10 @@ export function EntryDialog({
   party: PartyMember[];
   nextNumber?: number;
   sort: number;
+  useHomebrew?: boolean;
 }) {
   const actions = useCampaignActions(campaignId);
+  const restricted = useCampaignRestricted(useHomebrew);
   const [form, setForm] = useState<EntryInput>(() =>
     entry ? { ...entry, dmNotes: entry.dmNotes ?? "", data: { ...entry.data } } : blank(kind, sort, kind === "session" ? nextNumber : undefined),
   );
@@ -451,7 +454,7 @@ export function EntryDialog({
           <ItemPicker
             open={pickingBook}
             onOpenChange={setPickingBook}
-            restrictedSources={[]}
+            restrictedSources={restricted}
             onAdd={(add) => {
               if (!add.item) return;
               const book = add.item;

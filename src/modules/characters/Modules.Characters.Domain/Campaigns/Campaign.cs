@@ -30,6 +30,15 @@ public sealed class Campaign : EntityBase<Guid>
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>Whether the group's homebrew (items and monsters from the Homebrew page) is offered in this campaign.</summary>
+    public bool UseHomebrew { get; private set; }
+
+    public void SetUseHomebrew(bool use)
+    {
+        UseHomebrew = use;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>
     /// The salted hash of the campaign's password, or null when it is open: with one, only those who give the
     /// password (and the DM) can read the campaign or add a character to it.
