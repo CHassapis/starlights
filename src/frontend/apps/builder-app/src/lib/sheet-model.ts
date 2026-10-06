@@ -52,6 +52,11 @@ export interface SheetItemCard {
 
 export interface SheetArmor {
   total: number;
+  /** the armor's AC, or without armor the unarmored calculation's total (Mage Armor and the like compare with it) */
+  base: number;
+  /** "Light", "Medium" or "Heavy"; null without armor */
+  armorKind: string | null;
+  hasShield: boolean;
   /** "Chain Mail", "Unarmored (13)", "Draconic Resilience (Sorcerer) (17)" */
   label: string;
   shield: string;
@@ -100,6 +105,9 @@ export function sheetArmor(inventory: Inventory, catalog: Catalog, facts: Charac
   const feature = ac.calculation ? featureOf(ac.calculation) : undefined;
   return {
     total: ac.total,
+    base: ac.parts[0]?.value ?? 10,
+    armorKind: ac.armor?.armor?.kind ?? null,
+    hasShield: !!ac.shield,
     label: ac.armor ? generatedName(ac.armor) : feature ? `${feature} (${unarmored})` : `Unarmored (${unarmored})`,
     shield: ac.shield ? generatedName(ac.shield) : "",
     stealthDisadvantage: ac.stealthDisadvantage,

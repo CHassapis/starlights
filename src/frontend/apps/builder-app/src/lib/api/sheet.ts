@@ -128,6 +128,8 @@ export interface SheetData {
   attackModes: AttackMode[];
   /** the magic items and consumables the character carries, with their texts, for the Battle Action Simulator */
   items: SheetItem[];
+  /** the barbarian's Rage damage bonus (Aurora's "barbarian rage:damage"), 0 without Rage */
+  rageDamage: number;
   equipment: SheetEquipment;
   itemCards: SheetItemCard[];
   spellPages: SheetSpellPage[];
@@ -576,6 +578,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       equipment: sheetEquipment(inventory.data, catalog.data.byId, facts, itemTexts),
       itemCards: sheetItemCards(inventory.data, catalog.data.byId, itemTexts),
       items: sheetItems(inventory.data, catalog.data.byId, itemTexts),
+      rageDamage: stat("barbarian-rage:damage") ?? 0,
       spellPages,
       cardSpells,
       proficiencySummary: owned,

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  effectFor,
+  effectiveArmorClass,
+  effectiveSpeed,
+  hitChanceWithDie,
   itemHealing,
   itemRiders,
   average,
@@ -190,6 +194,48 @@ describe("magic items", () => {
   it("reads what a potion heals", () => {
     expect(formatRoll(itemHealing("<p>You regain 2d4 + 2 hit points when you drink this potion.</p>")!, false)).toBe("2d4+2");
     expect(itemHealing("<p>A pleasant smell.</p>")).toBeNull();
+  });
+});
+
+describe("active effects", () => {
+  const ctx = (edition: "2014" | "2024", scores: Record<string, number> = {}) => ({ edition, mod: (a: string) => scores[a] ?? 0, proficiencyBonus: 3, rageDamage: 2 });
+  const fx = (keys: string[], edition: "2014" | "2024" = "2024", scores: Record<string, number> = { DEX: 3, INT: 4 }) => keys.map((k) => effectFor(k, ctx(edition, scores))!);
+  const unarmored = { total: 13, base: 13, armorKind: null, shield: false }; // 10 + Dex 3
+  const chain = { total: 16, base: 16, armorKind: "Heavy", shield: false };
+  const leatherShield = { total: 16, base: 11, armorKind: "Light", shield: true }; // 11 + Dex 3 + shield 2
+
+  it("Shield adds 5; Mage Armor makes the base 13 + Dex only without armor", () => {
+    expect(effectiveArmorClass(unarmored, fx(["Shield"])).total).toBe(18);
+    expect(effectiveArmorClass(unarmored, fx(["Mage Armor"])).total).toBe(16);
+    expect(effectiveArmorClass(chain, fx(["Mage Armor"])).total).toBe(16);
+    expect(effectiveArmorClass(unarmored, fx(["Mage Armor", "Shield"])).total).toBe(21);
+  });
+
+  it("Bladesong adds Intelligence (at least 1) only in light or no armor and without a shield", () => {
+    expect(effectiveArmorClass(unarmored, fx(["Bladesong"])).total).toBe(17);
+    expect(effectiveArmorClass(leatherShield, fx(["Bladesong"])).total).toBe(16);
+    expect(effectiveArmorClass(unarmored, fx(["Bladesong"], "2024", { DEX: 3, INT: -1 })).total).toBe(14);
+    expect(effectiveArmorClass(chain, fx(["Bladesong"])).total).toBe(16);
+  });
+
+  it("Barkskin sets a floor by edition; Haste and Slow change AC and speed", () => {
+    expect(effectiveArmorClass(unarmored, fx(["Barkskin"], "2014")).total).toBe(16);
+    expect(effectiveArmorClass(unarmored, fx(["Barkskin"], "2024")).total).toBe(17);
+    expect(effectiveArmorClass({ ...chain, total: 19 }, fx(["Barkskin"])).total).toBe(19);
+    expect(effectiveArmorClass(chain, fx(["Haste"])).total).toBe(18);
+    expect(effectiveSpeed(30, fx(["Haste"]))).toBe(60);
+    expect(effectiveSpeed(30, fx(["Slow"]))).toBe(15);
+    expect(effectiveSpeed(30, fx(["Bladesong", "Longstrider"]))).toBe(50);
+  });
+
+  it("Bless raises the chance to hit by its die; Aid by slot level", () => {
+    const plain = hitChanceWithDie(5, 15, "normal", null).hit;
+    const blessed = hitChanceWithDie(5, 15, "normal", { sides: 4, sign: 1 }).hit;
+    expect(plain).toBeCloseTo(0.55);
+    expect(blessed).toBeCloseTo(0.55 + 2.5 * 0.05);
+    expect(effectFor("Aid@2", ctx("2024"))!.maxHpBonus).toBe(5);
+    expect(effectFor("Aid@4", ctx("2024"))!.maxHpBonus).toBe(15);
+    expect(effectFor("Fireball", ctx("2024"))).toBeNull();
   });
 });
 

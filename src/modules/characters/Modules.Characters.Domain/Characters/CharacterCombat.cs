@@ -37,6 +37,9 @@ public sealed record CharacterCombat
     /// <summary>Item powers switched on ("&lt;inventory entry id&gt;:extra", a Flame Tongue set ablaze).</summary>
     public List<string> Active { get; init; } = [];
 
+    /// <summary>Spells, features and situations affecting the character ("Shield", "Bladesong", "Aid@3").</summary>
+    public List<string> Effects { get; init; } = [];
+
     /// <summary>Familiars, companions, steeds and summons in the fight, each with its own hit points.</summary>
     public List<CharacterCompanion> Companions { get; init; } = [];
 
@@ -54,6 +57,10 @@ public sealed record CharacterCombat
         if (Concentration is { Length: > 200 } || Conditions.Count > 30 || Conditions.Any(c => c.Length is 0 or > 60))
         {
             return "At most 30 conditions, each a short name.";
+        }
+        if (Effects.Count > 50 || Effects.Any(e => e.Length is 0 or > 100))
+        {
+            return "At most 50 effects, each a short name.";
         }
         if (Active.Count > 50 || Active.Any(a => a.Length is 0 or > 200))
         {

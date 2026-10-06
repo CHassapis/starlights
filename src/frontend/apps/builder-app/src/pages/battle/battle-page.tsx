@@ -40,6 +40,14 @@ import { useLoreLookup } from "@/lib/lore/lookup";
 import {
   average,
   averageGreatWeapon,
+  effectFor,
+  effectiveArmorClass,
+  effectiveSpeed,
+  hitChanceWithDie,
+  PICKABLE_EFFECTS,
+  SELF_SPELLS,
+  type BattleEffect,
+  type Roll,
   CONDITIONS,
   critical,
   currentHitPoints,
@@ -48,7 +56,6 @@ import {
   formatRoll,
   gainTemporary,
   heal,
-  hitChance,
   longRest as restLong,
   MASTERY,
   maxHitPoints,
@@ -142,7 +149,23 @@ export function CharacterBattlePage() {
   const updateMagic = (change: (m: MagicState) => MagicState) => saveMagic.update(change, failed);
 
   const edition = model.edition;
-  const maxHp = maxHitPoints(data.hitPoints ?? 0, state, edition);
+  // spells, features and situations in effect (Shield, Bladesong, Bless…): they change AC, attacks, speed, hit points
+  const effectCtx = { edition, mod: model.mod, proficiencyBonus: data.proficiencyBonus, rageDamage: data.rageDamage ?? 0 };
+  const effects = (state.effects ?? []).map((k) => effectFor(k, effectCtx)).filter((e): e is BattleEffect => e !== null);
+  const ac = effectiveArmorClass({ total: data.armorClass, base: data.armor.base ?? data.armorClass, armorKind: data.armor.armorKind ?? null, shield: !!data.armor.hasShield }, effects);
+  const fx: Fx = {
+    attackBonus: effects.reduce((n, e) => n + (e.attackBonus ?? 0), 0),
+    die: effects.find((e) => e.d20Die)?.d20Die ?? null,
+    dieFrom: effects.filter((e) => e.d20Die).map((e) => e.name).join(", "),
+    weaponDamage: effects.filter((e) => e.weaponDamage).map((e) => ({ label: e.name, roll: e.weaponDamage! })),
+    strengthMelee: effects.reduce((n, e) => n + (e.strengthMeleeDamage ?? 0), 0),
+  };
+  const setEffect = (key: string, on: boolean) =>
+    updateCombat((c) => {
+      const others = (c.effects ?? []).filter((k) => k.split("@")[0].toLowerCase() !== key.split("@")[0].toLowerCase());
+      return { ...c, effects: on ? [...others, key] : others };
+    });
+  const maxHp = maxHitPoints(data.hitPoints ?? 0, state, edition) + effects.reduce((n, e) => n + (e.maxHpBonus ?? 0), 0);
   const hp = currentHitPoints(maxHp, state);
   const conditionInfo = CONDITIONS.filter((c) => state.conditions.includes(c.name));
   const exhaustion = exhaustionEffect(state.exhaustion, edition);
@@ -150,7 +173,7 @@ export function CharacterBattlePage() {
   const noReactions = conditionInfo.some((c) => c.noReactions) || hp === 0;
   const speedZero = conditionInfo.some((c) => c.speedZero) || exhaustion.speedZero;
   const baseSpeed = Math.max(0, (exhaustion.speedHalved ? Math.floor(data.speeds.walk / 2) : data.speeds.walk) - exhaustion.speedPenalty);
-  const speed = speedZero ? 0 : baseSpeed;
+  const speed = speedZero ? 0 : effectiveSpeed(baseSpeed, effects);
   const forcedDisadvantage = conditionInfo.some((c) => c.attackDisadvantage) || exhaustion.attackDisadvantage;
   const effectiveAdvantage: Advantage = forcedDisadvantage ? (advantage === "advantage" ? "normal" : "disadvantage") : advantage;
   const d20Penalty = exhaustion.d20Penalty;
@@ -179,6 +202,11 @@ export function CharacterBattlePage() {
       if (left < amount) return toast.error(left > 0 ? `Only ${left} ${u?.kind === "pool" ? u.pool : `use${left === 1 ? "" : "s"} of ${f.title}`} left` : `No ${u?.kind === "pool" ? u.pool : `uses of ${f.title}`} left`);
       updateCombat((c) => ({ ...c, uses: { ...c.uses, [owner.title]: (c.uses[owner.title] ?? 0) + amount } }));
     }
+    // a feature that changes the numbers while it lasts (Rage, Bladesong) starts its effect
+    if (effectFor(f.title, effectCtx)) {
+      setEffect(f.title, true);
+      toast.info(`${f.title}: ${effectFor(f.title, effectCtx)!.summary}`);
+    }
     markUsed(f.slot);
   };
 
@@ -201,10 +229,22 @@ export function CharacterBattlePage() {
     }
     if (spell.concentration) {
       if (state.concentration && state.concentration !== spell.name) toast.info(`${state.concentration} ends: you can concentrate on one spell at a time.`);
-      updateCombat((c) => ({ ...c, concentration: spell.name }));
+      // the spell concentrated on before ends, and its effect with it
+      updateCombat((c) => ({ ...c, concentration: spell.name, effects: (c.effects ?? []).filter((k) => !c.concentration || k.split("@")[0].toLowerCase() !== c.concentration.toLowerCase()) }));
     }
     markUsed(spell.slot);
-    toast.success(`${spell.name} cast${spell.level > 0 ? ` with a ${usePact ? `pact (${ordinal(level)}-level)` : `${ordinal(level)}-level`} slot` : ""}`);
+    const key = /^(aid|magic weapon)$/i.test(spell.name) ? `${spell.name}@${level}` : spell.name;
+    const effect = effectFor(key, { ...effectCtx, edition: /\(2024\)/.test(spell.source) ? "2024" : spell.source ? "2014" : edition });
+    const done = `${spell.name} cast${spell.level > 0 ? ` with a ${usePact ? `pact (${ordinal(level)}-level)` : `${ordinal(level)}-level`} slot` : ""}`;
+    if (effect && SELF_SPELLS.has(spell.name.toLowerCase())) {
+      setEffect(key, true);
+      toast.success(`${done}: ${effect.summary}`);
+    } else if (effect) {
+      // a buff that may be on someone else (Bless, Haste): the player says whether it is on them
+      toast.success(done, { description: effect.summary, action: { label: "It's on me too", onClick: () => setEffect(key, true) }, duration: 10000 });
+    } else {
+      toast.success(done);
+    }
   };
 
   const damage = (amount: number) => {
@@ -217,7 +257,8 @@ export function CharacterBattlePage() {
 
   const nextTurn = () => {
     setTurn((t) => ({ ...NEW_TURN, round: t.round + 1 }));
-    updateCombat((c) => newTurn(c, model.features));
+    // Shield and Dodge last until the start of your next turn
+    updateCombat((c) => ({ ...newTurn(c, model.features), effects: (c.effects ?? []).filter((k) => !effectFor(k, effectCtx)?.untilNextTurn) }));
   };
 
   // ?model: what the simulator worked out, for checking it against every class (scripts/starlights-battle-check.py)
@@ -275,7 +316,7 @@ export function CharacterBattlePage() {
       failed,
     );
 
-  const ctx: Ctx = { data, model, state, targetAc, advantage: effectiveAdvantage, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf };
+  const ctx: Ctx = { data, model, state, targetAc, advantage: effectiveAdvantage, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf, fx, effects, setEffect, effectCtx };
 
   return (
     <Shell>
@@ -285,8 +326,9 @@ export function CharacterBattlePage() {
         </pre>
       )}
       <Header id={id} data={data} model={model} onRest={setRest} />
-      <Vitals data={data} model={model} state={state} hp={hp} maxHp={maxHp} speed={speed} onDamage={damage} onHeal={(n) => updateCombat((c) => heal(c, n))} onTemp={(n) => updateCombat((c) => gainTemporary(c, n))} />
+      <Vitals data={data} model={model} state={state} hp={hp} maxHp={maxHp} speed={speed} ac={ac} onDamage={damage} onHeal={(n) => updateCombat((c) => heal(c, n))} onTemp={(n) => updateCombat((c) => gainTemporary(c, n))} />
       <Status data={data} state={state} edition={edition} exhaustionText={exhaustion.text} updateCombat={updateCombat} hp={hp} />
+      <Effects ctx={ctx} />
       <TurnBar
         turn={turn}
         setTurn={setTurn}
@@ -305,6 +347,15 @@ export function CharacterBattlePage() {
       <RestDialog kind={rest} onClose={() => setRest(null)} ctx={ctx} totalHitDice={data.level} />
     </Shell>
   );
+}
+
+/** What the active effects add to attacks: flat bonus, a die (Bless, Bane), weapon damage, Rage's bonus. */
+interface Fx {
+  attackBonus: number;
+  die: { sides: number; sign: 1 | -1 } | null;
+  dieFrom: string;
+  weaponDamage: { label: string; roll: Roll }[];
+  strengthMelee: number;
 }
 
 interface Ctx {
@@ -328,6 +379,10 @@ interface Ctx {
   updateMagic: (change: (m: MagicState) => MagicState) => void;
   updateCombat: (change: (c: CombatState) => CombatState) => void;
   setCharges: (entryId: string, used: number) => void;
+  fx: Fx;
+  effects: BattleEffect[];
+  setEffect: (key: string, on: boolean) => void;
+  effectCtx: Parameters<typeof effectFor>[1];
   consume: (entryId: string) => void;
   chargedItemOf: (spell: BattleSpell) => SheetData["items"][number] | undefined;
 }
@@ -440,6 +495,7 @@ function Vitals({
   hp,
   maxHp,
   speed,
+  ac,
   onDamage,
   onHeal,
   onTemp,
@@ -450,6 +506,7 @@ function Vitals({
   hp: number;
   maxHp: number;
   speed: number;
+  ac: { total: number; changes: string[] };
   onDamage: (n: number) => void;
   onHeal: (n: number) => void;
   onTemp: (n: number) => void;
@@ -493,7 +550,7 @@ function Vitals({
         </p>
       </Panel>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-        <Stat label="Armor class" value={data.armorClass} sub={data.armor.label + (data.armor.shield ? ` + ${data.armor.shield}` : "")} />
+        <Stat label="Armor class" value={ac.total} sub={ac.changes.length ? ac.changes.join(" · ") : data.armor.label + (data.armor.shield ? ` + ${data.armor.shield}` : "")} className={ac.total !== data.armorClass ? "border-sky-300/50" : undefined} />
         <Stat label="Initiative" value={signed(data.initiative)} />
         <Stat label="Speed" value={`${speed} ft`} sub={[data.speeds.fly && `fly ${data.speeds.fly}`, data.speeds.climb && `climb ${data.speeds.climb}`, data.speeds.swim && `swim ${data.speeds.swim}`].filter(Boolean).join(" · ") || undefined} />
         <Stat label="Proficiency" value={signed(data.proficiencyBonus)} />
@@ -516,7 +573,11 @@ function Status({ data, state, edition, exhaustionText, updateCombat, hp }: { da
         {state.concentration ? (
           <Chip tone="gold">
             Concentrating on {state.concentration}
-            <button type="button" className="ml-1 underline" onClick={() => updateCombat((c) => ({ ...c, concentration: null }))}>
+            <button
+              type="button"
+              className="ml-1 underline"
+              onClick={() => updateCombat((c) => ({ ...c, concentration: null, effects: (c.effects ?? []).filter((k) => !c.concentration || k.split("@")[0].toLowerCase() !== c.concentration.toLowerCase()) }))}
+            >
               end
             </button>
           </Chip>
@@ -592,6 +653,61 @@ function Status({ data, state, edition, exhaustionText, updateCombat, hp }: { da
         </div>
       )}
       <span className="sr-only">{data.name}</span>
+    </Panel>
+  );
+}
+
+/** What is in effect on the character (from its own spells and features, allies' spells, cover) and adding more. */
+function Effects({ ctx }: { ctx: Ctx }) {
+  const [adding, setAdding] = useState(false);
+  const active = new Set((ctx.state.effects ?? []).map((k) => k.split("@")[0].toLowerCase()));
+  // what it could have: its own spells and features that change numbers, and what allies or the table bring
+  const own = [...ctx.model.spells.map((sp) => sp.name), ...ctx.model.features.map((f) => f.title)].filter((n) => effectFor(n, ctx.effectCtx));
+  const choices = [...new Set([...own, ...PICKABLE_EFFECTS])].filter((k) => !active.has(k.split("@")[0].toLowerCase()));
+  return (
+    <Panel
+      title="In effect"
+      icon={<SparklesIcon className="size-4 text-sky-300" />}
+      action={
+        <Button size="sm" variant="ghost" className="h-7 text-white/80" onClick={() => setAdding((a) => !a)}>
+          {adding ? "Done" : "Add an effect…"}
+        </Button>
+      }
+    >
+      {ctx.effects.length === 0 ? (
+        <p className="text-xs text-white/55">Nothing yet. Casting a spell or using a feature that changes your numbers (Shield, Mage Armor, Bladesong, Rage) turns it on here; so can you.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {ctx.effects.map((e) => (
+            <li key={e.key} className="flex flex-wrap items-center gap-2 text-sm">
+              <Chip tone={e.kind === "situation" ? "neutral" : "blue"}>{e.key.replace("@", " at level ")}</Chip>
+              <span className="text-xs text-white/75">{e.summary}</span>
+              {e.untilNextTurn && <span className="text-[11px] text-white/45">ends at the start of your next turn</span>}
+              {e.concentration && <span className="text-[11px] text-white/45">concentration</span>}
+              {e.notes && <span className="text-[11px] text-white/45">{e.notes}</span>}
+              <span className="flex-1" />
+              <Button size="sm" variant="ghost" className="h-6 text-white/60" aria-label={`End ${e.name}`} onClick={() => ctx.setEffect(e.key, false)}>
+                End
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {adding && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {choices.map((k) => (
+            <button
+              key={k}
+              type="button"
+              title={effectFor(k, ctx.effectCtx)?.summary}
+              onClick={() => ctx.setEffect(k, true)}
+              className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-white/80 hover:border-sky-300/60 hover:bg-white/10"
+            >
+              {k.replace("@2", "")}
+            </button>
+          ))}
+        </div>
+      )}
     </Panel>
   );
 }
@@ -857,13 +973,22 @@ function SlotSection({ ctx, features, spells, empty }: { ctx: Ctx; features: Bat
 
 function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAttack; slot: Slot; attacks: number }) {
   const lookup = useLoreLookup();
-  const bonus = weapon.bonus - ctx.d20Penalty;
-  const { hit, crit } = hitChance(bonus, ctx.targetAc, ctx.advantage);
+  const bonus = weapon.bonus - ctx.d20Penalty + ctx.fx.attackBonus;
+  const { hit, crit } = hitChanceWithDie(bonus, ctx.targetAc, ctx.advantage, ctx.fx.die);
+  // Rage: attacks using Strength (melee; thrown too under the 2024 rules), finesse ones when Strength is the better
+  const usesStrength = !weapon.properties.includes("Finesse") || ctx.model.mod("STR") >= ctx.model.mod("DEX");
+  const strengthBased = usesStrength && (weapon.mode === "Thrown" ? ctx.model.edition === "2024" : weapon.melee);
+  const rage = strengthBased ? ctx.fx.strengthMelee : 0;
   // Great Weapon Fighting raises the average of the dice
   const avgOf = (r: typeof weapon.roll) => (weapon.greatWeapon ? averageGreatWeapon(r, weapon.greatWeapon) : average(r));
   // a magic weapon's extra damage that applies now (always on, or switched on in the Items tab)
   const powers = (weapon.entryId ? ctx.model.riders[weapon.entryId] : undefined) ?? [];
-  const on = powers.filter((p) => !p.critOnly && (p.always || (ctx.state.active ?? []).includes(`${weapon.entryId}:${p.id}`)));
+  const on = [
+    ...powers.filter((p) => !p.critOnly && (p.always || (ctx.state.active ?? []).includes(`${weapon.entryId}:${p.id}`))),
+    // spells on the character that add to weapon hits (Hunter's Mark, Divine Favor, Rage's bonus)
+    ...ctx.fx.weaponDamage.map((w, i) => ({ id: `fx${i}`, label: w.label, roll: w.roll, always: true, critOnly: false })),
+    ...(rage ? [{ id: "rage", label: "Rage", roll: { dice: [], bonus: rage, type: "" }, always: true, critOnly: false }] : []),
+  ];
   const onCrit = powers.filter((p) => p.critOnly);
   const extraAvg = on.reduce((n, p) => n + average(p.roll), 0);
   const extraCrit = on.reduce((n, p) => n + average(critical(p.roll)), 0) + onCrit.reduce((n, p) => n + average(critical(p.roll)), 0);
@@ -889,7 +1014,7 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
         </Button>
       </div>
       <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
-        <Mini label="To hit" value={signed(bonus)} />
+        <Mini label="To hit" value={`${signed(bonus)}${ctx.fx.die ? `${ctx.fx.die.sign > 0 ? "+" : "−"}1d${ctx.fx.die.sides}` : ""}`} sub={ctx.fx.die ? ctx.fx.dieFrom : undefined} />
         <Mini label="Damage" value={`${formatRoll(weapon.roll, false)}${on.map((p) => `+${formatRoll(p.roll, false)}`).join("")}`} sub={`${+avg.toFixed(1)} avg · ${lo}–${hi}${on.length ? "+" : ""}`} />
         <Mini label="Critical" value={formatRoll(critical(weapon.roll), false)} sub={`${+critAvg.toFixed(1)} avg`} />
         <Mini label={`vs AC ${ctx.targetAc}`} value={percent(hit)} sub={`${expected.toFixed(1)} dmg/attack`} />
@@ -1117,7 +1242,7 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
   const item = ctx.chargedItemOf(spell);
   const noSlot = item ? item.chargesUsed >= (item.charges ?? 0) : spell.level > 0 && (usePact ? ctx.pactLeft <= 0 : ctx.slotsLeft(castAt) <= 0);
   const blocked = spell.slot === "Reaction" ? ctx.noReactions : ctx.incapacitated;
-  const bonus = spell.attackBonus - ctx.d20Penalty;
+  const bonus = spell.attackBonus - ctx.d20Penalty + ctx.fx.attackBonus;
   return (
     <div className={cn("rounded-lg border bg-black/35 p-3", ready ? "border-white/10" : "border-dashed border-white/10 opacity-60")}>
       <div className="flex items-start gap-2">
@@ -1152,7 +1277,7 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
         </Button>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-        {effect.attack && <Chip tone="gold">{signed(bonus)} {effect.attack} spell attack · {percent(hitChance(bonus, ctx.targetAc, ctx.advantage).hit)} vs AC {ctx.targetAc}</Chip>}
+        {effect.attack && <Chip tone="gold">{signed(bonus)} {effect.attack} spell attack · {percent(hitChanceWithDie(bonus, ctx.targetAc, ctx.advantage, ctx.fx.die).hit)} vs AC {ctx.targetAc}</Chip>}
         {effect.save && <Chip tone="gold">DC {spell.saveDc} {effect.save} save{effect.halfOnSave ? " · half on a success" : ""}</Chip>}
         {effect.damage.map((r) => (
           <Chip key={r.type} tone="red">
@@ -1200,7 +1325,7 @@ function RestDialog({ kind, onClose, ctx, totalHitDice }: { kind: "short" | "lon
     onClose();
   };
   const finishShort = (healed: number) => {
-    ctx.updateCombat((c) => restShort(c, model.features, healed, dice));
+    ctx.updateCombat((c) => ({ ...restShort(c, model.features, healed, dice), effects: (c.effects ?? []).filter((k) => effectFor(k, ctx.effectCtx)?.longLasting) }));
     if (ctx.pact) ctx.updateMagic(slotsShort);
     toast.success(`Short rest: ${healed} hit points back${shortBack.length ? `, ${shortBack.map((f) => f.title).join(", ")} back` : ""}${ctx.pact ? ", pact slots back" : ""}.`);
     close();

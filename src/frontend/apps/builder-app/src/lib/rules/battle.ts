@@ -353,6 +353,8 @@ export interface CombatState {
   companions: Companion[];
   /** item powers switched on: "<inventory entry id>:<power id>" (a Flame Tongue ablaze) */
   active: string[];
+  /** spells, features and situations affecting the character now ("Shield", "Bladesong", "Aid@3"); see effectFor */
+  effects: string[];
 }
 
 export const EMPTY_COMBAT: CombatState = {
@@ -369,6 +371,7 @@ export const EMPTY_COMBAT: CombatState = {
   heroicInspiration: false,
   companions: [],
   active: [],
+  effects: [],
 };
 
 /** The maximum hit points: 2014 exhaustion level 4 halves it. */
@@ -448,6 +451,7 @@ export function longRest(state: CombatState, features: Restable[], totalHitDice:
     deathSaveFailures: 0,
     companions: (state.companions ?? []).map((c) => ({ ...c, damage: 0, temporaryHitPoints: 0 })),
     active: [],
+    effects: [],
   };
 }
 
@@ -574,4 +578,200 @@ export function itemRiders(html: string, weaponType = ""): ItemRider[] {
 export function itemHealing(html: string): Roll | null {
   const m = plainSpellText(html).match(/regains? (\d+d\d+(?:\s*\+\s*\d+)?) hit points/i);
   return m ? { ...parseRoll(m[1])!, type: "healing" } : null;
+}
+
+// ---- active effects: spells and features that change the character's numbers for a while
+
+export interface EffectContext {
+  edition: "2014" | "2024";
+  mod: (abbreviation: string) => number;
+  proficiencyBonus: number;
+  /** the barbarian's Rage damage bonus, if any */
+  rageDamage: number;
+}
+
+export interface BattleEffect {
+  key: string;
+  name: string;
+  /** what it does, in a few words */
+  summary: string;
+  kind: "spell" | "feature" | "situation";
+  /** a new base AC while no armor is worn (Mage Armor: 13 + Dexterity) */
+  acBase?: number;
+  acBonus?: number;
+  /** AC can't be lower than this (Barkskin) */
+  acFloor?: number;
+  /** the AC bonus needs this: no armor at all, or no medium or heavy armor and no shield (Bladesong) */
+  armorNeeded?: "none" | "light-no-shield";
+  attackBonus?: number;
+  /** a die added to (or taken from) attack rolls and saves: Bless +1d4, Bane −1d4 */
+  d20Die?: { sides: number; sign: 1 | -1 };
+  saveBonus?: number;
+  /** extra damage on weapon hits (Hunter's Mark, Divine Favor) */
+  weaponDamage?: Roll;
+  /** a flat bonus to Strength-based melee weapon damage (Rage) */
+  strengthMeleeDamage?: number;
+  speedBonus?: number;
+  speedMultiplier?: number;
+  maxHpBonus?: number;
+  /** ends at the start of your next turn (Shield, Dodge) */
+  untilNextTurn?: boolean;
+  concentration?: boolean;
+  /** survives a short rest (lasts an hour or more) */
+  longLasting?: boolean;
+  /** things it does that are not numbers here (resistances, advantage) */
+  notes?: string;
+}
+
+const die = (count: number, sides: number, type: string): Roll => ({ dice: [{ count, sides }], bonus: 0, type });
+
+/**
+ * The effect a spell, feature or situation has on the character, by its name ("Shield", "Bladesong", "Cover:
+ * three-quarters"), with an optional slot level ("Aid@3"); null when it changes none of the numbers shown here.
+ */
+export function effectFor(key: string, c: EffectContext): BattleEffect | null {
+  const [rawName, level] = key.split("@");
+  const name = rawName.trim();
+  const slot = Number(level) || 0;
+  const base = { key, name };
+  const spell = (e: Omit<BattleEffect, "key" | "name" | "kind">): BattleEffect => ({ ...base, kind: "spell", ...e });
+  const int = c.mod("INT");
+  switch (name.toLowerCase()) {
+    case "shield":
+      return spell({ summary: "+5 AC until the start of your next turn; no damage from Magic Missile", acBonus: 5, untilNextTurn: true });
+    case "shield of faith":
+      return spell({ summary: "+2 AC", acBonus: 2, concentration: true });
+    case "mage armor":
+      return spell({ summary: "base AC 13 + Dexterity while you wear no armor", acBase: 13 + c.mod("DEX"), longLasting: true });
+    case "barkskin":
+      return c.edition === "2024"
+        ? spell({ summary: "AC can't be less than 17", acFloor: 17, longLasting: true })
+        : spell({ summary: "AC can't be less than 16", acFloor: 16, concentration: true, longLasting: true });
+    case "haste":
+      return spell({ summary: "+2 AC, speed doubled, advantage on Dexterity saves, one extra limited action", acBonus: 2, speedMultiplier: 2, concentration: true, notes: "When it ends you can't move or act until after your next turn." });
+    case "slow":
+      return spell({ summary: "−2 AC and Dexterity saves, speed halved, no reactions, one action or bonus action a turn", acBonus: -2, speedMultiplier: 0.5, notes: "−2 to Dexterity saving throws." });
+    case "warding bond":
+      return spell({ summary: "+1 AC and saving throws, resistance to all damage", acBonus: 1, saveBonus: 1, longLasting: true });
+    case "bless":
+      return spell({ summary: "+1d4 to attack rolls and saving throws", d20Die: { sides: 4, sign: 1 }, concentration: true });
+    case "bane":
+      return spell({ summary: "−1d4 to attack rolls and saving throws", d20Die: { sides: 4, sign: -1 }, concentration: true });
+    case "hunter's mark":
+    case "hunter’s mark":
+      return spell({ summary: `+1d6${c.edition === "2024" ? " force" : ""} damage on weapon hits against the marked target`, weaponDamage: die(1, 6, c.edition === "2024" ? "force" : "damage"), concentration: true, longLasting: true });
+    case "hex":
+      return spell({ summary: "+1d6 necrotic on hits against the hexed target", weaponDamage: die(1, 6, "necrotic"), concentration: true, longLasting: true });
+    case "divine favor":
+      return spell({ summary: "+1d4 radiant on weapon hits", weaponDamage: die(1, 4, "radiant"), concentration: c.edition === "2014" });
+    case "elemental weapon":
+      return spell({ summary: "+1 to hit and +1d4 elemental damage with the weapon", attackBonus: 1, weaponDamage: die(1, 4, "elemental"), concentration: true, longLasting: true });
+    case "magic weapon":
+      return spell({ summary: `+${slot >= 6 ? 3 : slot >= 4 ? 2 : 1} to hit and damage with the weapon`, attackBonus: slot >= 6 ? 3 : slot >= 4 ? 2 : 1, weaponDamage: { dice: [], bonus: slot >= 6 ? 3 : slot >= 4 ? 2 : 1, type: "" }, concentration: c.edition === "2014", longLasting: true });
+    case "enlarge":
+    case "enlarge/reduce":
+      return spell({ summary: "enlarged: +1d4 weapon damage, advantage on Strength checks and saves", weaponDamage: die(1, 4, "damage"), concentration: true });
+    case "reduce":
+      return spell({ summary: "reduced: −1d4 weapon damage, disadvantage on Strength checks and saves", weaponDamage: die(-1, 4, "damage"), concentration: true });
+    case "longstrider":
+      return spell({ summary: "+10 ft speed", speedBonus: 10, longLasting: true });
+    case "aid": {
+      const hp = 5 * Math.max(1, (slot || 2) - 1);
+      return spell({ summary: `+${hp} hit point maximum (and current)`, maxHpBonus: hp, longLasting: true });
+    }
+    case "heroism":
+      return spell({ summary: "immune to Frightened; temporary hit points equal to the caster's spellcasting modifier at the start of each turn", concentration: true });
+    case "blade ward":
+      return spell({ summary: c.edition === "2024" ? "attack rolls against you take −1d4" : "resistance to bludgeoning, piercing and slashing from weapon attacks", concentration: c.edition === "2024" });
+    case "bladesong":
+      return {
+        ...base,
+        kind: "feature",
+        summary: `+${Math.max(1, int)} AC, +10 ft speed, advantage on Acrobatics, +${Math.max(1, int)} to Constitution saves for concentration (light or no armor, no shield)`,
+        acBonus: Math.max(1, int),
+        armorNeeded: "light-no-shield",
+        speedBonus: 10,
+      };
+    case "rage":
+      return {
+        ...base,
+        kind: "feature",
+        summary: `+${c.rageDamage} damage with Strength melee attacks, resistance to bludgeoning, piercing and slashing, advantage on Strength checks and saves; no spells`,
+        strengthMeleeDamage: c.rageDamage,
+      };
+    case "dodge":
+      return { ...base, kind: "situation", summary: "attacks against you have disadvantage, advantage on Dexterity saves", untilNextTurn: true };
+    case "cover: half":
+      return { ...base, kind: "situation", summary: "+2 AC and Dexterity saves", acBonus: 2 };
+    case "cover: three-quarters":
+      return { ...base, kind: "situation", summary: "+5 AC and Dexterity saves", acBonus: 5 };
+    default:
+      return null;
+  }
+}
+
+/** Spells that only ever affect the caster: casting one turns its effect on. */
+export const SELF_SPELLS = new Set(["shield", "mage armor", "divine favor", "hunter's mark", "hunter’s mark", "hex", "blade ward", "longstrider", "elemental weapon", "magic weapon"]);
+
+/** Effects a player may turn on by hand (cast on them by an ally, or a situation). */
+export const PICKABLE_EFFECTS = ["Bless", "Bane", "Haste", "Slow", "Shield of Faith", "Barkskin", "Warding Bond", "Mage Armor", "Aid@2", "Longstrider", "Enlarge", "Reduce", "Heroism", "Dodge", "Cover: half", "Cover: three-quarters"];
+
+export interface ArmorFacts {
+  total: number;
+  /** the armor's or unarmored calculation's base, before Dexterity and bonuses */
+  base: number;
+  /** "Light", "Medium", "Heavy", or null without armor */
+  armorKind: string | null;
+  shield: boolean;
+}
+
+/** The AC with the effects: Mage Armor's base without armor, then bonuses (Bladesong only in light or no armor and no shield), then floors (Barkskin). */
+export function effectiveArmorClass(armor: ArmorFacts, effects: BattleEffect[]): { total: number; changes: string[] } {
+  let total = armor.total;
+  const changes: string[] = [];
+  for (const e of effects) {
+    if (e.acBase === undefined || armor.armorKind) continue;
+    if (e.acBase > armor.base) {
+      changes.push(`${e.name}: base ${e.acBase} instead of ${armor.base}`);
+      total += e.acBase - armor.base;
+    }
+  }
+  for (const e of effects) {
+    if (!e.acBonus) continue;
+    const fits = e.armorNeeded === "none" ? !armor.armorKind : e.armorNeeded === "light-no-shield" ? (!armor.armorKind || armor.armorKind === "Light") && !armor.shield : true;
+    if (!fits) {
+      changes.push(`${e.name}: no AC bonus in ${armor.shield ? "a shield" : `${armor.armorKind?.toLowerCase()} armor`}`);
+      continue;
+    }
+    total += e.acBonus;
+    changes.push(`${e.name} ${e.acBonus > 0 ? "+" : ""}${e.acBonus}`);
+  }
+  for (const e of effects) {
+    if (e.acFloor && total < e.acFloor) {
+      changes.push(`${e.name}: at least ${e.acFloor}`);
+      total = e.acFloor;
+    }
+  }
+  return { total, changes };
+}
+
+/** The chance to hit with a die added to (or taken from) the roll (Bless, Bane): each face equally likely. */
+export function hitChanceWithDie(bonus: number, ac: number, advantage: Advantage, d: { sides: number; sign: 1 | -1 } | null): { hit: number; crit: number } {
+  if (!d) return hitChance(bonus, ac, advantage);
+  let hit = 0;
+  let crit = 0;
+  for (let face = 1; face <= d.sides; face++) {
+    const h = hitChance(bonus + d.sign * face, ac, advantage);
+    hit += h.hit / d.sides;
+    crit += h.crit / d.sides;
+  }
+  return { hit, crit };
+}
+
+/** Speed with the effects: bonuses first, then doubling or halving. */
+export function effectiveSpeed(speed: number, effects: BattleEffect[]): number {
+  if (speed <= 0) return 0;
+  const plus = effects.reduce((n, e) => n + (e.speedBonus ?? 0), 0);
+  const times = effects.reduce((n, e) => n * (e.speedMultiplier ?? 1), 1);
+  return Math.floor((speed + plus) * times);
 }
