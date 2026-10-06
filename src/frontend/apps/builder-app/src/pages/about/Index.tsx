@@ -47,8 +47,8 @@ export default function AboutPage() {
           <li>Running it all in Docker on a home server, with nightly content updates, backups and a password for the site</li>
           <li>A step-by-step character wizard for new players, with the books' starting equipment (or gold), and a skip for experienced ones</li>
           <li>Character sheets laid out like Aurora's (on screen and as PDF), bringing in players' Aurora files, multiclassing, and Save / Discard in the builder</li>
-          <li>The Battle Action Simulator: attacks, spells, magic items that cast (wands, staffs), familiars and conditions</li>
-          <li>Campaigns with a DM's view: sessions, NPCs, quests, maps, handouts, magic items to hand out, and a Gold tab that keeps the party stash</li>
+          <li>The Battle Action Simulator: attacks, spells, magic items that cast (wands, staffs), familiars and conditions; preparing spells, and casting one you forgot to prepare</li>
+          <li>Campaigns with a DM's view: sessions, NPCs, quests, maps, handouts, magic items to hand out (showing who carries each), and a Gold tab that keeps the party stash</li>
           <li>Encounters run as fights: initiative, monster hit points, the party's hit points and conditions straight from their simulators</li>
           <li>Players give each other items and coins from their Equipment tab</li>
           <li>A Homebrew page to make your own magic items and monsters. Homebrew stays off until a player ticks it in their Sources or a DM switches it on for a campaign</li>

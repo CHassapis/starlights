@@ -15,13 +15,15 @@
 - **Character sheets like Aurora's**, on screen and as PDF; bring in players' Aurora character files.
 - **Builder**: multiclassing, 2014 and 2024 rules (or both), Save / Discard, items that cast spells, extra feats,
   languages and proficiencies.
-- **Battle Action Simulator**: attacks, spells, slots and charges, magic items (wands, staffs), familiars, conditions.
+- **Battle Action Simulator**: attacks, spells, slots and charges, magic items (wands, staffs), familiars, conditions;
+  prepare spells right there, and cast one the player forgot to prepare (the DM's call).
 - **Campaigns** with a DM's side: sessions, NPCs, places, quests, maps, handouts, magic items to hand out, notes, and a
-  Gold tab with the party fund and stash. Players only see what the DM reveals.
+  Gold tab with the party fund and stash. The Magic items tab shows who carries each item. Players only see what the
+  DM reveals.
 - **Encounters run as fights**: initiative, turns, monster hit points (hidden from players), and the party's hit points
   and conditions straight from their simulators.
 - **Trading**: players give each other items and coins from their Equipment tab.
-- **Homebrew page**: make magic items and monsters in a form, or upload Aurora element files. Homebrew is off by
+- **Homebrew page**: make magic items (weapons can have their own damage dice) and monsters in a form, or upload Aurora element files. Homebrew is off by
   default: a player ticks it in a character's Sources, and a DM switches on "Use homebrew" in a campaign's settings.
 - **Compendium of Lore**: the books, creatures, spells and items from the 5etools data, linkable from campaigns.
 - Player names instead of accounts, with optional passwords; an admin password for the DM.
