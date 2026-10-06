@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ItemPicker } from "@/components/item-picker";
+import { RichText } from "@/components/rich-text";
 import { unlockCampaign, useCampaignActions, type CampaignEntry, type EntryInput, type EntryKind, type PartyMember } from "@/lib/api/campaigns";
 import { shrinkImage } from "@/lib/image";
 import { creatureDetails, type CompendiumLink } from "@/lib/lore/campaign-links";
@@ -52,9 +53,10 @@ function Field({ label, hint, children, group }: { label: string; hint?: string;
 }
 
 /** Text the players read, kept as written: paragraphs and line breaks, nothing else. */
+/** Campaign text with its headings, lists, tables and bold labels (components/rich-text). */
 export function Prose({ text, className }: { text: string; className?: string }) {
   if (!text.trim()) return null;
-  return <div className={cn("whitespace-pre-wrap text-sm leading-relaxed", className)}>{text}</div>;
+  return <RichText text={text} className={className} />;
 }
 
 /** Notes longer than this start folded, so a whole prep document does not bury the page. */
