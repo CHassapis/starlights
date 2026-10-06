@@ -43,6 +43,13 @@ sealed class DeleteCharacterEndpoint : EndpointWithoutRequest
         var registrations = _persistence.GetRepository<IRegistrationRepository>();
         await registrations.DeleteRegistrationsAsync(characterId);
 
+        // and its builder snapshot, if a build was not saved or discarded
+        var snapshots = _persistence.GetRepository<ICharacterSnapshotsRepository>();
+        if (await snapshots.GetAsync(characterId.Value) is { } snapshot)
+        {
+            snapshots.Remove(snapshot);
+        }
+
         var rows = await _persistence.SaveChangesAsync();
 
         activity?.AddTag("db.rows_affected", rows);

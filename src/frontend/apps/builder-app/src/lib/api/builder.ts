@@ -253,3 +253,43 @@ export function useRemovePortrait(characterId: string) {
     },
   });
 }
+
+/**
+ * The builder's Save and Discard (see the server's BuilderSessionEndpoints): opening the builder takes a snapshot of
+ * the character; changes show at once but are kept for good only on Save, and Discard puts the character back.
+ */
+export interface BuilderSession {
+  active: boolean;
+  since: string | null;
+  changed: boolean;
+}
+
+const sessionKey = (id: string) => ["builder", id, "session"] as const;
+
+export function useBuilderSession(characterId: string) {
+  return useQuery({
+    queryKey: sessionKey(characterId),
+    queryFn: () => apiClient.get<BuilderSession>(`/api/characters/${characterId}/builder/session`),
+    // edits on every tab change it (the equipment, story and magic tabs save under their own keys)
+    refetchInterval: 5000,
+  });
+}
+
+export function useBuilderSessionActions(characterId: string) {
+  const qc = useQueryClient();
+  const base = `/api/characters/${characterId}/builder/session`;
+  const set = (s: BuilderSession) => qc.setQueryData(sessionKey(characterId), s);
+  return {
+    start: useMutation({ mutationFn: () => apiClient.post<object, BuilderSession>(base, {}), onSuccess: set }),
+    save: useMutation({ mutationFn: () => apiClient.post<object, BuilderSession>(`${base}/save`, {}), onSuccess: set }),
+    discard: useMutation({
+      mutationFn: () => apiClient.post<object, BuilderSession>(`${base}/discard`, {}),
+      onSuccess: (s) => {
+        set(s);
+        // everything shown of the character (builder, equipment, magic, story, sheet) is as it was again
+        qc.invalidateQueries().catch(() => {});
+        refreshCharacter(qc, characterId);
+      },
+    }),
+  };
+}

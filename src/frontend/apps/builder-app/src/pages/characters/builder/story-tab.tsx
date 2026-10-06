@@ -49,7 +49,7 @@ const textareaClass =
   "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
 /**
- * Backstory, personality, appearance and notes; saved automatically a moment after typing stops.
+ * Backstory, personality, appearance and notes; sent a moment after typing stops (kept for good with the builder's Save).
  */
 export function StoryTab({ characterId }: { characterId: string }) {
   const qc = useQueryClient();
@@ -96,10 +96,10 @@ export function StoryTab({ characterId }: { characterId: string }) {
           </>
         ) : save.isSuccess ? (
           <>
-            <CheckIcon className="size-3" /> Saved
+            <CheckIcon className="size-3" /> Noted: press Save below to keep it
           </>
         ) : (
-          "Changes are saved automatically."
+          "Changes are noted as you type; press Save below to keep them."
         )}
       </p>
 

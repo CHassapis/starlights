@@ -21,6 +21,7 @@ internal class EntityFrameworkComponent : IPlatformServiceComponent, IPlatformAp
         builder.Services.AddScoped<IRegistrationRepository, RegistrationRepository>();
         builder.Services.AddScoped<IPlayersRepository, PlayersRepository>();
         builder.Services.AddScoped<ICampaignsRepository, CampaignsRepository>();
+        builder.Services.AddScoped<ICharacterSnapshotsRepository, CharacterSnapshotsRepository>();
 
         builder.Services.AddSingleton<PersistenceCharactersContextFactory>();
         builder.Services.AddDbContextFactory<CharactersContext>(options =>
@@ -60,5 +61,6 @@ internal class EntityFrameworkComponent : IPlatformServiceComponent, IPlatformAp
         host.UseRepositoryWithContext<IRegistrationRepository, PersistenceCharactersContextFactory>();
         host.UseRepositoryWithContext<IPlayersRepository, PersistenceCharactersContextFactory>();
         host.UseRepositoryWithContext<ICampaignsRepository, PersistenceCharactersContextFactory>();
+        host.UseRepositoryWithContext<ICharacterSnapshotsRepository, PersistenceCharactersContextFactory>();
     }
 }

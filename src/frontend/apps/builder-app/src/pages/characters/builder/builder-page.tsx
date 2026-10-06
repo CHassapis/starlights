@@ -1,6 +1,7 @@
 import { ArrowLeftIcon, ChurchIcon, FileTextIcon, ImageIcon, InfoIcon, MinusIcon, PlusIcon, ScaleIcon, ScrollTextIcon, SparklesIcon, SwordsIcon, UserIcon, UsersIcon } from "lucide-react";
 import { useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { SaveBar } from "./save-bar";
 import { toast } from "sonner";
 import { ElementPanel } from "@/components/element-panel";
 import { SearchSelect } from "@/components/search-select";
@@ -93,6 +94,7 @@ export function CharacterBuilderPage() {
   return (
     <div className="container mx-auto space-y-6 px-4 py-8 pb-24">
       <BuilderHeader characterId={id} choices={choicesData?.choices ?? []} pending={choicesData?.pending ?? false} />
+      <SaveBar characterId={id} name={header.data?.character.name ?? ""} />
 
       <Tabs defaultValue="build">
         <TabsList className="max-w-full justify-start overflow-x-auto">
