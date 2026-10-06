@@ -52,6 +52,7 @@ import {
 import { rarityOf } from "@/lib/rules/picker";
 import type { BuilderChoice } from "@/lib/api/builder";
 import { cn } from "@/lib/utils";
+import { TradeDialog, type TradeItem } from "./trade-dialog";
 
 const newId = () => crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
@@ -72,6 +73,7 @@ export function EquipmentTab({ characterId, itemChoices = [], renderChoice }: { 
   const { facts } = useCharacterFacts(characterId);
   const { data: sources } = useCharacterSources(characterId);
   const [picking, setPicking] = useState(false);
+  const [giving, setGiving] = useState<TradeItem | "coins" | null>(null);
 
   const byId = catalog?.byId;
   const groups = useMemo(() => (inventory && byId ? groupInventory(inventory, byId) : null), [inventory, byId]);
@@ -121,6 +123,7 @@ export function EquipmentTab({ characterId, itemChoices = [], renderChoice }: { 
     attackOf: (id: string) => summary?.attacks.get(id),
     modesOf: (id: string) => summary?.modes.get(id),
     onChange: (id: string, change: Partial<InventoryEntry>) => save.updateEntry(id, change, failed),
+    onGive: (r: Resolved) => setGiving({ id: r.entry.id, name: r.name, quantity: r.entry.quantity }),
     onRemove: (id: string) =>
       save.update(
         (current) => ({
@@ -243,7 +246,8 @@ export function EquipmentTab({ characterId, itemChoices = [], renderChoice }: { 
       ))}
       <Group title="Stored elsewhere" icon={<BackpackIcon className="size-4" />} items={groups.stored} note="not carried" {...rowProps} />
 
-      <Coins inventory={inventory.coins} onChange={(coins) => save.update(() => ({ coins }), failed)} />
+      <Coins inventory={inventory.coins} onChange={(coins) => save.update(() => ({ coins }), failed)} onGive={() => setGiving("coins")} />
+      {giving && <TradeDialog characterId={characterId} item={giving === "coins" ? null : giving} purse={inventory.coins} onClose={() => setGiving(null)} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <SavedText label="Additional treasure" value={inventory.treasure ?? ""} onCommit={(v) => save.update(() => ({ treasure: v || null }), failed)} />
@@ -263,6 +267,8 @@ interface RowProps {
   modesOf: (id: string) => AttackMode[] | undefined;
   onChange: (id: string, change: Partial<InventoryEntry>) => void;
   onRemove: (id: string) => void;
+  /** hand it to another character of a shared campaign */
+  onGive: (r: Resolved) => void;
 }
 
 function Group({ title, icon, note, items, empty, ...row }: RowProps & { title: string; icon: ReactNode; note?: ReactNode; items: Resolved[]; empty?: string }) {
@@ -300,7 +306,7 @@ function AttackModes({ modes }: { modes: AttackMode[] }) {
   );
 }
 
-function Row({ r, containers, nextAttack, attackOf, modesOf, onChange, onRemove }: RowProps & { r: Resolved }) {
+function Row({ r, containers, nextAttack, attackOf, modesOf, onChange, onRemove, onGive }: RowProps & { r: Resolved }) {
   const { entry, item } = r;
   const slots = equipSlots(r);
   const attack = attackOf(entry.id);
@@ -457,6 +463,7 @@ function Row({ r, containers, nextAttack, attackOf, modesOf, onChange, onRemove 
                 </DropdownMenuCheckboxItem>
               )}
               <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => onGive(r)}>Give to another character…</DropdownMenuItem>
               <DropdownMenuItem className="text-destructive" onSelect={() => onRemove(entry.id)}>
                 Remove
               </DropdownMenuItem>
@@ -489,7 +496,7 @@ function BaseChooser({ r, onChange }: { r: Resolved; onChange: (id: string) => v
   );
 }
 
-function Coins({ inventory, onChange }: { inventory: Partial<Record<(typeof COINS)[number], number>>; onChange: (coins: Partial<Record<(typeof COINS)[number], number>>) => void }) {
+function Coins({ inventory, onChange, onGive }: { inventory: Partial<Record<(typeof COINS)[number], number>>; onChange: (coins: Partial<Record<(typeof COINS)[number], number>>) => void; onGive: () => void }) {
   const gp = (inventory.cp ?? 0) / 100 + (inventory.sp ?? 0) / 10 + (inventory.ep ?? 0) / 2 + (inventory.gp ?? 0) + (inventory.pp ?? 0) * 10;
   return (
     <section className="space-y-2">
@@ -498,6 +505,9 @@ function Coins({ inventory, onChange }: { inventory: Partial<Record<(typeof COIN
         <Badge variant="outline" className="font-sans font-normal">
           worth {Math.round(gp * 100) / 100} gp
         </Badge>
+        <Button size="sm" variant="ghost" className="ml-auto font-sans" onClick={onGive} disabled={gp === 0}>
+          Give coins…
+        </Button>
       </h3>
       <div className="grid grid-cols-5 gap-2">
         {COINS.map((coin) => (

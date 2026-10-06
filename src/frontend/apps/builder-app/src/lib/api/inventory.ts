@@ -121,3 +121,34 @@ export function useCharacterFacts(characterId: string): { facts?: CharacterFacts
 
   return { facts, isLoading: abilities.isLoading || statistics.isLoading };
 }
+
+export interface Trade {
+  campaignId: string;
+  toCharacterId: string;
+  /** an inventory entry of this character, or null for coins only */
+  itemId?: string | null;
+  /** how many of the entry (0: all of it) */
+  quantity: number;
+  coins: Record<string, number>;
+}
+
+/** Hands another character of a shared campaign an item or coins; both inventories and the campaign's Gold tab change. */
+export function useTrade(characterId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (t: Trade) =>
+      apiClient.post<object, { given: string; fromRevision: number }>(`/api/campaigns/${t.campaignId}/trade`, {
+        fromCharacterId: characterId,
+        toCharacterId: t.toCharacterId,
+        itemId: t.itemId ?? null,
+        quantity: t.quantity,
+        coins: t.coins,
+      }),
+    onSettled: (_, __, t) => {
+      for (const id of [characterId, t.toCharacterId]) {
+        for (const key of [inventoryKey(id), ["sheet", id], ["builder", id, "facts"], ["builder", id, "choices"]]) qc.invalidateQueries({ queryKey: key }).catch(() => {});
+      }
+      qc.invalidateQueries({ queryKey: ["campaigns"] }).catch(() => {});
+    },
+  });
+}
