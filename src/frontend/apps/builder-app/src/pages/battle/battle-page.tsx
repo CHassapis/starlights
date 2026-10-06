@@ -21,6 +21,7 @@ import {
   SwordIcon,
   TimerIcon,
   ZapIcon,
+  ListChecksIcon,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -35,6 +36,7 @@ import { useCombat, useSaveCombat } from "@/lib/api/combat";
 import { useActiveFights, useMarkFight, type FightView } from "@/lib/api/encounters";
 import { useInventory, useSaveInventory } from "@/lib/api/inventory";
 import { useMagic, useSaveMagic, useSpellcasting } from "@/lib/api/magic";
+import { PrepareSpells } from "./prepare-spells";
 import { useSheetData, type SheetData } from "@/lib/api/sheet";
 import { buildBattleModel, type BattleFeature, type BattleModel, type BattleSpell, type Slot, type WeaponAttack } from "@/lib/battle-model";
 import { useLoreLookup } from "@/lib/lore/lookup";
@@ -74,7 +76,7 @@ import {
   type Advantage,
   type CombatState,
 } from "@/lib/rules/battle";
-import { expended, expendSlot, isCastable, longRest as slotsLong, ordinal, pactSlots, restoreSlot, setPactSpent, shortRest as slotsShort, spellSlots, type MagicState } from "@/lib/rules/magic";
+import { expended, expendSlot, isCastable, longRest as slotsLong, ordinal, pactSlots, restoreSlot, setPactSpent, shortRest as slotsShort, spellSlots, type Caster, type MagicState } from "@/lib/rules/magic";
 import { cn } from "@/lib/utils";
 import { BattleBackdrop } from "./battle-index";
 import { Companions } from "./companions";
@@ -128,6 +130,8 @@ export function CharacterBattlePage() {
   const saveInventory = useSaveInventory(id);
   const [turn, setTurn] = useTurn(id);
   const [targetAc, setTargetAc] = useState(15);
+  // spells the player forgot to prepare and casts anyway, once they say so (the DM's call)
+  const [forgotten, setForgotten] = useState<string[]>([]);
   const [advantage, setAdvantage] = useState<Advantage>("normal");
   const [rest, setRest] = useState<"short" | "long" | null>(null);
   // encounter mode: the fights this character's party is in, and the creature it aims at (or one described by hand)
@@ -222,7 +226,11 @@ export function CharacterBattlePage() {
   // spells that cannot be cast now: in a spellbook or class list but not prepared
   const unprepared = new Set<string>();
   if (magicState) for (const c of casters) for (const s of c.spells) if (!isCastable(c, magicState, s)) unprepared.add(s.name);
-  const castable = (s: BattleSpell) => !!s.item || !unprepared.has(s.name) || s.origin.startsWith("Prepared");
+  const castable = (s: BattleSpell) => !!s.item || !unprepared.has(s.name) || s.origin.startsWith("Prepared") || forgotten.includes(s.name);
+  const castAnyway = (name: string) => {
+    setForgotten((list) => [...list, name]);
+    toast(`${name} can be cast this session`, { description: "Not prepared: casting it anyway is your DM's call. Prepare it on the Spells tab to keep it." });
+  };
 
   const markUsed = (slot: Slot) => {
     const field = SLOT_FIELD[slot];
@@ -361,7 +369,7 @@ export function CharacterBattlePage() {
       failed,
     );
 
-  const ctx: Ctx = { data, model, state, targetAc: usedAc, rollFor, targetSaveFor, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf, fx, effects, setEffect, effectCtx };
+  const ctx: Ctx = { data, model, state, targetAc: usedAc, rollFor, targetSaveFor, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, castAnyway, casters, magicState, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf, fx, effects, setEffect, effectCtx };
 
   return (
     <Shell>
@@ -434,6 +442,10 @@ interface Ctx {
   spendFeature: (f: BattleFeature, amount?: number) => void;
   cast: (spell: BattleSpell, level: number, usePact: boolean) => void;
   castable: (s: BattleSpell) => boolean;
+  /** lets a spell the player forgot to prepare be cast anyway */
+  castAnyway: (name: string) => void;
+  casters: Caster[];
+  magicState: MagicState | undefined;
   slotsLeft: (level: number) => number;
   slotTotals: Record<number, number>;
   pact: { level: number; count: number } | null;
@@ -938,6 +950,16 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
 
       <TabsContent value="spells" className="space-y-3">
         <SlotsPanel ctx={ctx} />
+        {ctx.magicState && ctx.casters.some((c) => c.prepares) && (
+          <Panel title="Prepare spells" icon={<ListChecksIcon className="size-4 text-sky-300" />}>
+            <details open={ctx.casters.filter((c) => c.prepares).every((c) => (ctx.magicState!.prepared[c.name] ?? []).length === 0) || undefined}>
+              <summary className="cursor-pointer text-sm text-white/70">Change what you have prepared (after a long rest). The same as the Magic tab.</summary>
+              <div className="mt-3">
+                <PrepareSpells casters={ctx.casters} magic={ctx.magicState} onChange={ctx.updateMagic} />
+              </div>
+            </details>
+          </Panel>
+        )}
         {model.spells.length === 0 ? (
           <Panel>
             <p className="text-sm text-white/70">{data.name} has no spells.</p>
@@ -1258,7 +1280,7 @@ function SpellList({ ctx, spells, grouped }: { ctx: Ctx; spells: BattleSpell[]; 
     <div className="flex flex-col gap-4">
       {resting.length > 0 && (
         <details className="order-last rounded-lg border border-dashed border-white/10 p-2">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-white/55">Not prepared ({resting.length}): prepare them on the Magic tab</summary>
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-white/55">Not prepared ({resting.length}): prepare them above, or cast one anyway</summary>
           <div className="mt-2 grid gap-2 md:grid-cols-2">
             {resting.map((s) => (
               <SpellCard key={`${s.name}|${s.level}|${s.origin}|${s.item?.entryId ?? ""}`} ctx={ctx} spell={s} />
@@ -1328,7 +1350,14 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
           <div className="text-[11px] text-white/55">
             {[spell.time, spell.range, spell.duration, spell.components].filter(Boolean).join(" · ")}
           </div>
-          {!ready && <div className="text-[11px] text-amber-200/80">Not prepared</div>}
+          {!ready && (
+            <div className="text-[11px] text-amber-200/80">
+              Not prepared.{" "}
+              <button type="button" className="underline hover:text-amber-100" onClick={() => ctx.castAnyway(spell.name)}>
+                Forgot to prepare it? Cast anyway
+              </button>
+            </div>
+          )}
           {needsAttunement && <div className="text-[11px] text-amber-200/80">Attune to {item!.name} first (Equipment tab)</div>}
         </div>
         {spell.item && levels.length > 1 ? (
