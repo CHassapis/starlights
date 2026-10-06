@@ -7,9 +7,14 @@
 > [5etools](https://github.com/5etools-mirror-3/5etools-src). Unofficial fan project, not affiliated with or endorsed by
 > Wizards of the Coast; no book content is part of this repository. The original README follows the fork's sections.
 
+**Contents:** [What this fork adds](#what-this-fork-adds) · [Install](#install-with-docker) ·
+[Using it](#using-it) · [Settings](#settings) · [Content](#how-aurora-legacy-and-5etools-are-connected) ·
+[Updating](#updating) · [Backups](#backups-and-restoring) · [Playing away from home](#playing-away-from-home) ·
+[Troubleshooting](#troubleshooting) · [Removing it](#removing-it) · [Credits](#credits-and-legal)
+
 ## What this fork adds
 
-- **Docker install** for one machine: `deploy/setup.sh` fetches the content and sets everything up (see below).
+- **Docker install** for one machine: `deploy/setup.sh` fetches the content and sets everything up.
 - **Character wizard** for new players: class, species, background, ability scores, the books' starting equipment
   (packages or gold) and spells, one step at a time, with a skip to the full builder.
 - **Character sheets like Aurora's**, on screen and as PDF; bring in players' Aurora character files.
@@ -23,15 +28,26 @@
 - **Encounters run as fights**: initiative, turns, monster hit points (hidden from players), and the party's hit points
   and conditions straight from their simulators.
 - **Trading**: players give each other items and coins from their Equipment tab.
-- **Homebrew page**: make magic items (weapons can have their own damage dice) and monsters in a form, or upload Aurora element files. Homebrew is off by
-  default: a player ticks it in a character's Sources, and a DM switches on "Use homebrew" in a campaign's settings.
+- **Homebrew page**: make magic items (weapons can have their own damage dice) and monsters in a form, or upload Aurora
+  element files. Homebrew is off by default: a player ticks it in a character's Sources, and a DM switches on
+  "Use homebrew" in a campaign's settings.
 - **Compendium of Lore**: the books, creatures, spells and items from the 5etools data, linkable from campaigns.
 - Player names instead of accounts, with optional passwords; an admin password for the DM.
 
 ## Install with Docker
 
-You need a Linux machine (or WSL) with Docker and the compose plugin, `git`, `curl` and `openssl`, and about 3 GB of
-disk. Then:
+### What you need
+
+- A computer that stays on while you play: a home server, a spare PC or a NAS that runs Docker.
+  - **64-bit Intel/AMD (x86-64) only.** The database (Microsoft SQL Server) has no ARM version, so a Raspberry Pi
+    won't work; an Apple Silicon Mac only through Docker Desktop's x86 emulation, slowly.
+  - **4 GB of RAM** or more (the database takes up to 2 GB) and **about 3 GB of disk** (more with portraits).
+- **Linux** (or Windows with WSL 2 and Docker Desktop), with **Docker and its compose plugin**, `git`, `curl` and
+  `openssl`. On Ubuntu or Debian: `sudo apt install git curl openssl` and Docker from
+  [docs.docker.com/engine/install](https://docs.docker.com/engine/install/).
+- An internet connection for the first setup (it downloads about 400 MB of content and the Docker images).
+
+### Setting it up
 
 ```bash
 git clone -b aurora-server https://github.com/CHassapis/starlights.git
@@ -39,34 +55,82 @@ cd starlights/deploy
 ./setup.sh
 ```
 
-`setup.sh` takes a while the first time. It:
+The first run takes 10 to 20 minutes (building the app is the slow part). `setup.sh` is safe to run again; it skips what
+is done. It:
 
-1. writes `deploy/.env` with random passwords (your **admin password** is `STARLIGHTS_MASTER_PASSWORD` in it);
+1. writes `deploy/.env` with random passwords. Your **admin password** is `STARLIGHTS_MASTER_PASSWORD` in that file;
 2. clones the content into `deploy/data`: Aurora Legacy's elements and the 5etools data;
-3. builds and starts the database, the API and the web app;
+3. builds and starts three containers: the database, the API and the web app;
 4. imports the content (about 14,000 elements) and builds the Compendium of Lore.
 
-Then open `http://<your machine>:8093`, pick a player name, and make a character. Use the key button in the header with
-the admin password to act as the DM and to make homebrew. Change the port with `STARLIGHTS_PORT` in `.env`.
+When it finishes it prints the address, `http://<this machine>:8093` (for example `http://192.168.1.20:8093`), and the
+admin password. Everyone on your home network can open that address in a browser, on a phone too. The site restarts by
+itself after a reboot.
 
-Keep the site on your own network (or behind a VPN such as Tailscale). The book content it serves is for your table's
-private use; don't put it on the open internet.
+## Using it
 
-### How Aurora Legacy and 5etools are connected
+### Players
+
+1. Open the site and **pick your name** (top right). There are no accounts: your characters are filed under your name.
+   To stop others changing them, use **Lock your characters** to give your name a password.
+2. **Create Character**. Pick the rules (2014, 2024 or both) and leave "Guide me step by step" ticked if you're new:
+   the wizard walks through class, species, background, ability scores, the books' starting equipment and spells.
+   Experienced players untick it and go straight to the full builder (tabs: Build, Abilities, Magic, Equipment, Story,
+   Sources). Already have an Aurora character? Use **Import from Aurora** with its `.dnd5e` file.
+3. Changes are kept only when you press **Save** in the bar at the bottom (or **Discard changes** to go back).
+4. **Character sheet** shows the sheet and downloads it as a PDF. **Battle** opens the Battle Action Simulator for
+   playing: hit points, attacks, spells and slots, conditions, rests.
+5. Join your group's campaign with the **Campaigns** button on your character (the DM may give you a password).
+
+### The DM
+
+1. Press the **key button** in the header and enter the admin password. It opens every character and campaign, and
+   allows homebrew. (Anyone with it is a DM, so keep it to yourself.)
+2. **Campaigns → New campaign.** In **Campaign settings** choose the party, add a cover, set a password for players
+   and a DM password (so a co-DM can run it without the admin password), and switch on **Use homebrew** if you want it.
+3. Everything you add starts hidden: players see an entry only when you reveal it. Use the **DM / Player** switch at the
+   top to check what players see.
+4. **Encounters → Run the fight**: add the party and the monsters, roll initiative, track hit points; players follow
+   along in their simulators.
+5. **Magic items → Give to…** puts an item straight into a character's equipment and notes it in the Gold tab.
+
+### Homebrew
+
+On the **Homebrew** page (admin password needed) make magic items and monsters with a form, or upload Aurora element
+files (`.xml`) for classes, species, backgrounds and anything else. Homebrew starts switched off everywhere:
+
+- a player ticks the homebrew book in their character's **Sources** tab to use it in the builder;
+- a DM ticks **Use homebrew** in the campaign settings to hand out homebrew items and add homebrew monsters to fights.
+
+## Settings
+
+The settings live in `deploy/.env` (never share or commit it):
+
+| Setting | What it is |
+|---|---|
+| `STARLIGHTS_MASTER_PASSWORD` | The admin password (key button). Change it any time, then `docker compose up -d`. |
+| `STARLIGHTS_PORT` | The port the site is on (default `8093`). Change it, then `docker compose up -d`. |
+| `STARLIGHTS_ADMIN_KEY` | Sent by `./admin.sh` for imports. Any long random text. |
+| `STARLIGHTS_SA_PASSWORD` | The database password. Set once by `setup.sh`; **don't change it** after the first start (the database keeps the old one). |
+
+## How Aurora Legacy and 5etools are connected
 
 | Content | Where it lives | Used for |
 |---|---|---|
 | [AuroraLegacy/elements](https://github.com/AuroraLegacy/elements) | `deploy/data/aurora-elements` | classes, species, backgrounds, feats, spells, items: the builder's rules |
-| [5etools-src](https://github.com/5etools-mirror-3/5etools-src) | `deploy/data/5etools-src` | the Compendium of Lore, deities Aurora lacks, creatures for encounters |
-| Your homebrew | `deploy/data/homebrew` | made on the Homebrew page |
+| [5etools-src](https://github.com/5etools-mirror-3/5etools-src) | `deploy/data/5etools-src` | the Compendium of Lore, deities Aurora lacks, creatures for encounters, starting equipment |
+| Your homebrew | `deploy/data/homebrew` | made or uploaded on the Homebrew page |
 
-Both are plain git clones, so you can point them at your own fork. Optional extras:
+Both are plain git clones made by `setup.sh`, so you can point them at your own fork (clone it into that folder
+instead, then `./admin.sh import AuroraLegacy.index --update` or `./admin.sh import 5etools --update` and
+`./admin.sh lore`). Optional extras:
 
 - **Aurora's PDF sheets**: if you own Aurora Builder, copy the sheet templates and fonts from its install folder into
-  `deploy/data/aurora-sheets` for PDF sheets laid out like Aurora's. Without them the on-screen sheet still works.
+  `deploy/data/aurora-sheets` for PDF sheets laid out like Aurora's. Without them the on-screen sheet still works,
+  but the PDF download doesn't.
 - **Background pictures**: put `home-1.webp` … `home-5.webp`, `lore.webp` and `battle.webp` in `deploy/data/art`.
 
-### Updating
+## Updating
 
 ```bash
 cd starlights && git pull                                # new code
@@ -74,8 +138,88 @@ cd deploy && docker compose build && docker compose up -d
 ./admin.sh update                                        # newest Aurora Legacy and 5etools content
 ```
 
-`./admin.sh` also has `import`, `reprocess` (after an import, so characters get new choices) and `lore`. Run it without
-arguments for help. Back up `deploy/data` (the database is in `deploy/data/mssql`).
+The database changes a new version needs are applied by themselves when it starts. To get new content every night,
+add a cron job (`crontab -e`):
+
+```
+30 3 * * * cd /path/to/starlights/deploy && ./admin.sh update >> data/update.log 2>&1
+```
+
+`./admin.sh` (run it without arguments for help):
+
+| Command | What it does |
+|---|---|
+| `./admin.sh update` | pulls Aurora Legacy and 5etools, imports what changed, rebuilds the Compendium, updates characters |
+| `./admin.sh import <index> [--update\|--replace]` | imports content: `AuroraLegacy.index` (everything), `5etools`, `starlights` (built-in extras), `homebrew` |
+| `./admin.sh reprocess` | runs every character through the rules again, so they get new or changed choices |
+| `./admin.sh lore` | rebuilds the Compendium of Lore from the 5etools data |
+| `./admin.sh init` | the base rules, once, on an empty database (`setup.sh` does it) |
+
+## Backups and restoring
+
+Your group's data is the database, the portraits and the homebrew in `deploy/data` (the content clones can always be
+downloaded again). Keep `deploy/.env` with the backup: the database only opens with its password. The files belong to
+the containers' users, so the commands use a small helper container:
+
+```bash
+cd starlights/deploy
+docker compose stop
+docker run --rm -v "$PWD/data:/data" -v "$PWD:/backup" alpine \
+  tar czf /backup/starlights-$(date +%F).tgz -C /data mssql portraits homebrew
+docker compose start
+```
+
+To restore (replaces what is there now):
+
+```bash
+cd starlights/deploy
+docker compose down
+docker run --rm -v "$PWD/data:/data" -v "$PWD:/backup" alpine sh -c \
+  'rm -rf /data/mssql /data/portraits /data/homebrew && tar xzf /backup/starlights-2026-01-31.tgz -C /data'
+docker compose up -d
+```
+
+Copy the `.tgz` files somewhere else too (another disk, cloud storage).
+
+## Playing away from home
+
+Don't open the port on your router: the site serves book content for your table's private use and must not be on the
+open internet. To play from anywhere, use a private network such as [Tailscale](https://tailscale.com) (free for
+personal use): install it on the server and on each player's device, then open `http://<server's Tailscale name>:8093`.
+
+## Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| `setup.sh` waits forever for the API | `docker compose logs starlights-api starlights-db`. The most common causes: less than 2 GB of free RAM, or an ARM computer. |
+| "port is already allocated" | Another program uses 8093: set `STARLIGHTS_PORT=8094` (or another) in `.env` and run `docker compose up -d`. |
+| The Compendium of Lore says it isn't set up | `./admin.sh lore` |
+| New classes or options don't show after an update | `./admin.sh reprocess` |
+| A player forgot their password | Unlock admin with the key button, pick that player's name (top right), and use **Change password** to set a new one or remove it. |
+| You forgot the admin password | It's `STARLIGHTS_MASTER_PASSWORD` in `deploy/.env`. |
+| Something else | `docker compose ps` shows what is running; `docker compose logs -f` follows the logs. |
+
+## Removing it
+
+```bash
+cd starlights/deploy
+docker compose down
+docker run --rm -v "$PWD:/d" alpine rm -rf /d/data     # deletes everything, including characters and campaigns
+docker rmi starlights/backend starlights/web
+```
+
+## Credits and legal
+
+- [Project Starlights](https://github.com/swdriessen/starlights) and [Aurora Builder](https://www.aurorabuilder.com) by
+  **Bas Driessen**: the app, its rules engine and the Aurora way of building characters (MIT licence, kept in
+  [LICENSE](./LICENSE)).
+- [Aurora Legacy](https://github.com/AuroraLegacy/elements): the community's content files.
+- [5etools](https://github.com/5etools-mirror-3/5etools-src): the data behind the Compendium of Lore.
+- This fork (Docker packaging and the features listed above) by C Hassapis.
+
+Dungeons & Dragons and its books belong to Wizards of the Coast. This is an unofficial fan project, not approved or
+endorsed by Wizards of the Coast. No book content is in this repository: `setup.sh` downloads it onto your own machine
+for your own table's use.
 
 ## The original README
 
