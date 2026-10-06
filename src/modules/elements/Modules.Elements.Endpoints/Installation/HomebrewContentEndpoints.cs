@@ -69,6 +69,8 @@ public sealed record HomebrewItemModel
     public int? Charges { get; init; }
     /// <summary>The weapon or armor it is made from ("Rapier", "Chain Shirt"), for a magic weapon or armor.</summary>
     public string? Base { get; init; }
+    /// <summary>A magic weapon's own damage dice ("1d6"), instead of its base weapon's.</summary>
+    public string? Damage { get; init; }
     public decimal? Weight { get; init; }
     public int? Cost { get; init; }
     /// <summary>What it does: plain text, paragraphs separated by blank lines.</summary>
@@ -89,6 +91,7 @@ internal static class HomebrewItemXml
                 : new XElement("set", new XAttribute("name", "type"), kind),
             new XElement("set", new XAttribute("name", "rarity"), m.Rarity));
         if (kind == "Weapon" && !string.IsNullOrWhiteSpace(m.Base)) setters.Add(new XElement("set", new XAttribute("name", "weapon"), m.Base.Trim()));
+        if (kind == "Weapon" && !string.IsNullOrWhiteSpace(m.Damage)) setters.Add(new XElement("set", new XAttribute("name", "damage"), m.Damage.Trim()));
         if (kind == "Armor" && !string.IsNullOrWhiteSpace(m.Base)) setters.Add(new XElement("set", new XAttribute("name", "armor"), m.Base.Trim()));
         if (m.Attunement)
         {
@@ -129,6 +132,7 @@ internal static class HomebrewItemXml
             AttunementBy = (string?)Set("attunement")?.Attribute("addition"),
             Charges = int.TryParse(Set("charges")?.Value, out var c) ? c : null,
             Base = Set("weapon")?.Value.Trim() ?? Set("armor")?.Value.Trim() ?? (string?)type?.Attribute("addition"),
+            Damage = Set("damage")?.Value.Trim(),
             Weight = decimal.TryParse((string?)Set("weight")?.Attribute("lb"), NumberStyles.Number, CultureInfo.InvariantCulture, out var w) ? w : null,
             Cost = int.TryParse(Set("cost")?.Value, out var cost) ? cost : null,
             Description = string.Join("\n\n", e.Element("description")?.Elements("p").Select(p => p.Value.Trim()) ?? []),
@@ -169,9 +173,10 @@ public sealed class SaveHomebrewItemEndpoint : Endpoint<HomebrewItemModel, Homeb
     public override async Task HandleAsync(HomebrewItemModel req, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 100 || req.Description.Length > 20_000 || (req.Source?.Length ?? 0) > 100
-            || !HomebrewContent.Rarities.Contains(req.Rarity) || req.Charges is < 0 or > 100 || req.Weight is < 0 or > 10_000 || req.Cost is < 0)
+            || !HomebrewContent.Rarities.Contains(req.Rarity) || req.Charges is < 0 or > 100 || req.Weight is < 0 or > 10_000 || req.Cost is < 0
+            || (!string.IsNullOrWhiteSpace(req.Damage) && !Regex.IsMatch(req.Damage.Trim(), @"^\d{1,2}d\d{1,3}$")))
         {
-            AddError("A homebrew item needs a name (100 characters at most), a rarity, and sensible numbers.");
+            AddError("A homebrew item needs a name (100 characters at most), a rarity, and sensible numbers (damage like 1d6).");
             await Send.ErrorsAsync(cancellation: ct);
             return;
         }

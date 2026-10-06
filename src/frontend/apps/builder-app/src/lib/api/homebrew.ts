@@ -17,6 +17,8 @@ export interface HomebrewItem {
   attunementBy?: string | null;
   charges?: number | null;
   base?: string | null;
+  /** a magic weapon's own damage dice ("1d6"), instead of its base weapon's */
+  damage?: string | null;
   weight?: number | null;
   cost?: number | null;
   description: string;

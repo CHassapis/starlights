@@ -72,6 +72,7 @@ export function HomebrewItems() {
                     <span className="text-xs text-muted-foreground">
                       {i.kind}
                       {i.base ? ` (${i.base})` : ""}
+                      {i.damage ? ` · ${i.damage} damage` : ""}
                       {i.attunement ? ` · requires attunement${i.attunementBy ? ` ${i.attunementBy}` : ""}` : ""}
                       {i.charges ? ` · ${i.charges} charges` : ""}
                     </span>
@@ -154,8 +155,13 @@ function ItemDialog({ item, busy, onClose, onSave }: { item: HomebrewItem; busy:
             </select>
           </Field>
           {(f.kind === "Weapon" || f.kind === "Armor") && (
-            <Field label={f.kind === "Weapon" ? "Made from (weapon)" : "Made from (armor)"} hint={f.kind === "Weapon" ? "e.g. Rapier, Longsword, Dagger" : "e.g. Chain Shirt, Plate"} wide>
+            <Field label={f.kind === "Weapon" ? "Made from (weapon)" : "Made from (armor)"} hint={f.kind === "Weapon" ? "e.g. Rapier, Longsword, Dagger" : "e.g. Chain Shirt, Plate"} wide={f.kind === "Armor"}>
               <Input value={f.base ?? ""} onChange={(e) => set({ base: e.target.value })} maxLength={60} />
+            </Field>
+          )}
+          {f.kind === "Weapon" && (
+            <Field label="Damage (optional)" hint="Only if it differs from the weapon it's made from, e.g. 1d6">
+              <Input value={f.damage ?? ""} onChange={(e) => set({ damage: e.target.value.replace(/[^\dd]/gi, "").toLowerCase() || null })} maxLength={6} placeholder="as the weapon" />
             </Field>
           )}
           <Field label="Attunement">

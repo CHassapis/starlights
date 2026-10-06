@@ -154,7 +154,8 @@ export function resolve(entry: InventoryEntry, catalog: Catalog): Resolved {
     categories: item ? [...new Set([...item.categories, ...(base?.categories ?? [])])] : custom?.category ? [custom.category] : ["Adventuring Gear"],
     magic: !!item?.magic || !!custom?.magic,
     requiresAttunement: !!item?.magic?.attunement || !!custom?.attunement,
-    weapon: base?.weapon ?? item?.weapon,
+    // a magic weapon with dice of its own (a homebrew "Dagger of the Unbodied" doing 1d6) keeps its base's other figures
+    weapon: base?.weapon && item?.weapon ? { ...base.weapon, damage: item.weapon.damage, damageType: item.weapon.damageType ?? base.weapon.damageType } : (base?.weapon ?? item?.weapon),
     armor: base?.armor ?? item?.armor,
     container,
   };

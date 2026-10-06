@@ -115,6 +115,18 @@ describe("weight", () => {
   });
 });
 
+describe("magic weapons with dice of their own", () => {
+  it("take their damage from the item and everything else from the base weapon", () => {
+    const unbodied: ItemInfo = { id: "unbodied", name: "Dagger of the Unbodied", elementType: "Magic Item", auroraId: "ID_UNBODIED", categories: ["Magic Weapons"], magic: { rarity: "Uncommon" } as ItemInfo["magic"], weapon: { damage: "1d6" } };
+    const withIt = new Map(catalog).set("unbodied", unbodied);
+    const r = resolve(entry("u", "unbodied", { baseElementId: "dagger" }), withIt);
+    expect(r.weapon?.damage).toBe("1d6");
+    expect(r.weapon?.damageType).toBe("piercing");
+    expect(r.weapon?.properties).toEqual(["Finesse", "Light", "Thrown"]);
+    expect(resolve(entry("d", "dagger"), withIt).weapon?.damage).toBe("1d4");
+  });
+});
+
 describe("equipping and attunement", () => {
   it("offers the slots Aurora would", () => {
     expect(equipSlots(resolve(entry("a", "longsword"), catalog))).toEqual(["Main Hand", "Off Hand", "Two-Handed"]);
