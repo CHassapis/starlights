@@ -1,5 +1,14 @@
 # Project Starlights
 
+> **About this fork (branch `aurora-server`).** A self-hosted build of Project Starlights, packaged to run in Docker on a home
+> server for one D&D group by C Hassapis. All credit for Starlights and for Aurora Builder goes to their creator,
+> **Bas Driessen** ([swdriessen/starlights](https://github.com/swdriessen/starlights), [aurorabuilder.com](https://www.aurorabuilder.com));
+> the content files come from the [Aurora Legacy](https://github.com/AuroraLegacy/elements) community and the Compendium's
+> data from [5etools](https://github.com/5etools-mirror-3/5etools-src). This fork adds character sheets laid out like
+> Aurora's, multiclassing, Save / Discard in the builder, the Battle Action Simulator, campaigns with encounters, and the
+> Compendium of Lore. Unofficial fan project, not affiliated with or endorsed by Wizards of the Coast; the books' data is not
+> part of this repository. The original README follows.
+
 This is a work-in-progress project intended as an online toolset to enhance tabletop role‑playing games. Its initial focus is creating characters for Dungeons & Dragons in the form of an online version of [Aurora](https://www.aurorabuilder.com), which was my original creation years ago.
 
 If you'd like to see this project grow, please consider giving it a star :star: — thank you!
