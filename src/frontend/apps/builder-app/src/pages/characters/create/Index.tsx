@@ -68,6 +68,7 @@ function CharacterCreation() {
   const { data: sourceData, isLoading: sourcesLoading } = useSources();
   const [restricted, setRestricted] = useState<string[] | null>(null);
   const [uploadedPortrait, setUploadedPortrait] = useState<string | null>(null);
+  const [guided, setGuided] = useState(true);
   useEffect(() => {
     if (sourceData && restricted === null) setRestricted(restrictedForEdition("mixed", sourceData.sources));
   }, [sourceData, restricted]);
@@ -113,7 +114,7 @@ function CharacterCreation() {
     if (newId && uploadedPortrait) {
       await apiClient.post(`/api/characters/${newId}/portrait`, { data: uploadedPortrait }).catch(() => {});
     }
-    if (newId) navigate(`/characters/${newId}`);
+    if (newId) navigate(guided ? `/characters/${newId}?guide=1` : `/characters/${newId}`);
   });
 
   return (
@@ -244,6 +245,13 @@ function CharacterCreation() {
         <FieldSeparator />
       </FieldSet>
 
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-1" checked={guided} onChange={(e) => setGuided(e.target.checked)} />
+        <span>
+          <span className="font-medium">Guide me step by step</span>
+          <span className="block text-xs text-muted-foreground">Recommended if you're new: class, species, background, ability scores, the books' starting equipment and spells, one at a time. Untick to go straight to the full builder.</span>
+        </span>
+      </label>
       <div className="flex items-center justify-start gap-3">
         <Button type="submit" variant="default" disabled={!canSubmit} className="w-full sm:w-auto">
           {createMutation.isPending || isSubmitting ? "Creating..." : "Create Character"}

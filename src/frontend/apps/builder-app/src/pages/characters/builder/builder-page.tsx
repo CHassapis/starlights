@@ -1,6 +1,6 @@
 import { ArrowLeftIcon, ChurchIcon, FileTextIcon, ImageIcon, InfoIcon, MinusIcon, PlusIcon, ScaleIcon, ScrollTextIcon, SparklesIcon, SwordsIcon, UserIcon, UsersIcon } from "lucide-react";
 import { useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { SaveBar } from "./save-bar";
 import { toast } from "sonner";
 import { ElementPanel } from "@/components/element-panel";
@@ -37,6 +37,7 @@ import { MagicTab } from "./magic-tab";
 import { AuroraUpdateDialog } from "../aurora-import-dialog";
 import { CharacterCampaigns } from "./character-campaigns";
 import { ExtrasCard } from "./extras-card";
+import { Wizard } from "./wizard";
 import { editionOf, switchEdition, useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { EditionPicker } from "@/components/edition-picker";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,8 @@ export function CharacterBuilderPage() {
   const [preview, setPreview] = useState<string | null>(null); // option under the pointer in an open list
   const [focus, setFocus] = useState<string | null>(null); // last picked or inspected element
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const guided = params.get("guide") === "1";
 
   const sections = useMemo(() => {
     const bySection = new Map<string, BuilderChoice[]>();
@@ -96,7 +99,24 @@ export function CharacterBuilderPage() {
       <BuilderHeader characterId={id} choices={choicesData?.choices ?? []} pending={choicesData?.pending ?? false} />
       <SaveBar characterId={id} name={header.data?.character.name ?? ""} />
 
+      {guided ? (
+        <Wizard
+          characterId={id}
+          choices={choicesData?.choices ?? []}
+          renderChoice={(choice, hideLabel) => (
+            <ChoiceRow key={choice.ruleId} characterId={id} choice={choice} hideLabel={hideLabel} onHighlight={setPreview} onPicked={setFocus} onInspect={inspect} />
+          )}
+          rules={<SourcesTab characterId={id} />}
+          aside={
+            <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg border bg-background/60 p-5">
+              <ElementPanel id={preview ?? focus} emptyHint="Open a list and point at an option to read about it here." />
+            </div>
+          }
+          onExit={() => setParams({}, { replace: true })}
+        />
+      ) : (
       <Tabs defaultValue="build">
+        <div className="flex flex-wrap items-center gap-2">
         <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="build">Build</TabsTrigger>
           <TabsTrigger value="abilities">Abilities</TabsTrigger>
@@ -105,6 +125,10 @@ export function CharacterBuilderPage() {
           <TabsTrigger value="story">Story</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
         </TabsList>
+          <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => setParams({ guide: "1" })}>
+            Step by step
+          </Button>
+        </div>
 
         <TabsContent value="abilities" className="mt-4">
           <AbilitiesTab characterId={id} />
@@ -184,6 +208,7 @@ export function CharacterBuilderPage() {
           </div>
         </TabsContent>
       </Tabs>
+      )}
 
       <Drawer open={drawerId !== null} onOpenChange={(open) => !open && setDrawerId(null)}>
         <DrawerContent>
