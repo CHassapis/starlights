@@ -48,6 +48,9 @@ export function StartingEquipment({ characterId, choices }: { characterId: strin
   const pickOf = (key: string, group: StartGroup) => picks[key] ?? group[0].label;
 
   function add() {
+    // a second kit by mistake (back to this step, or the guide opened again on a character with gear)
+    const has = inventory.data?.items.length ?? 0;
+    if (has > 0 && !window.confirm(`This character already has ${has} ${has === 1 ? "item" : "items"}. Add the starting equipment as well?`)) return;
     const entries: InventoryEntry[] = [];
     let cp = 0;
     for (const s of sources) {
@@ -156,7 +159,11 @@ export function StartingEquipment({ characterId, choices }: { characterId: strin
         <Button onClick={add} disabled={added || save.isPending || !inventory.data}>
           {added ? <CheckIcon /> : null} {added ? "Added to your equipment" : "Add this to my equipment"}
         </Button>
-        <span className="text-xs text-muted-foreground">You can change anything later in the Equipment tab.</span>
+        <span className="text-xs text-muted-foreground">
+          {inventory.data && inventory.data.items.length > 0 && !added
+            ? `This character already has ${inventory.data.items.length} items: add this only if they don't have their starting gear yet.`
+            : "You can change anything later in the Equipment tab."}
+        </span>
       </div>
     </div>
   );
