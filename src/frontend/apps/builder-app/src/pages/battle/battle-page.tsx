@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCombat, useSaveCombat } from "@/lib/api/combat";
+import { useInventory, useSaveInventory } from "@/lib/api/inventory";
 import { useMagic, useSaveMagic, useSpellcasting } from "@/lib/api/magic";
 import { useSheetData, type SheetData } from "@/lib/api/sheet";
 import { buildBattleModel, type BattleFeature, type BattleModel, type BattleSpell, type Slot, type WeaponAttack } from "@/lib/battle-model";
@@ -43,7 +44,6 @@ import {
   critical,
   currentHitPoints,
   exhaustionEffect,
-  expectedDamage,
   findPool,
   formatRoll,
   gainTemporary,
@@ -69,6 +69,7 @@ import { expended, expendSlot, isCastable, longRest as slotsLong, ordinal, pactS
 import { cn } from "@/lib/utils";
 import { BattleBackdrop } from "./battle-index";
 import { Companions } from "./companions";
+import { Items } from "./items";
 
 // ---- this turn (kept for the browser tab, so a reload keeps it)
 
@@ -113,6 +114,9 @@ export function CharacterBattlePage() {
   const combat = useCombat(id);
   const saveMagic = useSaveMagic(id);
   const saveCombat = useSaveCombat(id);
+  // the inventory, for spending an item's charges and using up a potion (the same as the Equipment tab)
+  useInventory(id);
+  const saveInventory = useSaveInventory(id);
   const [turn, setTurn] = useTurn(id);
   const [targetAc, setTargetAc] = useState(15);
   const [advantage, setAdvantage] = useState<Advantage>("normal");
@@ -178,8 +182,15 @@ export function CharacterBattlePage() {
     markUsed(f.slot);
   };
 
+  // a spell from a magic item with charges (a wand, a staff, Enspelled Armor) spends a charge, not a slot
+  const chargedItemOf = (spell: BattleSpell) => (data.items ?? []).find((i) => i.charges && spell.origin && (spell.origin.includes(i.elementName) || spell.origin.includes(i.name)));
+
   const cast = (spell: BattleSpell, level: number, usePact: boolean) => {
-    if (spell.level > 0) {
+    const item = chargedItemOf(spell);
+    if (item && item.charges) {
+      if (item.chargesUsed >= item.charges) return toast.error(`${item.name} has no charges left`);
+      saveInventory.updateEntry(item.entryId, { chargesUsed: item.chargesUsed + 1 }, failed);
+    } else if (spell.level > 0) {
       if (usePact) {
         if (!pact || pactLeft <= 0) return toast.error("No pact slots left");
         updateMagic((m) => setPactSpent(m, m.expendedPactSlots + 1, pact.count));
@@ -251,7 +262,20 @@ export function CharacterBattlePage() {
       })
     : null;
 
-  const ctx: Ctx = { data, model, state, targetAc, advantage: effectiveAdvantage, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat };
+  const setCharges = (entryId: string, used: number) => {
+    const item = (data.items ?? []).find((i) => i.entryId === entryId);
+    if (item?.charges) saveInventory.updateEntry(entryId, { chargesUsed: Math.max(0, Math.min(item.charges, used)) }, failed);
+  };
+  const consume = (entryId: string) =>
+    saveInventory.update(
+      (current) => ({
+        ...current,
+        items: current.items.flatMap((e) => (e.id !== entryId ? [e] : e.quantity > 1 ? [{ ...e, quantity: e.quantity - 1 }] : [])),
+      }),
+      failed,
+    );
+
+  const ctx: Ctx = { data, model, state, targetAc, advantage: effectiveAdvantage, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf };
 
   return (
     <Shell>
@@ -303,6 +327,9 @@ interface Ctx {
   pactLeft: number;
   updateMagic: (change: (m: MagicState) => MagicState) => void;
   updateCombat: (change: (c: CombatState) => CombatState) => void;
+  setCharges: (entryId: string, used: number) => void;
+  consume: (entryId: string) => void;
+  chargedItemOf: (spell: BattleSpell) => SheetData["items"][number] | undefined;
 }
 
 // ---- layout pieces
@@ -684,6 +711,7 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
         <TabsTrigger value="reaction" className="text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Reaction</TabsTrigger>
         <TabsTrigger value="spells" className="text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Spells</TabsTrigger>
         <TabsTrigger value="resources" className="text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Resources</TabsTrigger>
+        <TabsTrigger value="items" className="text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Items</TabsTrigger>
         <TabsTrigger value="companions" className="text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Familiars & companions{(ctx.state.companions ?? []).length ? ` (${ctx.state.companions.length})` : ""}</TabsTrigger>
         <TabsTrigger value="move" className="text-white/70 data-[state=active]:bg-amber-400 data-[state=active]:text-black">Movement & free</TabsTrigger>
       </TabsList>
@@ -765,6 +793,20 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
         </Panel>
       </TabsContent>
 
+      <TabsContent value="items">
+        <Items
+          items={data.items ?? []}
+          riders={model.riders}
+          state={ctx.state}
+          edition={model.edition}
+          update={ctx.updateCombat}
+          setCharges={ctx.setCharges}
+          consume={ctx.consume}
+          heal={(n) => ctx.updateCombat((c) => heal(c, n))}
+          markUsed={ctx.use}
+        />
+      </TabsContent>
+
       <TabsContent value="companions">
         <Companions edition={model.edition} state={ctx.state} featureTitles={model.features.map((f) => f.title)} spellNames={model.spells.map((s) => s.name)} update={ctx.updateCombat} />
       </TabsContent>
@@ -819,9 +861,15 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
   const { hit, crit } = hitChance(bonus, ctx.targetAc, ctx.advantage);
   // Great Weapon Fighting raises the average of the dice
   const avgOf = (r: typeof weapon.roll) => (weapon.greatWeapon ? averageGreatWeapon(r, weapon.greatWeapon) : average(r));
-  const avg = avgOf(weapon.roll);
-  const critAvg = avgOf(critical(weapon.roll));
-  const expected = weapon.greatWeapon ? (hit - crit) * avg + crit * critAvg : expectedDamage(bonus, ctx.targetAc, weapon.roll, ctx.advantage);
+  // a magic weapon's extra damage that applies now (always on, or switched on in the Items tab)
+  const powers = (weapon.entryId ? ctx.model.riders[weapon.entryId] : undefined) ?? [];
+  const on = powers.filter((p) => !p.critOnly && (p.always || (ctx.state.active ?? []).includes(`${weapon.entryId}:${p.id}`)));
+  const onCrit = powers.filter((p) => p.critOnly);
+  const extraAvg = on.reduce((n, p) => n + average(p.roll), 0);
+  const extraCrit = on.reduce((n, p) => n + average(critical(p.roll)), 0) + onCrit.reduce((n, p) => n + average(critical(p.roll)), 0);
+  const avg = avgOf(weapon.roll) + extraAvg;
+  const critAvg = avgOf(critical(weapon.roll)) + extraCrit;
+  const expected = (hit - crit) * avg + crit * critAvg;
   const [lo, hi] = rollRange(weapon.roll);
   const itemKey = weapon.kind === "item" ? lookup("items", weapon.name, ctx.model.edition) : null;
   const field = SLOT_FIELD[slot];
@@ -842,7 +890,7 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
       </div>
       <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
         <Mini label="To hit" value={signed(bonus)} />
-        <Mini label="Damage" value={formatRoll(weapon.roll, false)} sub={`${+avg.toFixed(1)} avg · ${lo}–${hi}`} />
+        <Mini label="Damage" value={`${formatRoll(weapon.roll, false)}${on.map((p) => `+${formatRoll(p.roll, false)}`).join("")}`} sub={`${+avg.toFixed(1)} avg · ${lo}–${hi}${on.length ? "+" : ""}`} />
         <Mini label="Critical" value={formatRoll(critical(weapon.roll), false)} sub={`${+critAvg.toFixed(1)} avg`} />
         <Mini label={`vs AC ${ctx.targetAc}`} value={percent(hit)} sub={`${expected.toFixed(1)} dmg/attack`} />
       </div>
@@ -851,6 +899,11 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
         {attacks > 1 ? ` · ${attacks} attacks: about ${(expected * attacks).toFixed(1)} damage per Attack action` : ""}
         {crit > 0.05 ? ` · critical ${percent(crit)}` : ""}
       </p>
+      {on.map((p) => (
+        <p key={p.id} className="mt-1 text-[11px] text-red-100/90">
+          +{formatRoll(p.roll)} ({p.label.toLowerCase()})
+        </p>
+      ))}
       {(weapon.notes ?? []).map((n) => (
         <p key={n} className="mt-1 text-[11px] text-sky-100/80">
           {n}
@@ -1061,7 +1114,8 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
   const ready = ctx.castable(spell);
   const field = SLOT_FIELD[spell.slot];
   const spent = field ? ctx.turn[field] : false;
-  const noSlot = spell.level > 0 && (usePact ? ctx.pactLeft <= 0 : ctx.slotsLeft(castAt) <= 0);
+  const item = ctx.chargedItemOf(spell);
+  const noSlot = item ? item.chargesUsed >= (item.charges ?? 0) : spell.level > 0 && (usePact ? ctx.pactLeft <= 0 : ctx.slotsLeft(castAt) <= 0);
   const blocked = spell.slot === "Reaction" ? ctx.noReactions : ctx.incapacitated;
   const bonus = spell.attackBonus - ctx.d20Penalty;
   return (
@@ -1078,7 +1132,12 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
           </div>
           {!ready && <div className="text-[11px] text-amber-200/80">Not prepared</div>}
         </div>
-        {spell.level > 0 && (
+        {item && (
+          <span className="rounded-md border border-violet-300/40 px-1.5 py-1 text-[11px] text-violet-100">
+            {item.name}: {Math.max(0, (item.charges ?? 0) - item.chargesUsed)} charges
+          </span>
+        )}
+        {spell.level > 0 && !item && (
           <select aria-label="Cast with" value={choice} onChange={(e) => setChoice(e.target.value)} className="h-7 rounded-md border border-white/20 bg-black/60 px-1 text-xs text-white">
             {levels.map((l) => (
               <option key={l} value={l}>

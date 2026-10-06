@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  itemHealing,
+  itemRiders,
   average,
   averageGreatWeapon,
   castingAction,
@@ -169,3 +171,25 @@ describe("limited uses and rests", () => {
     expect(longRest({ ...EMPTY_COMBAT, uses: { "Second Wind": 2 } }, wind, 4, "2024").uses).toEqual({});
   });
 });
+
+describe("magic items", () => {
+  // item texts below follow the books' wording patterns; they are written for these tests
+  it("reads a switch-on power, target-dependent damage, always-on damage and critical-only damage", () => {
+    const [ablaze] = itemRiders("<p>While the blade is ablaze, it deals an extra 2d6 fire damage to any target it hits.</p>");
+    expect([ablaze.label, formatRoll(ablaze.roll), ablaze.always]).toEqual(["While the blade is ablaze", "2d6 fire", false]);
+    const [undead] = itemRiders("<p>When you hit a fiend or an undead with it, that creature takes an extra 2d10 radiant damage.</p>");
+    expect([undead.label, formatRoll(undead.roll)]).toEqual(["Against fiend or undead", "2d10 radiant"]);
+    const [cold] = itemRiders("<p>When you hit with an attack using this sword, the target takes an extra 1d6 cold damage.</p>");
+    expect(cold.always).toBe(true);
+    const [slayer] = itemRiders("<p>When you hit a dragon with this weapon, it takes an extra 3d6 damage of the weapon's type.</p>", "slashing");
+    expect(formatRoll(slayer.roll)).toBe("3d6 slashing");
+    const [vicious] = itemRiders("<p>When you roll a 20 on your attack roll, your critical hit deals an extra 2d6 damage of the weapon's type.</p>", "piercing");
+    expect(vicious.critOnly).toBe(true);
+  });
+
+  it("reads what a potion heals", () => {
+    expect(formatRoll(itemHealing("<p>You regain 2d4 + 2 hit points when you drink this potion.</p>")!, false)).toBe("2d4+2");
+    expect(itemHealing("<p>A pleasant smell.</p>")).toBeNull();
+  });
+});
+

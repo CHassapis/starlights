@@ -3,7 +3,7 @@ import { apiClient } from "@/lib/api-client";
 import type { BuilderChoice } from "@/lib/api/builder";
 import { useItemCatalog } from "@/lib/api/items";
 import { useSpellIndex } from "@/lib/api/magic";
-import { attackModes, type AttackMode, type CharacterFacts, type Inventory } from "@/lib/rules/items";
+import { attackModes, generatedNameOf, isActive, isCarried, resolve, type AttackMode, type CharacterFacts, type Inventory, type Resolved } from "@/lib/rules/items";
 import { EMPTY_MAGIC, type KnownSpell, type MagicState, type Spellcasting } from "@/lib/rules/magic";
 import { summarizeProficiencies, type Proficiencies } from "@/lib/rules/proficiencies";
 import {
@@ -126,6 +126,8 @@ export interface SheetData {
   attacks: SheetAttackLine[];
   /** every way each carried weapon can attack (one hand, two hands, thrown, off hand), for the Battle Action Simulator */
   attackModes: AttackMode[];
+  /** the magic items and consumables the character carries, with their texts, for the Battle Action Simulator */
+  items: SheetItem[];
   equipment: SheetEquipment;
   itemCards: SheetItemCard[];
   spellPages: SheetSpellPage[];
@@ -155,6 +157,77 @@ export interface SheetData {
 }
 
 const ABILITY_NAMES = ["Strength", "Dexterity", "Constitution", "Intelligence", "Wisdom", "Charisma"];
+
+/** A magic item or consumable the character carries. */
+export interface SheetItem {
+  entryId: string;
+  name: string;
+  /** the item's own name in the books ("Enspelled Armor (Level 1)"), which the spells it grants name as their origin */
+  elementName: string;
+  magic: boolean;
+  rarity: string | null;
+  requiresAttunement: boolean;
+  attuned: boolean;
+  equipped: string | null;
+  /** its rules apply now (equipped, and attuned when it needs attunement) */
+  active: boolean;
+  charges: number | null;
+  chargesUsed: number;
+  quantity: number;
+  /** a potion, oil, scroll or other thing used up */
+  consumable: boolean;
+  /** the weapon's damage type, for "extra damage of the weapon's type" */
+  weaponDamageType: string | null;
+  /** what its rules give while active, in words ("+1 AC", "+1 to all saving throws") */
+  bonuses: string[];
+  html: string;
+}
+
+const CONSUMABLE = /potion|oil|elixir|scroll|philter|dust|ammunition|bead|ointment|salve/i;
+
+function sheetItems(inventory: Inventory, catalog: Parameters<typeof resolve>[1], texts: ReadonlyMap<string, { description: string }>): SheetItem[] {
+  const entries = new Map(inventory.items.map((e) => [e.id, resolve(e, catalog)] as [string, Resolved]));
+  return [...entries.values()]
+    .filter((r) => isCarried(r.entry, entries))
+    .filter((r) => r.magic || CONSUMABLE.test(`${r.categories.join(" ")} ${r.item?.name ?? ""}`))
+    .map((r) => ({
+      entryId: r.entry.id,
+      name: r.entry.name?.trim() || generatedNameOf(r),
+      elementName: r.item?.name ?? r.entry.name ?? r.name,
+      magic: r.magic,
+      rarity: r.item?.magic?.rarity ?? r.entry.custom?.rarity ?? null,
+      requiresAttunement: r.requiresAttunement,
+      attuned: !!r.entry.attuned,
+      equipped: r.entry.equipped ?? null,
+      active: isActive(r),
+      charges: r.item?.magic?.charges ?? null,
+      chargesUsed: r.entry.chargesUsed ?? 0,
+      quantity: r.entry.quantity,
+      consumable: CONSUMABLE.test(`${r.categories.join(" ")} ${r.item?.name ?? ""}`) && !r.weapon && !r.armor,
+      weaponDamageType: r.weapon?.damageType ?? null,
+      bonuses: r.item?.effects ?? [],
+      html: r.entry.custom?.description ?? texts.get(r.item?.id ?? "")?.description ?? "",
+    }));
+}
+
+/**
+ * Speeds as Aurora adds them up: the base ("innate speed", or "speed" for a creature form) plus the bonuses that
+ * depend on what is worn ("innate speed:misc": Fast Movement, Unarmored Movement) and other bonuses ("speed:misc":
+ * Mobile). Climbing, swimming and flying the same, each only when the character has that speed at all.
+ */
+export function speedsOf(stat: (name: string) => number | undefined): { walk: number; fly: number; climb: number; swim: number } {
+  const plus = (...names: string[]) => names.reduce((n, name) => n + (stat(name) ?? 0), 0);
+  const other = (kind: "fly" | "climb" | "swim") => {
+    const base = Math.max(stat(`innate-speed:${kind}`) ?? 0, stat(`speed:${kind}`) ?? 0);
+    return base > 0 ? base + plus(`innate-speed:${kind}:misc`, `speed:${kind}:misc`) : 0;
+  };
+  return {
+    walk: (stat("innate-speed") ?? stat("speed") ?? 30) + plus("innate-speed:misc", "speed:misc"),
+    fly: other("fly"),
+    climb: other("climb"),
+    swim: other("swim"),
+  };
+}
 
 const FEATURE_TYPES = new Set(["Class Feature", "Archetype Feature", "Feat", "Feat Feature"]);
 
@@ -494,12 +567,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       skills: skillList,
       passivePerception: 10 + perception,
       initiative: mod("DEX") + (stat("initiative") ?? 0),
-      speeds: {
-        walk: stat("innate-speed") ?? stat("speed") ?? 30,
-        fly: stat("innate-speed:fly") ?? 0,
-        climb: stat("innate-speed:climb") ?? 0,
-        swim: stat("innate-speed:swim") ?? 0,
-      },
+      speeds: speedsOf(stat),
       vision: unique(all.filter((r) => r.type === "Vision").map((r) => r.name)),
       armorClass: armor.total,
       armor,
@@ -507,6 +575,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       attackModes: attackModes(inventory.data, catalog.data.byId, facts),
       equipment: sheetEquipment(inventory.data, catalog.data.byId, facts, itemTexts),
       itemCards: sheetItemCards(inventory.data, catalog.data.byId, itemTexts),
+      items: sheetItems(inventory.data, catalog.data.byId, itemTexts),
       spellPages,
       cardSpells,
       proficiencySummary: owned,

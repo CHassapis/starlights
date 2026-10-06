@@ -185,6 +185,11 @@ describe("armor class", () => {
     expect(ac.parts.map((p) => p.label)).toEqual(["Chain Mail", "Magic armor", "Shield", "Magic shield", "Other bonuses"]);
   });
 
+  it("counts a magic shield made from a base shield: the base's +2 here, the +1 from its rule", () => {
+    const ac = armorClass(inv(entry("a", "chain", { equipped: "Armor" }), entry("s", "weapon+1", { baseElementId: "shield", equipped: "Off Hand" })), catalog, facts({}, { "ac:shield": 1 }));
+    expect(ac.total).toBe(16 + 2 + 1);
+  });
+
   it("uses the best unarmored calculation a feature gives (Draconic Resilience)", () => {
     expect(armorClass(inv(), catalog, facts({ DEX: 12 }, { "ac:draconic-resilience": 14 })).total).toBe(14);
     // worn armor replaces it
@@ -286,6 +291,14 @@ describe("every way to attack with a weapon", () => {
     expect(modes(both, "Rapier")["One hand"].damage).toBe("1d8+3 piercing");
     const twf = modes(attackModes(inv(entry("d", "dagger", { equipped: "Off Hand" })), catalog, facts({ DEX: 16 }, {}, ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_TWOWEAPON_FIGHTING", ...proficient])), "Dagger");
     expect(twf["Off hand"].damage).toBe("1d4+3 piercing");
+  });
+
+  it("2014 Dueling, whose +2 the server already put in melee:damage, is not counted twice and leaves two hands", () => {
+    const has = ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_DUELING", ...proficient];
+    const m = modes(attackModes(inv(entry("s", "longsword", { equipped: "Main Hand" })), catalog, facts({ STR: 16 }, { "melee:damage": 2 }, has)), "Longsword");
+    expect([m["One hand"].damage, m["Two hands"].damage]).toEqual(["1d8+5 slashing", "1d10+3 slashing"]);
+    // the sheet's line (the grip in use) keeps the server's figure, like Aurora
+    expect(attacks(inv(entry("s", "longsword", { equipped: "Main Hand" })), catalog, facts({ STR: 16 }, { "melee:damage": 2 }, has))[0].damage).toBe("1d8+5 slashing");
   });
 
   it("the Nick mastery makes the off-hand attack part of the Attack action only when the character picked it", () => {

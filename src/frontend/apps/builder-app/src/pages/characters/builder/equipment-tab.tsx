@@ -50,6 +50,7 @@ import {
   type Resolved,
 } from "@/lib/rules/items";
 import { rarityOf } from "@/lib/rules/picker";
+import type { BuilderChoice } from "@/lib/api/builder";
 import { cn } from "@/lib/utils";
 
 const newId = () => crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -60,7 +61,11 @@ const newId = () => crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.
  * Equipping armor, shields and weapons and attuning magic items drives the sheet: armor class, attacks, and the
  * items' own rules (saves, speeds, spells) through the rules engine.
  */
-export function EquipmentTab({ characterId }: { characterId: string }) {
+/**
+ * `itemChoices`: the choices the character's items bring (Enspelled Armor's spell), drawn by `renderChoice` (the
+ * Build tab's choice row), so they can be made next to the items.
+ */
+export function EquipmentTab({ characterId, itemChoices = [], renderChoice }: { characterId: string; itemChoices?: BuilderChoice[]; renderChoice?: (choice: BuilderChoice) => ReactNode }) {
   const { data: inventory, isLoading } = useInventory(characterId);
   const save = useSaveInventory(characterId);
   const { data: catalog } = useItemCatalog();
@@ -128,6 +133,13 @@ export function EquipmentTab({ characterId }: { characterId: string }) {
 
   return (
     <div className="max-w-4xl space-y-5">
+      {itemChoices.length > 0 && renderChoice && (
+        <section className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+          <h3 className="mb-1 text-sm font-medium">Choices your items bring</h3>
+          <p className="mb-2 text-xs text-muted-foreground">Pick what an item does (the spell it holds, the option it grants). These also show in the Build tab.</p>
+          <div className="space-y-2">{itemChoices.map(renderChoice)}</div>
+        </section>
+      )}
       {/* the numbers the equipment decides */}
       <div className="flex flex-wrap items-stretch gap-2">
         {summary && (

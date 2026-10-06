@@ -351,6 +351,8 @@ export interface CombatState {
   deathSaveFailures: number;
   heroicInspiration: boolean;
   companions: Companion[];
+  /** item powers switched on: "<inventory entry id>:<power id>" (a Flame Tongue ablaze) */
+  active: string[];
 }
 
 export const EMPTY_COMBAT: CombatState = {
@@ -366,6 +368,7 @@ export const EMPTY_COMBAT: CombatState = {
   deathSaveFailures: 0,
   heroicInspiration: false,
   companions: [],
+  active: [],
 };
 
 /** The maximum hit points: 2014 exhaustion level 4 halves it. */
@@ -444,6 +447,7 @@ export function longRest(state: CombatState, features: Restable[], totalHitDice:
     deathSaveSuccesses: 0,
     deathSaveFailures: 0,
     companions: (state.companions ?? []).map((c) => ({ ...c, damage: 0, temporaryHitPoints: 0 })),
+    active: [],
   };
 }
 
@@ -517,3 +521,57 @@ export function attackBonusOf(attack: string): number | null {
 
 export const percent = (p: number) => `${Math.round(p * 100)}%`;
 export const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+// ---- magic items
+
+/** Extra damage an item's text gives its weapon's hits: always, while switched on, or against some targets. */
+export interface ItemRider {
+  id: string;
+  /** "Always", "While the sword is ablaze", "Against fiend or undead" */
+  label: string;
+  roll: Roll;
+  /** applies on every hit (no switch needed) */
+  always: boolean;
+  /** only on a critical hit */
+  critOnly: boolean;
+}
+
+/**
+ * The extra damage in a magic weapon's text: "it deals an extra 2d6 fire damage", "takes an extra 2d10 radiant
+ * damage", "an extra 3d6 damage of the weapon's type", "plus 4d6 lightning damage". `weaponType` names the
+ * weapon's damage type for "of the weapon's type".
+ */
+export function itemRiders(html: string, weaponType = ""): ItemRider[] {
+  const text = plainSpellText(html);
+  const out: ItemRider[] = [];
+  for (const sentence of text.split(/(?<=\.)\s+/)) {
+    const m = sentence.match(/(?:an extra|plus) (\d+d\d+) (?:([a-z]+) damage|damage(?: of the weapon[’']s type)?)/i);
+    if (!m) continue;
+    const roll = parseRoll(m[1]);
+    if (!roll) continue;
+    roll.type = (m[2] ?? weaponType).toLowerCase();
+    const critOnly = /critical hit/i.test(sentence) && /roll a 20/i.test(sentence);
+    const versus = sentence.match(/when you hit (?:an? |any )?([a-z ,]+?) with/i)?.[1] ?? sentence.match(/if the target is an? ([a-z ]+)/i)?.[1];
+    const condition = sentence.match(/^(?:while|as long as) ([^,]+)/i)?.[1];
+    // a power used now and then (a command word, once a day) adds its damage only when switched on
+    const power = /\b(?:once|bonus action|action|until|expend|charge)\b/i.test(sentence) || (/^(?:on a hit|plus)\b/i.test(sentence) && /command word|can[’']t be used again|until (?:the next )?dawn/i.test(text));
+    const always = !versus && !condition && !critOnly && !power;
+    const label = critOnly
+      ? "On a critical hit"
+      : versus
+        ? `Against ${versus.trim().toLowerCase().replace(/\b(?:an?|any)\s+/g, "")}`
+        : condition
+          ? `While ${condition.trim()}`
+          : always
+            ? "On every hit"
+            : "When you use its power";
+    out.push({ id: `extra${out.length}`, label, roll, always, critOnly });
+  }
+  return out;
+}
+
+/** What a potion or other consumable heals: "regains 2d4 + 2 Hit Points". */
+export function itemHealing(html: string): Roll | null {
+  const m = plainSpellText(html).match(/regains? (\d+d\d+(?:\s*\+\s*\d+)?) hit points/i);
+  return m ? { ...parseRoll(m[1])!, type: "healing" } : null;
+}

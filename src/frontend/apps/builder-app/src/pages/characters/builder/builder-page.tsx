@@ -109,7 +109,13 @@ export function CharacterBuilderPage() {
         </TabsContent>
 
         <TabsContent value="equipment" className="mt-4">
-          <EquipmentTab characterId={id} />
+          <EquipmentTab
+            characterId={id}
+            itemChoices={sections.find(([section]) => section === "Equipment")?.[1] ?? []}
+            renderChoice={(choice) => (
+              <ChoiceRow key={choice.ruleId} characterId={id} choice={choice} hideLabel={false} onHighlight={setPreview} onPicked={setFocus} onInspect={inspect} />
+            )}
+          />
         </TabsContent>
 
         <TabsContent value="story" className="mt-4">

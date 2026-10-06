@@ -160,6 +160,9 @@ export function resolve(entry: InventoryEntry, catalog: Catalog): Resolved {
   };
 }
 
+/** An entry's name as lists show it (the player's own, else the generated one). */
+export const generatedNameOf = (r: Resolved) => displayName({ ...r.entry, name: null }, r.item, r.base);
+
 /** The player's name, else Aurora's name-format with the base item ("Flame Tongue Longsword", "Longsword +1"). */
 export function displayName(entry: InventoryEntry, item?: ItemInfo, base?: ItemInfo): string {
   if (entry.name?.trim()) return entry.name.trim();
@@ -357,9 +360,10 @@ export function armorClass(inventory: Inventory, catalog: Catalog, c: CharacterF
   }
   if (shield?.armor) {
     parts.push({ label: shield.name, value: shield.armor.armorClass });
-    // the shield's own rule puts its +2 in ac:shield too: only what is above it is magic (a +1 shield gives 3)
+    // a whole magic shield's own rule puts its +2 in ac:shield too, so only what is above it is magic; a magic
+    // shield made from a base shield ("Shield, +1") registers only its magic (+1), the base's +2 coming from here
     const total = c.stat("ac:shield");
-    const magic = total === undefined ? 0 : total - shield.armor.armorClass;
+    const magic = total === undefined ? 0 : shield.base ? total : total - shield.armor.armorClass;
     if (magic > 0) parts.push({ label: "Magic shield", value: magic });
   }
   const misc = c.stat("ac:misc") ?? 0;
@@ -390,6 +394,8 @@ const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
 /** Fighting styles that change an attack by how the weapon is held (Aurora gives these no numbers to add). */
 const STYLES = {
+  // 2014 Dueling has a rule (melee:damage +2 while one weapon is held), which the server applies to the grip in use
+  dueling2014: ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_DUELING"],
   dueling: ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_DUELING", "ID_WOTC_PHB24_FEAT_DUELING"],
   greatWeapon2014: ["ID_WOTC_PHB_CLASS_FEATURE_FIGHTINGSTYLE_GREAT_WEAPON_FIGHTING"],
   greatWeapon2024: ["ID_WOTC_PHB24_FEAT_GREAT_WEAPON_FIGHTING"],
@@ -511,6 +517,12 @@ export function attackModes(inventory: Inventory, catalog: Catalog, c: Character
   const thrownStyle = hasAny(c, STYLES.thrown);
   const twoWeapon = hasAny(c, STYLES.twoWeapon);
   const heldWeapons = (except: Resolved) => resolved.filter((x) => x !== except && x.entry.equipped && x.entry.equipped !== "Armor" && x.weapon).length;
+  // 2014 Dueling's +2 is already in melee:damage while its condition holds now (a weapon in the main hand, nothing
+  // but a shield in the other): take it out, so each way of holding gets it only when that way qualifies
+  const held = [...entries.values()].filter((x) => x.entry.equipped && !x.entry.stored);
+  const mainHand = held.find((x) => x.weapon && (x.entry.equipped === "Main Hand" || x.entry.equipped === "Two-Handed"));
+  const offHand = held.find((x) => x.entry.equipped === "Off Hand" && x.armor?.kind !== "Shield") ?? held.find((x) => x.entry.equipped === "Two-Handed");
+  const dueling2014Counted = hasAny(c, STYLES.dueling2014) && !!mainHand && !offHand ? 2 : 0;
 
   const seen = new Set<string>();
   const out: AttackMode[] = [];
@@ -521,7 +533,7 @@ export function attackModes(inventory: Inventory, catalog: Catalog, c: Character
     const w = r.weapon!;
     const p = w.properties ?? [];
     const equipped = !!r.entry.equipped;
-    const held = r.entry.equipped;
+    const heldAs = r.entry.equipped;
     const masteryKnown = knowsMastery(c, r.base?.name ?? r.item?.name ?? r.name, w.mastery);
     const push = (mode: AttackModeName, current: boolean, o: WeaponLineOptions, notes: string[] = [], extra: Partial<AttackMode> = {}) =>
       out.push({ ...weaponLine(r, c, o), mode, action: "Attack", current, equipped, notes, masteryKnown, ...extra });
@@ -535,16 +547,16 @@ export function attackModes(inventory: Inventory, catalog: Catalog, c: Character
       const duel = dueling && alone;
       push(
         "One hand",
-        held === "Main Hand" || held === "Off Hand",
-        { dice: w.damage, ranged: false, range: reachOf(r), extraDamage: duel ? 2 : 0 },
+        heldAs === "Main Hand" || heldAs === "Off Hand",
+        { dice: w.damage, ranged: false, range: reachOf(r), extraDamage: (duel ? 2 : 0) - dueling2014Counted },
         dueling ? [alone ? "Dueling +2 damage (no other weapon held)" : "Dueling: +2 damage when it is the only weapon you hold"] : [],
       );
     }
     if (p.includes("Versatile") || p.includes("Two-Handed")) {
       push(
         "Two hands",
-        held === "Two-Handed",
-        { dice: p.includes("Versatile") && w.versatile ? w.versatile : w.damage, ranged: false, range: reachOf(r) },
+        heldAs === "Two-Handed",
+        { dice: p.includes("Versatile") && w.versatile ? w.versatile : w.damage, ranged: false, range: reachOf(r), extraDamage: -dueling2014Counted },
         greatWeapon ? [greatWeapon === "2024" ? "Great Weapon Fighting: damage dice of 1 or 2 count as 3" : "Great Weapon Fighting: reroll damage dice of 1 or 2 once"] : [],
         greatWeapon ? { greatWeapon } : {},
       );
@@ -557,7 +569,7 @@ export function attackModes(inventory: Inventory, catalog: Catalog, c: Character
       push(
         "Off hand",
         false,
-        { dice: w.damage, ranged: false, range: reachOf(r), noAbilityDamage: !twoWeapon },
+        { dice: w.damage, ranged: false, range: reachOf(r), noAbilityDamage: !twoWeapon, extraDamage: -dueling2014Counted },
         [
           "After attacking with a different Light weapon",
           twoWeapon ? "Two-Weapon Fighting: keeps the ability modifier" : "No ability modifier to its damage unless it is negative",

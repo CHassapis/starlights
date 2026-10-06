@@ -5,12 +5,14 @@
  * bonus or save DC of the spellcasting they belong to. Only what the sheet says the character has is listed.
  */
 import type { SheetData, SheetFeature, SheetSpell } from "@/lib/api/sheet";
-import { attackBonusOf, castingAction, findPool, parseRoll, parseUsage, poolFromText, regainsOneOnShortRest, signed, ABILITIES, type Roll, type Usage } from "@/lib/rules/battle";
+import { attackBonusOf, castingAction, findPool, itemRiders, type ItemRider, parseRoll, parseUsage, poolFromText, regainsOneOnShortRest, signed, ABILITIES, type Roll, type Usage } from "@/lib/rules/battle";
 
 export type Slot = "Action" | "Bonus Action" | "Reaction" | "Attack" | "Other";
 
 export interface WeaponAttack {
   name: string;
+  /** the inventory entry, for its magic item's powers */
+  entryId?: string;
   /** how it is used ("Two hands", "Thrown"), when the weapon can be used more than one way */
   mode?: string;
   /** held this way now; an item weapon not equipped must be drawn first */
@@ -72,6 +74,8 @@ export interface BattleModel {
   features: BattleFeature[];
   standard: StandardAction[];
   spells: BattleSpell[];
+  /** a magic weapon's extra damage from its text, by inventory entry (Flame Tongue ablaze, Holy Avenger vs fiends) */
+  riders: Record<string, ItemRider[]>;
   grapple: string;
   hasWeaponMastery: boolean;
 }
@@ -178,6 +182,7 @@ export function buildBattleModel(data: SheetData): BattleModel {
     if (!roll) return null;
     return {
       name: m.name,
+      entryId: m.entryId,
       mode: (byWeapon.get(m.entryId) ?? 0) > 1 || m.mode === "Thrown" || m.mode === "Off hand" ? m.mode : undefined,
       current: m.current,
       equipped: m.equipped,
@@ -273,6 +278,7 @@ export function buildBattleModel(data: SheetData): BattleModel {
     features,
     standard: standardActions(edition, data, data.speeds.walk),
     spells,
+    riders: Object.fromEntries((data.items ?? []).map((i) => [i.entryId, itemRiders(i.html, i.weaponDamageType ?? "")]).filter(([, r]) => (r as ItemRider[]).length > 0)),
     grapple,
     hasWeaponMastery: has(/^Weapon Mastery$/i),
   };
