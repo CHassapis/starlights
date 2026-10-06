@@ -131,6 +131,51 @@ export function useSetClassLevel(characterId: string) {
   });
 }
 
+export interface MulticlassOption {
+  elementId: string;
+  name: string;
+  source: string;
+  prerequisite: string | null;
+  /** the character meets the prerequisite (ability scores) */
+  eligible: boolean;
+}
+
+export interface MulticlassTaken {
+  extraId: string;
+  elementId: string;
+  name: string;
+}
+
+/** The classes the character can take as an additional class, and the ones it has taken. */
+export function useMulticlass(characterId: string) {
+  return useQuery({
+    queryKey: ["builder", characterId, "multiclass"],
+    queryFn: () => apiClient.get<{ taken: MulticlassTaken[]; options: MulticlassOption[] }>(`/api/characters/${characterId}/multiclass`),
+  });
+}
+
+export function useAddMulticlass(characterId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (elementId: string) => apiClient.post<{ elementId: string }, MulticlassTaken>(`/api/characters/${characterId}/multiclass`, { elementId }),
+    onSettled: () => {
+      refreshCharacter(qc, characterId);
+      qc.invalidateQueries({ queryKey: ["builder", characterId, "multiclass"] }).catch(() => {});
+    },
+  });
+}
+
+export function useRemoveMulticlass(characterId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (extraId: string) => apiClient.delete(`/api/characters/${characterId}/multiclass/${extraId}`),
+    onSettled: () => {
+      refreshCharacter(qc, characterId);
+      qc.invalidateQueries({ queryKey: ["builder", characterId, "multiclass"] }).catch(() => {});
+    },
+  });
+}
+
 export function useAssignPlayer(characterId: string) {
   const qc = useQueryClient();
   return useMutation({

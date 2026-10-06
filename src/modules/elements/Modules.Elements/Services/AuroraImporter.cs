@@ -236,6 +236,18 @@ internal sealed class AuroraImporter : IAuroraImporter
                 Attach("supports", id => new SupportsComponent(id, aurora.Supports));
             }
 
+            // a multiclass's prerequisite ("Strength 13 or Dexterity 13") and the expression that checks it
+            if (aurora.Type == "Multiclass" && aurora.Xml.Element("prerequisite") is { } prerequisite)
+            {
+                var check = Convert(((string?)aurora.Xml.Element("requirements"))?.Trim(), byId);
+                Attach("prerequisites", id =>
+                {
+                    var component = new PrerequisitesComponent(id, prerequisite.Value);
+                    component.UpdateRequirements(check ?? string.Empty);
+                    return component;
+                });
+            }
+
             foreach (var rule in aurora.Rules)
             {
                 var requirements = RequirementsOf(rule, byId);
@@ -363,6 +375,22 @@ internal sealed class AuroraImporter : IAuroraImporter
                 {
                     duplicates++;
                 }
+
+                // a class taken as an additional class: its <multiclass> becomes an element of its own ("Fighter
+                // (multiclass)") that grants the class; the class's starting grants marked "!ID_…_MULTICLASS_FIGHTER"
+                // (saving throws, skills, some armor) stay off for a character who has it
+                foreach (var multiclass in xml.Elements("multiclass"))
+                {
+                    var multiclassId = (string?)multiclass.Attribute("id");
+                    if (string.IsNullOrWhiteSpace(multiclassId))
+                    {
+                        continue;
+                    }
+                    var synthetic = Multiclass(multiclass, multiclassId, id, name, (string?)xml.Attribute("source"));
+                    var multiclassElement = new AuroraElement(multiclassId, (string)synthetic.Attribute("name")!, "Multiclass", (string?)xml.Attribute("source"), file, synthetic);
+                    elements.Add(multiclassElement);
+                    byId.TryAdd(multiclassId, multiclassElement);
+                }
             }
             byFile[file] = elements;
         }
@@ -467,11 +495,11 @@ internal sealed class AuroraImporter : IAuroraImporter
     }
 
     // "unless the character has X" where X is something the builder does not offer yet, so it always holds:
-    // multiclassing (!ID_WOTC_PHB24_MULTICLASS_FIGHTER), Tasha's customized origin options, optional
+    // Tasha's customized origin options, optional
     // feature replacements and optional background features. Not "!ID_INTERNAL_GRANTS_BACKGROUND_ASI": whether
     // a background grants the ability score increase really differs between the 2014 and 2024 rules
     private static readonly Regex AlwaysMet = new(
-        @"^!(ID_[A-Z0-9_]*MULTICLASS[A-Z0-9_]*|ID_WOTC_TCOE_OPTION_CUSTOMIZED_[A-Z_]+|ID_INTERNAL_PHB24_FEATURE_REPLACEMENT_[A-Z0-9_]+|ID_INTERNAL_GRANT_OPTIONAL_BACKGROUND_FEATURE)$",
+        @"^!(ID_WOTC_TCOE_OPTION_CUSTOMIZED_[A-Z_]+|ID_INTERNAL_PHB24_FEATURE_REPLACEMENT_[A-Z0-9_]+|ID_INTERNAL_GRANT_OPTIONAL_BACKGROUND_FEATURE)$",
         RegexOptions.Compiled);
 
     // an equipped condition's terms ("[armor:none]", "[primary:versatile]") as requirement terms the processor
@@ -505,6 +533,31 @@ internal sealed class AuroraImporter : IAuroraImporter
             (_, null) => converted,
             _ => $"({converted}),({equipped})",
         };
+    }
+
+    // Aurora ids of imported elements as their element ids, the others left as they are
+    private static string? Convert(string? expression, Dictionary<string, AuroraElement> catalog) =>
+        string.IsNullOrEmpty(expression) ? null : AuroraId.Replace(expression, m => catalog.ContainsKey(m.Value) ? ToGuid(m.Value).ToString() : m.Value);
+
+    /// <summary>The element for taking a class as an additional class, from the class's &lt;multiclass&gt;.</summary>
+    private static XElement Multiclass(XElement multiclass, string multiclassId, string classId, string className, string? source)
+    {
+        var prerequisite = ((string?)multiclass.Element("prerequisite"))?.Trim();
+        var proficiencies = multiclass.Element("setters")?.Elements("set").FirstOrDefault(s => (string?)s.Attribute("name") == "multiclass proficiencies")?.Value.Trim();
+        var text = $"Take {className} as an additional class.";
+        if (!string.IsNullOrEmpty(prerequisite)) text += $" Prerequisite: {prerequisite}.";
+        if (!string.IsNullOrEmpty(proficiencies)) text += $" You gain these proficiencies: {proficiencies}.";
+        return new XElement("element",
+            new XAttribute("name", $"{className} (multiclass)"),
+            new XAttribute("type", "Multiclass"),
+            new XAttribute("source", source ?? string.Empty),
+            new XAttribute("id", multiclassId),
+            new XElement("description", new XElement("p", text)),
+            new XElement("prerequisite", prerequisite ?? string.Empty),
+            multiclass.Element("requirements") is { } requirements ? new XElement("requirements", requirements.Value) : null,
+            new XElement("rules",
+                (multiclass.Element("rules")?.Elements() ?? []).Select(rule => new XElement(rule)),
+                new XElement("grant", new XAttribute("type", "Class"), new XAttribute("id", classId))));
     }
 
     private static int? ParseInt(XAttribute? attribute) => int.TryParse(attribute?.Value, out var value) ? value : null;

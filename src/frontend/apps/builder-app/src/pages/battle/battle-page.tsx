@@ -515,7 +515,8 @@ function Vitals({
   const n = Math.max(0, Math.floor(Number(amount) || 0));
   const ratio = maxHp > 0 ? hp / maxHp : 0;
   const caster = data.spellcasting[0];
-  const hitDiceLeft = Math.max(0, data.level - state.hitDiceSpent);
+  const dicePools = hitDiceOf(data, state, data.level);
+  const hitDiceLeft = dicePools.pools.reduce((n, p) => n + dicePools.leftOf(p.sides), 0);
   const apply = (fn: (n: number) => void) => {
     if (n > 0) fn(n);
     setAmount("");
@@ -556,7 +557,11 @@ function Vitals({
         <Stat label="Proficiency" value={signed(data.proficiencyBonus)} />
         <Stat label="Passive Perception" value={data.passivePerception} sub={data.vision.join(", ") || undefined} />
         {caster ? <Stat label="Spell save DC" value={caster.saveDc} sub={`${signed(caster.attackBonus)} to hit · ${caster.ability}`} /> : <Stat label="Attacks per action" value={data.attacksPerAction} />}
-        <Stat label="Hit dice" value={hitDiceLeft} sub={data.hitDie ? `d${data.hitDie} + ${model.mod("CON")} each` : undefined} />
+        <Stat
+          label="Hit dice"
+          value={hitDiceLeft}
+          sub={dicePools.multi ? dicePools.pools.map((p) => `${dicePools.leftOf(p.sides)} d${p.sides}`).join(" · ") : data.hitDie ? `d${data.hitDie} + ${model.mod("CON")} each` : undefined}
+        />
         <Stat label="Saves" value={<span className="text-sm leading-6">{data.saves.filter((s) => s.proficiency !== "none").map((s) => s.abilityScoreAbbreviation).join(" ") || "—"}</span>} sub="proficient" />
       </div>
     </div>
@@ -1309,13 +1314,31 @@ function withBonus(effect: ReturnType<typeof spellEffect>, bonus: number) {
 
 // ---- rests
 
+/**
+ * Hit dice by size: one pool per die (a fighter 5 / wizard 2 has 5 d10 and 2 d6). A single-class character keeps
+ * the one count it always had; a multiclass character's spent dice are kept per size ("Hit Dice d10" in uses).
+ */
+function hitDiceOf(data: SheetData, state: CombatState, total: number) {
+  const pools = data.hitDicePools?.length ? data.hitDicePools : [{ sides: data.hitDie ?? 8, count: total }];
+  const multi = pools.length > 1;
+  const key = (sides: number) => `Hit Dice d${sides}`;
+  const leftOf = (sides: number) => {
+    const count = pools.find((p) => p.sides === sides)?.count ?? 0;
+    return Math.max(0, count - (multi ? (state.uses[key(sides)] ?? 0) : state.hitDiceSpent));
+  };
+  return { pools, multi, leftOf, key };
+}
+
 function RestDialog({ kind, onClose, ctx, totalHitDice }: { kind: "short" | "long" | null; onClose: () => void; ctx: Ctx; totalHitDice: number }) {
   const { data, model, state } = ctx;
   const [dice, setDice] = useState(0);
   const [rolled, setRolled] = useState<number[] | null>(null);
-  const left = Math.max(0, totalHitDice - state.hitDiceSpent);
+  const [size, setSize] = useState<number | null>(null);
+  const { pools, multi, leftOf, key } = hitDiceOf(data, state, totalHitDice);
   const con = model.mod("CON");
-  const die = data.hitDie ?? 8;
+  // a multiclass character picks which hit dice to spend (the biggest with some left, to start)
+  const die = size ?? pools.find((p) => leftOf(p.sides) > 0)?.sides ?? pools[0]?.sides ?? 8;
+  const left = leftOf(die);
   const averageHeal = dice * Math.max(0, Math.floor(die / 2) + 1 + con);
   const shortBack = model.features.filter((f) => f.parsedUsage?.kind === "count" && (f.parsedUsage.recharge === "short" || f.parsedUsage.recharge === "turn" || f.regainOnShort) && (state.uses[f.title] ?? 0) > 0);
   const longBack = model.features.filter((f) => f.parsedUsage?.kind === "count" && (state.uses[f.title] ?? 0) > 0);
@@ -1325,13 +1348,31 @@ function RestDialog({ kind, onClose, ctx, totalHitDice }: { kind: "short" | "lon
     onClose();
   };
   const finishShort = (healed: number) => {
-    ctx.updateCombat((c) => ({ ...restShort(c, model.features, healed, dice), effects: (c.effects ?? []).filter((k) => effectFor(k, ctx.effectCtx)?.longLasting) }));
+    ctx.updateCombat((c) => {
+      const rested = { ...restShort(c, model.features, healed, dice), effects: (c.effects ?? []).filter((k) => effectFor(k, ctx.effectCtx)?.longLasting) };
+      // a multiclass character's spent dice are kept by size too
+      return multi && dice > 0 ? { ...rested, uses: { ...rested.uses, [key(die)]: (rested.uses[key(die)] ?? 0) + dice } } : rested;
+    });
     if (ctx.pact) ctx.updateMagic(slotsShort);
     toast.success(`Short rest: ${healed} hit points back${shortBack.length ? `, ${shortBack.map((f) => f.title).join(", ")} back` : ""}${ctx.pact ? ", pact slots back" : ""}.`);
     close();
   };
   const finishLong = () => {
-    ctx.updateCombat((c) => restLong(c, model.features, totalHitDice, model.edition));
+    ctx.updateCombat((c) => {
+      const rested = restLong(c, model.features, totalHitDice, model.edition);
+      if (!multi) return rested;
+      // dice back by size, the biggest first: all of them (2024) or half the total (2014)
+      let back = model.edition === "2024" ? Infinity : Math.max(1, Math.floor(totalHitDice / 2));
+      const uses = { ...rested.uses };
+      for (const p of pools) {
+        const spent = c.uses[key(p.sides)] ?? 0;
+        const regained = Math.min(spent, back);
+        back -= regained;
+        if (spent - regained > 0) uses[key(p.sides)] = spent - regained;
+        else delete uses[key(p.sides)];
+      }
+      return { ...rested, uses };
+    });
     ctx.updateMagic(slotsLong);
     toast.success("Long rest: hit points, spell slots and features are back.");
     close();
@@ -1344,9 +1385,29 @@ function RestDialog({ kind, onClose, ctx, totalHitDice }: { kind: "short" | "lon
             <DialogHeader>
               <DialogTitle>Short rest</DialogTitle>
               <DialogDescription>
-                At least an hour of rest. Spend hit dice to heal: each heals its roll {con >= 0 ? "+" : "−"} {Math.abs(con)} (Constitution). You have {left} of {totalHitDice} d{die} left.
+                At least an hour of rest. Spend hit dice to heal: each heals its roll {con >= 0 ? "+" : "−"} {Math.abs(con)} (Constitution).{" "}
+                {multi ? `You have ${pools.map((p) => `${leftOf(p.sides)} d${p.sides}`).join(" and ")} left.` : `You have ${left} of ${totalHitDice} d${die} left.`}
               </DialogDescription>
             </DialogHeader>
+            {multi && (
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Which hit dice">
+                {pools.map((p) => (
+                  <Button
+                    key={p.sides}
+                    size="sm"
+                    variant={p.sides === die ? "default" : "outline"}
+                    disabled={leftOf(p.sides) === 0}
+                    onClick={() => {
+                      setSize(p.sides);
+                      setDice(0);
+                      setRolled(null);
+                    }}
+                  >
+                    d{p.sides} ({leftOf(p.sides)} left)
+                  </Button>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <Button size="icon" variant="outline" aria-label="One die fewer" onClick={() => setDice((d) => Math.max(0, d - 1))}>
                 <MinusIcon />

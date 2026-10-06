@@ -46,7 +46,8 @@ public sealed class GetExtrasEndpoint : EndpointWithoutRequest<ExtrasResponse>
         }
 
         var catalog = await _catalog.GetAsync(ct);
-        await Send.OkAsync(new ExtrasResponse(character.Extras.Select(e =>
+        // extras are build options; a multiclass is kept with them but listed by the multiclass endpoint
+        await Send.OkAsync(new ExtrasResponse(character.Extras.Where(e => catalog.Find(e.ElementId) is { BuildOption: true }).Select(e =>
         {
             var info = catalog.Find(e.ElementId);
             return new ExtraModel(e.Id, e.ElementId, info?.Name ?? "Unknown option", info?.Categories ?? [], e.RegistrationId is not null);

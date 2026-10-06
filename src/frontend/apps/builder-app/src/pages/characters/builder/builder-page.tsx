@@ -20,8 +20,12 @@ import {
   useClearChoice,
   usePickChoice,
   useSetClassLevel,
+  useMulticlass,
+  useAddMulticlass,
+  useRemoveMulticlass,
   type BuilderChoice,
 } from "@/lib/api/builder";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { usePlayer } from "@/lib/player";
 import { firstImage, usePictureDrop, usePortraitUpload } from "@/lib/picture-drop";
 import { SourcesPicker } from "@/components/sources-picker";
@@ -206,14 +210,6 @@ function BuilderHeader({ characterId, choices, pending }: { characterId: string;
   const summary = [pick("Species"), primary ? `${primary.name} ${primary.level}` : null, pick("Background")].filter(Boolean).join(" · ");
   const owner = character?.playerName;
 
-  function changeLevel(newLevel: number) {
-    if (!primary) return;
-    setLevel.mutate(
-      { characterClassId: primary.characterClassId, newLevel },
-      { onError: (e) => toast.error("Could not change the level", { description: e.message }) },
-    );
-  }
-
   return (
     <header className="space-y-3">
       <Link to="/characters" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -250,33 +246,116 @@ function BuilderHeader({ characterId, choices, pending }: { characterId: string;
               <Spinner className="size-4" /> Updating…
             </span>
           )}
-          <div className="flex items-center gap-2 rounded-lg border px-2 py-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Level down"
-              disabled={!primary || primary.level <= 1 || setLevel.isPending}
-              onClick={() => changeLevel(primary!.level - 1)}
-            >
-              <MinusIcon />
-            </Button>
-            <div className="w-16 text-center">
-              <div className="text-xs uppercase tracking-widest text-muted-foreground">Level</div>
-              <div className="font-heading text-xl">{primary?.level ?? "–"}</div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Level up"
-              disabled={!primary || primary.level >= 20 || setLevel.isPending}
-              onClick={() => changeLevel(primary!.level + 1)}
-            >
-              <PlusIcon />
-            </Button>
-          </div>
+          <ClassLevels characterId={characterId} classes={classData?.classes ?? []} busy={setLevel.isPending} onLevel={(characterClassId, newLevel) =>
+            setLevel.mutate({ characterClassId, newLevel }, { onError: (e) => toast.error("Could not change the level", { description: e.message }) })
+          } />
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * The character's classes, each with its level (the total is the character's level, at most 20), and multiclassing:
+ * add another class (its prerequisite shown; one the character does not meet is greyed out) or remove one added.
+ */
+function ClassLevels({
+  characterId,
+  classes,
+  busy,
+  onLevel,
+}: {
+  characterId: string;
+  classes: { characterClassId: string; name: string; level: number; isPrimary: boolean }[];
+  busy: boolean;
+  onLevel: (characterClassId: string, newLevel: number) => void;
+}) {
+  const multiclass = useMulticlass(characterId);
+  const add = useAddMulticlass(characterId);
+  const remove = useRemoveMulticlass(characterId);
+  const [adding, setAdding] = useState(false);
+  const total = classes.reduce((n, c) => n + c.level, 0);
+  const sorted = [...classes].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+  const takenOf = (name: string) => multiclass.data?.taken.find((t) => t.name === `${name} (multiclass)`);
+  const options = [...(multiclass.data?.options ?? [])].sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.name.localeCompare(b.name));
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {sorted.map((c) => {
+        const taken = takenOf(c.name);
+        return (
+          <div key={c.characterClassId} className="flex items-center gap-1 rounded-lg border px-2 py-1">
+            <Button variant="ghost" size="icon-sm" aria-label={`${c.name} level down`} disabled={c.level <= 1 || busy} onClick={() => onLevel(c.characterClassId, c.level - 1)}>
+              <MinusIcon />
+            </Button>
+            <div className="min-w-16 text-center">
+              <div className="text-xs uppercase tracking-widest text-muted-foreground">{classes.length > 1 ? c.name : "Level"}</div>
+              <div className="font-heading text-xl">{c.level}</div>
+            </div>
+            <Button variant="ghost" size="icon-sm" aria-label={`${c.name} level up`} disabled={total >= 20 || busy} onClick={() => onLevel(c.characterClassId, c.level + 1)}>
+              <PlusIcon />
+            </Button>
+            {taken && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove the ${c.name} levels`}
+                title={`Remove the ${c.name} levels`}
+                disabled={remove.isPending}
+                onClick={() => remove.mutate(taken.extraId, { onError: (e) => toast.error("Could not remove the class", { description: e.message }) })}
+              >
+                ×
+              </Button>
+            )}
+          </div>
+        );
+      })}
+      {classes.length > 0 && (
+        <Button variant="outline" size="sm" disabled={total >= 20} onClick={() => setAdding(true)}>
+          <PlusIcon /> Add a class
+        </Button>
+      )}
+      {classes.length > 1 && <span className="text-sm text-muted-foreground">Level {total}</span>}
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add a class (multiclass)</DialogTitle>
+            <DialogDescription>
+              The new class starts at level 1 and raises the character's level by one. You get its hit die and features, but only some of its starting proficiencies. You need the ability scores it asks for.
+            </DialogDescription>
+          </DialogHeader>
+          {multiclass.isLoading ? (
+            <Spinner className="mx-auto my-4 size-5" />
+          ) : (
+            <ul className="space-y-1.5">
+              {options.map((o) => (
+                <li key={o.elementId}>
+                  <button
+                    type="button"
+                    disabled={!o.eligible || add.isPending}
+                    onClick={() =>
+                      add.mutate(o.elementId, {
+                        onSuccess: () => {
+                          setAdding(false);
+                          toast.success(`${o.name} added at level 1`);
+                        },
+                        onError: (e) => toast.error("Could not add the class", { description: e.message }),
+                      })
+                    }
+                    className={cn("flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left", o.eligible ? "hover:bg-muted" : "cursor-not-allowed opacity-50")}
+                  >
+                    <span>
+                      <span className="font-medium">{o.name}</span>
+                      <span className="block text-xs text-muted-foreground">{o.source}</span>
+                    </span>
+                    <span className="text-right text-xs text-muted-foreground">{o.prerequisite ? `Needs ${o.prerequisite}` : ""}{!o.eligible && <span className="block text-destructive">not met</span>}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

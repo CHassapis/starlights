@@ -10,7 +10,7 @@ namespace Starlights.Modules.Characters.Services.Processing;
 /// Anything unknown (a value the character does not have, ids of elements that were not imported) does not hold,
 /// so "!ID_SOMETHING_UNKNOWN" is met.
 /// </summary>
-internal static class RequirementsExpression
+public static class RequirementsExpression
 {
     public static bool Evaluate(string expression, Func<Guid, bool> hasElement, int characterLevel) =>
         Evaluate(expression, hasElement, name => name is "level" or "character" ? characterLevel : null);

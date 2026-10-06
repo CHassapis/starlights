@@ -15,4 +15,8 @@ public record ElementDataModel
     public List<IncludeRuleDataModel> IncludeRules { get; init; } = [];
     public List<StatisticRuleDataModel> StatisticRules { get; init; } = [];
     public List<SelectionRuleDataModel> SelectionRules { get; init; } = [];
+
+    /// <summary>What it asks of the character, in words ("Strength 13 or Dexterity 13"), and as a requirements expression.</summary>
+    public string? Prerequisite { get; init; }
+    public string? PrerequisiteRequirements { get; init; }
 }

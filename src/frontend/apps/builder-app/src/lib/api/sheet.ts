@@ -145,6 +145,8 @@ export interface SheetData {
   hitDice: string;
   /** the primary class's hit die (8 for a d8), for short rests */
   hitDie: number | null;
+  /** hit dice by size, one pool per die (a fighter 5 / wizard 2 has 5 d10 and 2 d6) */
+  hitDicePools: { sides: number; count: number }[];
   /** the rules the primary class comes from: 2024 for a revised Player's Handbook class, else 2014 */
   edition: "2014" | "2024";
   hitPoints: number | null;
@@ -254,6 +256,21 @@ const unique = (list: string[]) => [...new Set(list)].sort((a, b) => a.localeCom
 export function hitPointsFor(hitDie: number, level: number, con: number, bonus: number, rolls?: string): number {
   const rolled = (rolls ?? "").split(",").map((r) => Number(r.trim())).filter((n) => n > 0);
   const dice = rolled.length >= level ? rolled.slice(0, level).reduce((a, b) => a + b, 0) : hitDie + (level - 1) * (hitDie / 2 + 1);
+  return dice + level * con + bonus;
+}
+
+/**
+ * Maximum hit points of a multiclass character: the first class's die at its first level, then each level's fixed
+ * average of its own class's die (or Aurora's rolls, when there is one for every level), the Constitution modifier
+ * each level, and bonuses.
+ */
+export function hitPointsForClasses(classes: { level: number; die: number }[], con: number, bonus: number, rolls?: string): number {
+  const level = classes.reduce((n, c) => n + c.level, 0);
+  const rolled = (rolls ?? "").split(",").map((r) => Number(r.trim())).filter((n) => n > 0);
+  const dice =
+    rolled.length >= level
+      ? rolled.slice(0, level).reduce((a, b) => a + b, 0)
+      : classes.reduce((n, c, i) => n + (i === 0 ? c.die + (c.level - 1) * (c.die / 2 + 1) : c.level * (c.die / 2 + 1)), 0);
   return dice + level * con + bonus;
 }
 
@@ -461,6 +478,14 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
   const classEntry = entries.get(all.find((r) => r.registrationId === primary?.registrationId)?.associatedElementId ?? "");
   const subclass = all.find((r) => r.type === "SubClass")?.name;
   const hitDie = Number(classEntry?.setters.hd?.replace(/\D/g, "")) || null;
+  // every class with its hit die, the primary first (its first level gives the die's maximum)
+  const classDice = [...(classes.data?.classes ?? [])]
+    .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
+    .map((c) => {
+      const entry = entries.get(all.find((r) => r.registrationId === c.registrationId)?.associatedElementId ?? "");
+      return { name: c.name, level: c.level, die: Number(entry?.setters.hd?.replace(/\D/g, "")) || hitDie || 8 };
+    });
+  const multiclass = classDice.length > 1;
   const con = mod("CON");
 
   const proficiencies = { armor: [] as string[], weapons: [] as string[], tools: [] as string[] };
@@ -558,7 +583,7 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       player: details.data.character.playerName ?? "",
       portraitUrl: details.data.character.portraitUrl,
       level,
-      classLine: `Level ${level} ${top("Species")} ${primary?.name ?? ""}${subclass ? `, ${subclass}` : ""}`.replace(/\s+/g, " ").trim(),
+      classLine: `Level ${level} ${top("Species")} ${multiclass ? classDice.map((c) => `${c.name} ${c.level}`).join(" / ") : (primary?.name ?? "")}${subclass ? `, ${subclass}` : ""}`.replace(/\s+/g, " ").trim(),
       background: top("Background"),
       alignment: top("Alignment"),
       deity: top("Deity"),
@@ -593,10 +618,17 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
         }),
       ),
       defenses: defenses.data ?? { resistances: [], immunities: [], vulnerabilities: [] },
-      hitDice: hitDie ? `${level}d${hitDie}` : "",
+      hitDice: multiclass ? classDice.map((c) => `${c.level}d${c.die}`).join(" + ") : hitDie ? `${level}d${hitDie}` : "",
       hitDie,
+      hitDicePools: [...classDice.reduce((m, c) => m.set(c.die, (m.get(c.die) ?? 0) + c.level), new Map<number, number>())]
+        .map(([sides, count]) => ({ sides, count }))
+        .sort((a, b) => b.sides - a.sides),
       edition: /\((2024|2025)\)/.test(classEntry?.source ?? "") ? "2024" : "2014",
-      hitPoints: hitDie ? hitPointsFor(hitDie, level, con, stat("hp") ?? 0, story.data?.fields.hitPointRolls) : null,
+      hitPoints: multiclass
+        ? hitPointsForClasses(classDice, con, stat("hp") ?? 0, story.data?.fields.hitPointRolls)
+        : hitDie
+          ? hitPointsFor(hitDie, level, con, stat("hp") ?? 0, story.data?.fields.hitPointRolls)
+          : null,
       proficiencies: { armor: unique(proficiencies.armor), weapons: unique(proficiencies.weapons), tools: unique(proficiencies.tools) },
       languages: unique(all.filter((r) => r.type === "Language").map((r) => r.name)),
       speciesTraits: dedupe(
