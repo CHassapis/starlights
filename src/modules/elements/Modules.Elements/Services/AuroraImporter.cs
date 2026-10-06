@@ -236,6 +236,13 @@ internal sealed class AuroraImporter : IAuroraImporter
                 Attach("supports", id => new SupportsComponent(id, aurora.Supports));
             }
 
+            // "allow duplicate": the same option may be picked again (the same ability twice for +2, a feat taken twice)
+            if (aurora.Xml.Element("setters")?.Elements("set").Any(set =>
+                    (string?)set.Attribute("name") == "allow duplicate" && string.Equals(set.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase)) == true)
+            {
+                Attach("repeatable", id => new RepeatableComponent(id, isRepeatable: true));
+            }
+
             // a multiclass's prerequisite ("Strength 13 or Dexterity 13") and the expression that checks it
             if (aurora.Type == "Multiclass" && aurora.Xml.Element("prerequisite") is { } prerequisite)
             {
@@ -432,6 +439,13 @@ internal sealed class AuroraImporter : IAuroraImporter
             }
         }
 
+        // a class's Ability Score Improvement levels ask for an "Improvement Option" (2014 classes): the Aurora app makes
+        // the answers itself (increase abilities, or take a feat), so they are generated for every such choice no file answers
+        if (ImprovementOptions(byId.Values.ToList()) is { } improvements)
+        {
+            AddDocument(BuiltIn.BuiltInContent.Prefix + "improvement-options.xml", improvements);
+        }
+
         _logger.LogInformation("aurora catalog: {Elements} elements in {Files} files ({Duplicates} duplicate ids ignored)", byId.Count, byFile.Count, duplicates);
         return (byId, byFile);
     }
@@ -625,6 +639,87 @@ internal sealed class AuroraImporter : IAuroraImporter
         hash[6] = (byte)((hash[6] & 0x0F) | 0x50); // version 5
         hash[8] = (byte)((hash[8] & 0x3F) | 0x80); // RFC 4122 variant
         return new Guid(hash.AsSpan(0, 16), bigEndian: true);
+    }
+
+    private static readonly string[] AbilityNames = ["Strength", "Dexterity", "Constitution", "Intelligence", "Wisdom", "Charisma"];
+
+    /// <summary>
+    /// The answers to "Improvement Option, {class}, {level}" choices that no file has: for each, "Ability Score
+    /// Improvement ({class} {level})" (two +1s, the same ability twice for +2) and "Feat ({class} {level})", with the
+    /// ids the Aurora app gives them (so characters saved by Aurora import), and the six +1 options they choose from.
+    /// Null when nothing is missing.
+    /// </summary>
+    private static XDocument? ImprovementOptions(List<AuroraElement> all)
+    {
+        var generated = new List<XElement>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var owner in all)
+        foreach (var select in owner.Rules.Where(r => r.Name.LocalName == "select" && (string?)r.Attribute("type") == "Class Feature"))
+        {
+            var tokens = ((string?)select.Attribute("supports") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (tokens.Length != 3 || !tokens[0].Equals("Improvement Option", StringComparison.OrdinalIgnoreCase) || !seen.Add(string.Join(",", tokens)))
+            {
+                continue;
+            }
+            // answered by a file already (the artificer's own)
+            if (all.Any(e => tokens.All(t => e.Supports.Contains(t, StringComparer.OrdinalIgnoreCase))))
+            {
+                continue;
+            }
+            var (className, level) = (tokens[1], tokens[2]);
+            var key = $"{IdPart(className)}_{IdPart(level)}";
+            var supports = new XElement("supports", $"Improvement Option, {className}, {level}");
+            generated.Add(new XElement("element",
+                new XAttribute("name", $"Ability Score Improvement ({className} {level})"),
+                new XAttribute("type", "Class Feature"),
+                new XAttribute("source", owner.Source ?? "Internal"),
+                new XAttribute("id", $"ID_INTERNAL_CLASS_FEATURE_ASI_{key}"),
+                supports,
+                new XElement("description", new XElement("p", "Increase one ability score by 2, or two ability scores by 1 each (pick the same ability twice for +2). As a rule, a score can't go above 20 this way.")),
+                new XElement("sheet", new XAttribute("display", "false")),
+                new XElement("rules", new XElement("select",
+                    new XAttribute("type", "Ability Score Improvement"),
+                    new XAttribute("name", $"Ability Score Improvement ({className} {level})"),
+                    new XAttribute("supports", "Ability Score Improvement, Class"),
+                    new XAttribute("number", "2")))));
+            generated.Add(new XElement("element",
+                new XAttribute("name", $"Feat ({className} {level})"),
+                new XAttribute("type", "Class Feature"),
+                new XAttribute("source", owner.Source ?? "Internal"),
+                new XAttribute("id", $"ID_INTERNAL_CLASS_FEATURE_FEAT_{key}"),
+                new XElement(supports),
+                new XElement("description", new XElement("p", "Instead of increasing your ability scores, take a feat.")),
+                new XElement("sheet", new XAttribute("display", "false")),
+                new XElement("rules", new XElement("select",
+                    new XAttribute("type", "Feat"),
+                    new XAttribute("name", $"Feat ({className} {level})")))));
+        }
+        if (generated.Count == 0)
+        {
+            return null;
+        }
+        // the +1 to an ability those choose from (the app's own; no file has them)
+        foreach (var ability in AbilityNames)
+        {
+            var id = $"ID_INTERNAL_ASI_{ability.ToUpperInvariant()}";
+            if (all.Any(e => e.Id == id))
+            {
+                continue;
+            }
+            generated.Add(new XElement("element",
+                new XAttribute("name", ability),
+                new XAttribute("type", "Ability Score Improvement"),
+                new XAttribute("source", "Player’s Handbook"),
+                new XAttribute("id", id),
+                new XElement("supports", $"Ability Score Improvement, Class, {ability}"),
+                new XElement("description", new XElement("p", $"Your {ability} increases by 1.")),
+                new XElement("sheet", new XAttribute("display", "false")),
+                new XElement("setters", new XElement("set", new XAttribute("name", "allow duplicate"), "true")),
+                new XElement("rules", new XElement("stat", new XAttribute("name", ability.ToLowerInvariant()), new XAttribute("value", "1"), new XAttribute("alt", "Ability Score Increase")))));
+        }
+        return new XDocument(new XElement("elements", generated));
+
+        static string IdPart(string text) => System.Text.RegularExpressions.Regex.Replace(text.ToUpperInvariant(), "[^A-Z0-9]+", "_").Trim('_');
     }
 
     private sealed record AuroraElement(string Id, string Name, string Type, string? Source, string File, XElement Xml)

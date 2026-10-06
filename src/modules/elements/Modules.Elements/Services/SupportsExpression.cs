@@ -21,7 +21,9 @@ internal sealed class SupportsExpression
         _tokens = tokens;
     }
 
-    public static Func<IReadOnlyCollection<string>, string?, bool> Compile(string expression) => Compile(expression, numbersAreTerms: false);
+    // a class's "Improvement Option, Fighter, 4" names its level: the level 4 choice offers the level 4 answers only
+    public static Func<IReadOnlyCollection<string>, string?, bool> Compile(string expression) =>
+        Compile(expression, numbersAreTerms: expression.TrimStart().StartsWith("Improvement Option", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// With <paramref name="numbersAreTerms"/>, a number is an ordinary term (a spell selection passes the spell's

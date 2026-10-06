@@ -19,4 +19,7 @@ public record ElementDataModel
     /// <summary>What it asks of the character, in words ("Strength 13 or Dexterity 13"), and as a requirements expression.</summary>
     public string? Prerequisite { get; init; }
     public string? PrerequisiteRequirements { get; init; }
+
+    /// <summary>Aurora's "allow duplicate": it can be picked again although the character already has it.</summary>
+    public bool AllowDuplicate { get; init; }
 }

@@ -35,6 +35,7 @@ public static class DataModelMappingExtensions
             SelectionRules = [.. element.GetComponents<SelectionRuleComponent>().Select(rule => rule.AsSelectionRuleDataModel())],
             Prerequisite = element.GetComponent<PrerequisitesComponent>()?.Prerequisites,
             PrerequisiteRequirements = element.GetComponent<PrerequisitesComponent>()?.Requirements,
+            AllowDuplicate = element.GetComponent<RepeatableComponent>()?.IsRepeatable == true,
         };
     }
 

@@ -71,13 +71,13 @@ public sealed class GetSelectionRuleOptionsEndpoint : EndpointWithoutRequest<Get
             ?? await _elements.GetSelectionOptions(selectionRule.ElementType, supports);
 
         // like Aurora: leave out what the character already has (a skill it is proficient in, a feat it took),
-        // except this slot's own pick, and list repeatable copies of an element (the nine "Skilled") once
+        // except this slot's own pick and what may be taken again (Aurora's "allow duplicate"), and list repeatable copies of an element (the nine "Skilled") once
         var owned = characterRegistrations.Select(r => r.AssociatedElementId.Value).ToHashSet();
         var current = selectionRule.SelectedOption?.Value;
         // a choice only one edition's books fill stays open for the other edition: when none of the ticked books
         // offer anything, every book counts. Gods are setting lore, not rules (the 2024 Player's Handbook has no
         // pantheons), so a deity can come from any book.
-        var allowed = elements.Where(e => e.Id == current || !owned.Contains(e.Id)).ToList();
+        var allowed = elements.Where(e => e.Id == current || e.AllowDuplicate || !owned.Contains(e.Id)).ToList();
         if (selectionRule.ElementType != "Deity" && allowed.Any(e => !character.RestrictedSources.Contains(e.Source)))
         {
             allowed = allowed.Where(e => e.Id == current || !character.RestrictedSources.Contains(e.Source)).ToList();

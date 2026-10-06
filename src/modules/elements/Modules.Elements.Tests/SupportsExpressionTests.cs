@@ -40,6 +40,15 @@ public class SupportsExpressionTests
     }
 
     [TestMethod]
+    public void AnImprovementOption_OffersItsOwnLevelOnly()
+    {
+        var level4 = SupportsExpression.Compile("Improvement Option,Barbarian,4");
+        level4(["Improvement Option", "Barbarian", "4"], null).Should().BeTrue();
+        level4(["Improvement Option", "Barbarian", "8"], null).Should().BeFalse();
+        level4(["Improvement Option", "Fighter", "4"], null).Should().BeFalse();
+    }
+
+    [TestMethod]
     public void CompiledExpressionCanBeReused()
     {
         var matches = SupportsExpression.Compile("Skill,PHB24 Fighter");

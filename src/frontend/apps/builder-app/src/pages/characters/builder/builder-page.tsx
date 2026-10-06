@@ -439,7 +439,7 @@ function ChoiceRow({
           valueHint={choice.selected?.source}
           options={options}
           loading={optionsQuery.isLoading}
-          placeholder={`Choose ${choice.type.toLowerCase()}…`}
+          placeholder={`Choose ${placeholderOf(choice)}…`}
           disabled={busy}
           onOpenChange={(next) => {
             setOpen(next);
@@ -557,4 +557,11 @@ function PortraitEditor({ characterId, url }: { characterId: string; url?: strin
       />
     </div>
   );
+}
+
+/** What a choice asks for, in words: its kind ("proficiency", "sub race"), or its own name when the kind says nothing ("a list"). */
+function placeholderOf(choice: BuilderChoice): string {
+  if (/^Improvement Option\b/i.test(choice.name)) return "ability score improvement or feat";
+  const generic = /^(list|option|grants|information|support)$/i.test(choice.type);
+  return (generic ? choice.name.replace(/\s*\([^)]*\)\s*$/, "") : choice.type).toLowerCase();
 }
