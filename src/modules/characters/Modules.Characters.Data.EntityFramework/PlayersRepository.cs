@@ -9,7 +9,7 @@ internal class PlayersRepository : RepositoryBase<Player>, IPlayersRepository
 {
     public void Add(Player player) => Entities.Add(player);
 
-    // the column collation is case-insensitive, so this matches "c hassapis" to "C Hassapis"
+    // the column collation is case-insensitive, so this matches "cara vale" to "Cara Vale"
     public Task<Player?> GetPlayerAsync(string name) =>
         Entities.SingleOrDefaultAsync(p => p.Name == name.Trim());
 

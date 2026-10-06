@@ -14,7 +14,7 @@ public class CampaignAccessTests
     [DataRow("*admin*", true)]
     [DataRow("  *admin*", true)]
     [DataRow("#campaign:0123", true)]
-    [DataRow("C Hassapis", false)]
+    [DataRow("Cara Vale", false)]
     [DataRow("Ada Lark", false)]
     public void NamesBehindTokens_AreNotPlayersToHave(string name, bool reserved)
     {
@@ -41,7 +41,7 @@ public class CampaignAccessTests
         access.HasCampaignToken(token, strahd).Should().BeTrue();
         access.HasCampaignToken(token, other).Should().BeFalse();
         access.HasAdminToken(token).Should().BeFalse();
-        access.HasToken(token, "C Hassapis").Should().BeFalse();
+        access.HasToken(token, "Cara Vale").Should().BeFalse();
         access.HasCampaignToken(access.UnlockAdmin("x") ?? access.IssueToken("*admin*"), other).Should().BeTrue();
     }
 
