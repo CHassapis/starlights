@@ -1,0 +1,95 @@
+# Starlights (aurora-server) on one machine with Docker. Run ./setup.sh from this folder the first time: it fills
+# in .env, fetches Aurora Legacy's content and the 5etools data into ./data, builds and starts everything, and
+# imports the content. Afterwards: `docker compose up -d` / `docker compose down`, and ./admin.sh for content.
+#
+# ./data holds the books' content and your group's data (database, portraits, homebrew). It is never part of the
+# repository; keep the site on your own network (or behind a password), not open to the internet.
+
+x-db: &db
+  ConnectionStrings__starlights-db: "Server=starlights-db;Database=starlights;User Id=sa;Password=${STARLIGHTS_SA_PASSWORD};TrustServerCertificate=True"
+
+services:
+  starlights-db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Express
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+      MSSQL_SA_PASSWORD: ${STARLIGHTS_SA_PASSWORD}
+    volumes:
+      - ./data/mssql:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  # the database migrations run once at every start, before the API
+  starlights-migrate-elements:
+    image: starlights/backend
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    working_dir: /app/migrate-elements
+    entrypoint: ["dotnet", "Modules.Elements.Data.EntityFramework.MigrationService.dll"]
+    environment: *db
+    depends_on:
+      starlights-db:
+        condition: service_healthy
+    restart: "no"
+
+  starlights-migrate-characters:
+    image: starlights/backend
+    working_dir: /app/migrate-characters
+    entrypoint: ["dotnet", "Modules.Characters.Data.EntityFramework.MigrationService.dll"]
+    environment: *db
+    depends_on:
+      starlights-migrate-elements:
+        condition: service_completed_successfully
+    restart: "no"
+
+  starlights-api:
+    image: starlights/backend
+    init: true
+    environment:
+      <<: *db
+      Elements__SampleContent: "false"
+      Admin__Key: ${STARLIGHTS_ADMIN_KEY}
+      Admin__MasterPassword: ${STARLIGHTS_MASTER_PASSWORD}
+      Aurora__ContentPath: /data/aurora-elements
+      Aurora__HomebrewPath: /data/homebrew
+      FiveETools__Path: /data/5etools
+      Sheets__TemplatesPath: /data/aurora-sheets
+    volumes:
+      # github.com/AuroraLegacy/elements (setup.sh clones it)
+      - ./data/aurora-elements:/data/aurora-elements:ro
+      # the "data" folder of github.com/5etools-mirror-3/5etools-src (setup.sh clones it)
+      - ./data/5etools-src/data:/data/5etools:ro
+      # optional: Aurora Builder's sheet templates and fonts, for PDF sheets laid out like Aurora's
+      - ./data/aurora-sheets:/data/aurora-sheets:ro
+      # your group's portraits, campaign pictures and homebrew (written by the app)
+      - ./data/portraits:/data/portraits
+      - ./data/homebrew:/data/homebrew
+    depends_on:
+      starlights-migrate-characters:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  starlights-web:
+    image: starlights/web
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+    init: true
+    ports:
+      - "${STARLIGHTS_PORT:-8093}:80"
+    volumes:
+      # the Compendium of Lore, built from the 5etools data by ./admin.sh lore
+      - ./data/lore:/srv/lore-data:ro
+      # optional: background pictures (home-1.webp … home-5.webp, lore.webp, battle.webp)
+      - ./data/art:/srv/art:ro
+    depends_on:
+      - starlights-api
+    restart: unless-stopped

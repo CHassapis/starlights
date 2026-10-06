@@ -449,3 +449,6 @@ aurora-app/
 5etools*/
 starlights-lore/
 *.htpasswd
+
+# the self-hosting kit's content and data (deploy/setup.sh)
+deploy/data/
