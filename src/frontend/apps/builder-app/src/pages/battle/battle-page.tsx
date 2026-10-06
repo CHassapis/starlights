@@ -32,11 +32,13 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCombat, useSaveCombat } from "@/lib/api/combat";
+import { useActiveFights, useMarkFight, type FightView } from "@/lib/api/encounters";
 import { useInventory, useSaveInventory } from "@/lib/api/inventory";
 import { useMagic, useSaveMagic, useSpellcasting } from "@/lib/api/magic";
 import { useSheetData, type SheetData } from "@/lib/api/sheet";
 import { buildBattleModel, type BattleFeature, type BattleModel, type BattleSpell, type Slot, type WeaponAttack } from "@/lib/battle-model";
 import { useLoreLookup } from "@/lib/lore/lookup";
+import { attackRoll, failChanceWith, inOrder, MARKS, targetSave, type AttackRoll, type Combatant, type FightCondition } from "@/lib/rules/encounter";
 import {
   average,
   averageGreatWeapon,
@@ -128,6 +130,12 @@ export function CharacterBattlePage() {
   const [targetAc, setTargetAc] = useState(15);
   const [advantage, setAdvantage] = useState<Advantage>("normal");
   const [rest, setRest] = useState<"short" | "long" | null>(null);
+  // encounter mode: the fights this character's party is in, and the creature it aims at (or one described by hand)
+  const fights = useActiveFights(id);
+  const markFight = useMarkFight();
+  const [targetPick, setTargetPick] = useState<TargetPick | null>(null);
+  const [within5, setWithin5] = useState(true);
+  const [manualTarget, setManualTarget] = useState<string[]>([]);
 
   if (sheet.isLoading || combat.isLoading) return <Loading />;
   if (sheet.error || !sheet.data)
@@ -175,8 +183,34 @@ export function CharacterBattlePage() {
   const baseSpeed = Math.max(0, (exhaustion.speedHalved ? Math.floor(data.speeds.walk / 2) : data.speeds.walk) - exhaustion.speedPenalty);
   const speed = speedZero ? 0 : effectiveSpeed(baseSpeed, effects);
   const forcedDisadvantage = conditionInfo.some((c) => c.attackDisadvantage) || exhaustion.attackDisadvantage;
-  const effectiveAdvantage: Advantage = forcedDisadvantage ? (advantage === "advantage" ? "normal" : "disadvantage") : advantage;
   const d20Penalty = exhaustion.d20Penalty;
+
+  // the target: a creature of a running fight (its conditions as the DM and party marked them, its AC when shared)
+  const fightList = fights.data ?? [];
+  const pickedFight = targetPick ? fightList.find((f) => f.campaignId === targetPick.campaignId && f.entryId === targetPick.entryId) : undefined;
+  const target = (targetPick && pickedFight?.fight.combatants.find((c) => c.id === targetPick.combatantId)) || null;
+  const targetConditions: FightCondition[] = target ? target.conditions : manualTarget.map((name) => ({ name }));
+  const usedAc = target?.ac ?? targetAc;
+  const ownDisadvantage = [...conditionInfo.filter((c) => c.attackDisadvantage).map((c) => c.name), ...(exhaustion.attackDisadvantage ? ["exhausted"] : [])];
+  const rollFor = (melee: boolean) => attackRoll({ melee, within5, manual: advantage, ownDisadvantage, ownInvisible: state.conditions.includes("Invisible"), target: targetConditions });
+  const targetSaveFor = (ability: string) => ({ ...targetSave(targetConditions, ability), bonus: target?.saves?.[ability.slice(0, 3).toLowerCase()] });
+  const toggleMark = (name: string, on: boolean) => {
+    if (target && pickedFight) {
+      markFight.mutate(
+        { campaignId: pickedFight.campaignId, entryId: pickedFight.entryId, characterId: id, combatantId: target.id, condition: name, on },
+        { onError: (e) => toast.error(`Could not mark ${target.name}`, { description: e.message }) },
+      );
+    } else {
+      setManualTarget((list) => (on ? [...list.filter((n) => n !== name), name] : list.filter((n) => n !== name)));
+    }
+  };
+  // a spell that puts a condition on its target offers to mark it ("if it fails its save")
+  const offerMark = (spellName: string) => {
+    const mark = SPELL_MARKS[spellName.toLowerCase()];
+    if (!mark) return;
+    const who = target?.name ?? "the target";
+    toast(`${spellName}: mark ${who} ${mark.condition}?`, { description: mark.when, action: { label: `Mark ${mark.condition}`, onClick: () => toggleMark(mark.condition, true) }, duration: 12000 });
+  };
 
   // slots: the Magic tab's numbers, spent ones shared with it
   const slotTotals = spellSlots(casters);
@@ -254,6 +288,7 @@ export function CharacterBattlePage() {
     } else {
       toast.success(done);
     }
+    offerMark(spell.name);
   };
 
   const damage = (amount: number) => {
@@ -325,7 +360,7 @@ export function CharacterBattlePage() {
       failed,
     );
 
-  const ctx: Ctx = { data, model, state, targetAc, advantage: effectiveAdvantage, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf, fx, effects, setEffect, effectCtx };
+  const ctx: Ctx = { data, model, state, targetAc: usedAc, rollFor, targetSaveFor, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf, fx, effects, setEffect, effectCtx };
 
   return (
     <Shell>
@@ -345,12 +380,25 @@ export function CharacterBattlePage() {
         incapacitated={incapacitated}
         noReactions={noReactions}
         onNextTurn={nextTurn}
-        targetAc={targetAc}
-        setTargetAc={setTargetAc}
-        advantage={advantage}
-        setAdvantage={setAdvantage}
         forcedDisadvantage={forcedDisadvantage}
         d20Penalty={d20Penalty}
+      />
+      <TargetPanel
+        me={id}
+        fights={fightList}
+        pick={targetPick}
+        setPick={setTargetPick}
+        target={target}
+        conditions={targetConditions}
+        manualAc={targetAc}
+        setManualAc={setTargetAc}
+        advantage={advantage}
+        setAdvantage={setAdvantage}
+        within5={within5}
+        setWithin5={setWithin5}
+        rollFor={rollFor}
+        toggle={toggleMark}
+        busy={markFight.isPending}
       />
       <Choices ctx={ctx} speed={speed} />
       <RestDialog kind={rest} onClose={() => setRest(null)} ctx={ctx} totalHitDice={data.level} />
@@ -372,7 +420,10 @@ interface Ctx {
   model: BattleModel;
   state: CombatState;
   targetAc: number;
-  advantage: Advantage;
+  /** an attack's roll against the target: advantage or disadvantage from both sides' conditions, and why */
+  rollFor: (melee: boolean) => AttackRoll;
+  /** what the target's conditions do to its save, and its save bonus when the DM shares it */
+  targetSaveFor: (ability: string) => ReturnType<typeof targetSave> & { bonus?: number };
   d20Penalty: number;
   turn: Turn;
   incapacitated: boolean;
@@ -744,10 +795,6 @@ function TurnBar({
   incapacitated,
   noReactions,
   onNextTurn,
-  targetAc,
-  setTargetAc,
-  advantage,
-  setAdvantage,
   forcedDisadvantage,
   d20Penalty,
 }: {
@@ -757,10 +804,6 @@ function TurnBar({
   incapacitated: boolean;
   noReactions: boolean;
   onNextTurn: () => void;
-  targetAc: number;
-  setTargetAc: (n: number) => void;
-  advantage: Advantage;
-  setAdvantage: (a: Advantage) => void;
   forcedDisadvantage: boolean;
   d20Penalty: number;
 }) {
@@ -802,23 +845,11 @@ function TurnBar({
             <PlusIcon />
           </Button>
         </div>
-        <span className="flex-1" />
-        <label className="flex items-center gap-1.5 text-xs text-white/70">
-          <CrosshairIcon className="size-3.5" /> Target AC
-          <Input inputMode="numeric" value={targetAc} onChange={(e) => setTargetAc(Math.min(40, Math.max(0, Number(e.target.value.replace(/\D/g, "")) || 0)))} className="h-7 w-14 border-white/20 bg-black/40 text-center text-white" />
-        </label>
-        <div className="flex overflow-hidden rounded-md border border-white/15 text-xs" role="group" aria-label="Attack rolls">
-          {(["disadvantage", "normal", "advantage"] as const).map((a) => (
-            <button key={a} type="button" aria-pressed={advantage === a} onClick={() => setAdvantage(a)} className={cn("px-2 py-1 capitalize", advantage === a ? "bg-white/20 text-white" : "text-white/60 hover:bg-white/10")}>
-              {a === "normal" ? "Normal" : a === "advantage" ? "Adv." : "Disadv."}
-            </button>
-          ))}
-        </div>
       </div>
       {(incapacitated || forcedDisadvantage || d20Penalty > 0) && (
         <p className="mt-2 text-xs text-red-200/90">
           {incapacitated && "You can't take actions or bonus actions right now. "}
-          {forcedDisadvantage && "Your conditions give your attacks disadvantage (counted below). "}
+          {forcedDisadvantage && "Your conditions give your attacks disadvantage (counted in the target's roll below). "}
           {d20Penalty > 0 && `Exhaustion: −${d20Penalty} to attack rolls (counted below).`}
         </p>
       )}
@@ -988,7 +1019,11 @@ function SlotSection({ ctx, features, spells, empty }: { ctx: Ctx; features: Bat
 function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAttack; slot: Slot; attacks: number }) {
   const lookup = useLoreLookup();
   const bonus = weapon.bonus - ctx.d20Penalty + ctx.fx.attackBonus;
-  const { hit, crit } = hitChanceWithDie(bonus, ctx.targetAc, ctx.advantage, ctx.fx.die);
+  const roll = ctx.rollFor(weapon.melee);
+  const chance = hitChanceWithDie(bonus, ctx.targetAc, roll.advantage, ctx.fx.die);
+  const hit = chance.hit;
+  // a hit within 5 ft on a Paralyzed or Unconscious target is a critical hit
+  const crit = roll.autoCrit && weapon.melee ? chance.hit : chance.crit;
   // Rage: attacks using Strength (melee; thrown too under the 2024 rules), finesse ones when Strength is the better
   const usesStrength = !weapon.properties.includes("Finesse") || ctx.model.mod("STR") >= ctx.model.mod("DEX");
   const strengthBased = usesStrength && (weapon.mode === "Thrown" ? ctx.model.edition === "2024" : weapon.melee);
@@ -1033,6 +1068,7 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
         <Mini label="Critical" value={formatRoll(critical(weapon.roll), false)} sub={`${+critAvg.toFixed(1)} avg`} />
         <Mini label={`vs AC ${ctx.targetAc}`} value={percent(hit)} sub={`${expected.toFixed(1)} dmg/attack`} />
       </div>
+      <RollNote roll={roll} />
       <p className="mt-1.5 text-[11px] text-white/50">
         {weapon.roll.type}
         {attacks > 1 ? ` · ${attacks} attacks: about ${(expected * attacks).toFixed(1)} damage per Attack action` : ""}
@@ -1275,6 +1311,9 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
   const noSlot = spell.item ? chargesFor(spell, castAt) > chargesLeft : item ? item.chargesUsed >= (item.charges ?? 0) : spell.level > 0 && (usePact ? ctx.pactLeft <= 0 : ctx.slotsLeft(castAt) <= 0);
   const blocked = spell.slot === "Reaction" ? ctx.noReactions : ctx.incapacitated;
   const bonus = spell.attackBonus - ctx.d20Penalty + ctx.fx.attackBonus;
+  // touch and melee spell attacks count as melee for the target's conditions (Prone)
+  const attackRollOf = ctx.rollFor(effect.attack === "melee");
+  const save = effect.save ? ctx.targetSaveFor(effect.save) : null;
   return (
     <div className={cn("rounded-lg border bg-black/35 p-3", ready ? "border-white/10" : "border-dashed border-white/10 opacity-60")}>
       <div className="flex items-start gap-2">
@@ -1322,8 +1361,15 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
         </Button>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-        {effect.attack && <Chip tone="gold">{signed(bonus)} {effect.attack} spell attack · {percent(hitChanceWithDie(bonus, ctx.targetAc, ctx.advantage, ctx.fx.die).hit)} vs AC {ctx.targetAc}</Chip>}
+        {effect.attack && <Chip tone="gold">{signed(bonus)} {effect.attack} spell attack · {percent(hitChanceWithDie(bonus, ctx.targetAc, attackRollOf.advantage, ctx.fx.die).hit)} vs AC {ctx.targetAc}</Chip>}
         {effect.save && <Chip tone="gold">DC {spell.saveDc} {effect.save} save{effect.halfOnSave ? " · half on a success" : ""}</Chip>}
+        {save && (save.autoFail || save.advantage !== "normal" || save.bonus !== undefined || save.notes.length > 0) && (
+          <Chip tone={save.autoFail ? "red" : "blue"}>
+            {save.autoFail
+              ? save.notes[0]
+              : [save.bonus !== undefined && `fails ${percent(failChanceWith(spell.saveDc, save.bonus, save.advantage))} (its save ${signed(save.bonus)})`, ...save.notes].filter(Boolean).join(" · ")}
+          </Chip>
+        )}
         {effect.damage.map((r) => (
           <Chip key={r.type} tone="red">
             {effect.beams > 1 ? `${effect.beams} × ` : ""}
@@ -1337,6 +1383,7 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
         {spell.damageBonusFrom && <Chip tone="gold">+{spell.damageBonus} {spell.damageBonusFrom}</Chip>}
         <Chip>{spell.castingName ? `${spell.castingName} · ` : ""}{spell.slot === "Other" ? spell.time : spell.slot}</Chip>
       </div>
+      {effect.attack && <RollNote roll={attackRollOf} />}
       {effect.upcastNote && <p className="mt-1.5 text-[11px] text-sky-100/70">Higher slot: {effect.upcastNote}</p>}
       <details className="mt-1.5 text-xs text-white/65">
         <summary className="cursor-pointer text-white/50">Description</summary>
@@ -1514,5 +1561,166 @@ function RestDialog({ kind, onClose, ctx, totalHitDice }: { kind: "short" | "lon
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---- the target (encounter mode)
+
+type TargetPick = { campaignId: string; entryId: string; combatantId: string };
+
+/** Spells that put a condition on their target, offered as a mark after casting. */
+const SPELL_MARKS: Record<string, { condition: string; when: string }> = {
+  "faerie fire": { condition: "Faerie Fire", when: "If it failed its Dexterity save." },
+  "guiding bolt": { condition: "Guiding Bolt", when: "If it hit: the next attack against it has advantage." },
+  hex: { condition: "Hex", when: "Your hits on it deal an extra 1d6 necrotic." },
+  "hunter's mark": { condition: "Hunter's Mark", when: "Your hits on it deal an extra 1d6." },
+  "hunter’s mark": { condition: "Hunter's Mark", when: "Your hits on it deal an extra 1d6." },
+  bane: { condition: "Bane", when: "If it failed its Charisma save." },
+  "hold person": { condition: "Paralyzed", when: "If it failed its Wisdom save." },
+  "hold monster": { condition: "Paralyzed", when: "If it failed its Wisdom save." },
+  web: { condition: "Restrained", when: "If it failed its Dexterity save." },
+  entangle: { condition: "Restrained", when: "If it failed its Strength save." },
+  "ensnaring strike": { condition: "Restrained", when: "If it failed its Strength save." },
+  "cause fear": { condition: "Frightened", when: "If it failed its Wisdom save." },
+  fear: { condition: "Frightened", when: "If it failed its Wisdom save." },
+  "blindness/deafness": { condition: "Blinded", when: "If it failed its Constitution save." },
+  sleep: { condition: "Unconscious", when: "If it fell asleep." },
+  "tasha's hideous laughter": { condition: "Prone", when: "If it failed its Wisdom save (it is Incapacitated too)." },
+  "tasha’s hideous laughter": { condition: "Prone", when: "If it failed its Wisdom save (it is Incapacitated too)." },
+  command: { condition: "Prone", when: "If you commanded it to grovel and it failed its save." },
+  "ray of enfeeblement": { condition: "Poisoned", when: "2024: if it failed its Constitution save." },
+  "color spray": { condition: "Blinded", when: "If it was blinded." },
+  "tidal wave": { condition: "Prone", when: "If it failed its Dexterity save." },
+  thunderwave: { condition: "Prone", when: "Only if a feature knocks it prone." },
+};
+
+/** Why an attack has advantage or disadvantage, and a critical hit by itself. */
+function RollNote({ roll }: { roll: AttackRoll }) {
+  if (roll.advantage === "normal" && !roll.for.length && !roll.against.length && !roll.autoCrit && !roll.notes.length) return null;
+  const word = roll.advantage === "advantage" ? "Advantage" : roll.advantage === "disadvantage" ? "Disadvantage" : "Normal roll";
+  return (
+    <p className={cn("mt-1.5 text-[11px]", roll.advantage === "advantage" ? "text-emerald-200" : roll.advantage === "disadvantage" ? "text-red-200" : "text-white/60")}>
+      <span className="font-semibold">{word}</span>
+      {roll.for.length > 0 && ` · for: ${roll.for.join(", ")}`}
+      {roll.against.length > 0 && ` · against: ${roll.against.join(", ")}`}
+      {roll.autoCrit && " · a hit within 5 ft is a critical hit"}
+      {roll.notes.length > 0 && ` · ${roll.notes.join(", ")}`}
+    </p>
+  );
+}
+
+/**
+ * Who the character attacks: a creature of a running fight in its campaigns (with the conditions the DM and party
+ * marked, its armor class when the DM shares it), or a target described by hand (armor class and conditions).
+ * Conditions marked here are marked in the fight for everyone.
+ */
+function TargetPanel(p: {
+  me: string;
+  fights: FightView[];
+  pick: TargetPick | null;
+  setPick: (t: TargetPick | null) => void;
+  target: Combatant | null;
+  conditions: FightCondition[];
+  manualAc: number;
+  setManualAc: (n: number) => void;
+  advantage: Advantage;
+  setAdvantage: (a: Advantage) => void;
+  within5: boolean;
+  setWithin5: (b: boolean) => void;
+  rollFor: (melee: boolean) => AttackRoll;
+  toggle: (name: string, on: boolean) => void;
+  busy: boolean;
+}) {
+  const value = p.pick ? `${p.pick.campaignId}|${p.pick.entryId}|${p.pick.combatantId}` : "";
+  const melee = p.rollFor(true);
+  const ranged = p.rollFor(false);
+  const word = (r: AttackRoll) => (r.advantage === "advantage" ? "advantage" : r.advantage === "disadvantage" ? "disadvantage" : "normal");
+  const myTurn = p.fights.find((f) => f.fight.turn && f.fight.combatants.find((c) => c.id === f.fight.turn)?.characterId === p.me);
+  return (
+    <Panel title={p.target ? `Target: ${p.target.name}` : "Target"} icon={<CrosshairIcon className="size-4 text-amber-300" />}>
+      {p.fights.map((f) => {
+        const current = f.fight.combatants.find((c) => c.id === f.fight.turn);
+        return (
+          <p key={f.entryId} className={cn("mb-2 text-xs", myTurn === f ? "font-semibold text-amber-200" : "text-white/65")}>
+            {f.campaignName}: {f.title}, round {f.fight.round}
+            {current ? ` · ${myTurn === f ? "your turn!" : `${current.name}'s turn`}` : ""}{" "}
+            <Link to={`/campaigns/${f.campaignId}/fight/${f.entryId}`} className="underline decoration-white/30 hover:text-white">
+              order of play
+            </Link>
+          </p>
+        );
+      })}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {p.fights.length > 0 && (
+          <select
+            aria-label="Target"
+            value={value}
+            onChange={(e) => {
+              const [campaignId, entryId, combatantId] = e.target.value.split("|");
+              p.setPick(e.target.value ? { campaignId, entryId, combatantId } : null);
+            }}
+            className="h-7 max-w-64 rounded-md border border-white/20 bg-black/60 px-1 text-white"
+          >
+            <option value="">Someone else (describe below)</option>
+            {p.fights.map((f) => (
+              <optgroup key={f.entryId} label={f.title}>
+                {inOrder(f.fight.combatants)
+                  .filter((c) => c.characterId !== p.me)
+                  .map((c) => (
+                    <option key={c.id} value={`${f.campaignId}|${f.entryId}|${c.id}`}>
+                      {c.name}
+                      {c.health ? ` (${c.health})` : ""}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
+        <label className="flex items-center gap-1.5 text-white/70">
+          AC
+          {p.target?.ac != null ? (
+            <span className="font-semibold text-white">{p.target.ac}</span>
+          ) : (
+            <Input aria-label="Target AC" inputMode="numeric" value={p.manualAc} onChange={(e) => p.setManualAc(Math.min(40, Math.max(0, Number(e.target.value.replace(/\D/g, "")) || 0)))} className="h-7 w-14 border-white/20 bg-black/40 text-center text-white" />
+          )}
+        </label>
+        <label className="flex items-center gap-1.5 text-white/70">
+          <input type="checkbox" checked={p.within5} onChange={(e) => p.setWithin5(e.target.checked)} /> within 5 ft
+        </label>
+        <span className="flex-1" />
+        <span className="text-white/55">Your own:</span>
+        <div className="flex overflow-hidden rounded-md border border-white/15" role="group" aria-label="Attack rolls">
+          {(["disadvantage", "normal", "advantage"] as const).map((a) => (
+            <button key={a} type="button" aria-pressed={p.advantage === a} onClick={() => p.setAdvantage(a)} className={cn("px-2 py-1 capitalize", p.advantage === a ? "bg-white/20 text-white" : "text-white/60 hover:bg-white/10")}>
+              {a === "normal" ? "Normal" : a === "advantage" ? "Adv." : "Disadv."}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {MARKS.map((m) => {
+          const on = p.conditions.some((c) => c.name === m.name);
+          const by = p.conditions.find((c) => c.name === m.name)?.by;
+          return (
+            <button
+              key={m.name}
+              type="button"
+              aria-pressed={on}
+              disabled={p.busy}
+              title={`${m.note}${by ? ` · marked by ${by}` : ""}`}
+              onClick={() => p.toggle(m.name, !on)}
+              className={cn("rounded-full border px-2 py-0.5 text-[11px]", on ? "border-violet-300/70 bg-violet-500/30 text-violet-50" : "border-white/15 text-white/55 hover:bg-white/10")}
+            >
+              {m.name}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-xs text-white/70">
+        Melee: <span className={melee.advantage === "advantage" ? "text-emerald-200" : melee.advantage === "disadvantage" ? "text-red-200" : ""}>{word(melee)}</span> · Ranged:{" "}
+        <span className={ranged.advantage === "advantage" ? "text-emerald-200" : ranged.advantage === "disadvantage" ? "text-red-200" : ""}>{word(ranged)}</span>
+        {p.target ? " · marks are shared with the DM and party" : ""}
+      </p>
+    </Panel>
   );
 }

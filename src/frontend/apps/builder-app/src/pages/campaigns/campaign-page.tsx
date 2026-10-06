@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftIcon, CoinsIcon, CrownIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon, CoinsIcon, CrownIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, SwordsIcon, Trash2Icon, UsersIcon } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -401,6 +401,11 @@ function Encounters({ view, canEdit, onEdit }: TabProps) {
                     {typeof e.data.location === "string" && e.data.location && <span className="text-xs text-muted-foreground">{e.data.location}</span>}
                     <HiddenBadge entry={e} canEdit={canEdit} />
                     {canEdit && <EditButton onClick={() => onEdit("encounter", e)} label={`Edit ${e.title}`} />}
+                    <Button asChild size="sm" variant={canEdit ? "default" : "outline"} className="h-7">
+                      <Link to={`/campaigns/${view.campaign.id}/fight/${e.id}`}>
+                        <SwordsIcon /> {canEdit ? "Run the fight" : "Follow the fight"}
+                      </Link>
+                    </Button>
                   </div>
                   {typeof e.data.creatures === "string" && e.data.creatures.trim() && (
                     <p className="mt-1 text-sm">

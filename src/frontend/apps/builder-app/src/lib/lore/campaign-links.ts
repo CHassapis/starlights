@@ -1,6 +1,7 @@
 /** Links from campaign entries into the Compendium of Lore. */
 import { chunkUrl, imageUrl } from "./data.ts";
 import { monsterSubtitle } from "./monster-text.ts";
+import { monsterStats } from "@/lib/rules/encounter";
 import type { LoreMeta } from "./types.ts";
 
 /** A link from a campaign entry into the compendium: an entry, or a section of a book (chapter and section id). */
@@ -23,4 +24,14 @@ export async function creatureDetails(meta: LoreMeta, link: CompendiumLink): Pro
   const fluff = m._fluff as { images?: { href?: unknown }[] } | undefined;
   const href = fluff?.images?.[0]?.href;
   return { role: monsterSubtitle(m), imageUrl: href ? imageUrl(meta, href) : null };
+}
+
+/** A creature's numbers for encounter mode (hit points, armor class, initiative, saves), read from its book's file. */
+export async function creatureStats(meta: LoreMeta, link: CompendiumLink): Promise<(ReturnType<typeof monsterStats> & { imageUrl: string | null }) | null> {
+  const source = decodeURIComponent(link.key.slice(link.key.lastIndexOf("_") + 1));
+  const chunk = await get<{ entries: Record<string, Record<string, unknown>> }>(chunkUrl(meta, "bestiary", source));
+  const m = chunk.entries[link.key];
+  if (!m) return null;
+  const href = (m._fluff as { images?: { href?: unknown }[] } | undefined)?.images?.[0]?.href;
+  return { ...monsterStats(m), imageUrl: href ? imageUrl(meta, href) : null };
 }

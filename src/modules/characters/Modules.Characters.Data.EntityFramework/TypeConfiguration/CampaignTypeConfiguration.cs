@@ -54,6 +54,7 @@ public class CampaignEntryTypeConfiguration : IEntityTypeConfiguration<CampaignE
         builder.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(500);
         builder.Property(e => e.Data).HasColumnName("data").HasColumnType("nvarchar(max)").IsRequired();
         builder.Property(e => e.Sort).HasColumnName("sort");
+        builder.Property(e => e.Fight).HasColumnName("fight").HasColumnType("nvarchar(max)").IsRequired().HasDefaultValueSql("N'{}'");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
         builder.Property(e => e.UpdatedAt).HasColumnName("updated_at");
     }

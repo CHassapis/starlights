@@ -104,6 +104,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <CampaignsPage /> },
       { path: ":id", element: <CampaignPage /> },
+      { path: ":id/fight/:entryId", lazy: () => import("./pages/campaigns/encounter-page.tsx").then((m) => ({ Component: m.EncounterPage })) },
     ],
   },
   {

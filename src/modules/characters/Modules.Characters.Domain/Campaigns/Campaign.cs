@@ -179,6 +179,18 @@ public sealed class CampaignEntry : EntityBase<Guid>
 
     public DateTimeOffset UpdatedAt { get; private set; }
 
+    /// <summary>
+    /// An encounter being run, as JSON: the initiative order, round and whose turn, and each creature's hit points,
+    /// armor class and conditions. The DM's alone: players get it only through FightView, without what is secret.
+    /// </summary>
+    public string Fight { get; private set; } = "{}";
+
+    public void SetFight(string fight)
+    {
+        Fight = fight;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     public static CampaignEntry Create(Guid campaignId, string kind)
     {
         var now = DateTimeOffset.UtcNow;
