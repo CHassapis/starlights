@@ -34,6 +34,9 @@ public sealed record CharacterCombat
 
     public bool HeroicInspiration { get; init; }
 
+    /// <summary>Item powers switched on ("&lt;inventory entry id&gt;:extra", a Flame Tongue set ablaze).</summary>
+    public List<string> Active { get; init; } = [];
+
     /// <summary>Familiars, companions, steeds and summons in the fight, each with its own hit points.</summary>
     public List<CharacterCompanion> Companions { get; init; } = [];
 
@@ -51,6 +54,10 @@ public sealed record CharacterCombat
         if (Concentration is { Length: > 200 } || Conditions.Count > 30 || Conditions.Any(c => c.Length is 0 or > 60))
         {
             return "At most 30 conditions, each a short name.";
+        }
+        if (Active.Count > 50 || Active.Any(a => a.Length is 0 or > 200))
+        {
+            return "At most 50 item powers switched on.";
         }
         if (Companions.Count > 12 || Companions.Any(c => c.Validate() is not null))
         {

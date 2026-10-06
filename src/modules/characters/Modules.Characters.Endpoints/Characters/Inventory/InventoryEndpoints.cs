@@ -97,6 +97,7 @@ public sealed class UpdateCharacterInventoryEndpoint : Endpoint<CharacterInvento
         // mundane weapons and armor are not, the sheet works them out from the catalog
         var catalog = await _catalog.GetAsync(ct);
         var previous = character.Inventory.Items.Where(i => i.RegistrationId is not null).ToDictionary(i => i.Id, i => i.RegistrationId);
+        var wasEquipped = character.Inventory.Items.Where(i => i.Equipped is not null && !i.Stored).Select(i => $"{i.Id}:{i.Equipped}").ToHashSet();
         var items = new List<InventoryItem>(req.Items.Count);
         foreach (var entry in req.Items)
         {
@@ -125,7 +126,9 @@ public sealed class UpdateCharacterInventoryEndpoint : Endpoint<CharacterInvento
         // an item's rules came or went: work the character out again now, so the sheet is right when this returns
         // (the background processing that follows finds nothing left to change)
         var registrationsChanged = !previous.Values.OfType<Guid>().ToHashSet().SetEquals(kept);
-        if (registrationsChanged)
+        // rules that depend on what is worn or held (Fast Movement, Bracers of Defense, Dueling) change with it
+        var equipmentChanged = !wasEquipped.SetEquals(items.Where(i => i.Equipped is not null && !i.Stored).Select(i => $"{i.Id}:{i.Equipped}"));
+        if (registrationsChanged || equipmentChanged)
         {
             await _processor.ReproccessRegistrations(character.Id);
         }

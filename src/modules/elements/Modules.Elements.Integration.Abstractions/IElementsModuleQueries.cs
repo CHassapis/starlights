@@ -63,4 +63,10 @@ public interface IElementsModuleQueries
     /// rules have to be looked at again.
     /// </summary>
     Task<IReadOnlySet<Guid>> GetElementsReferencedByRequirements();
+
+    /// <summary>
+    /// The statistics that rules' requirements test ("[innate speed:1]" → "innate-speed", "[str:13]" → "strength"):
+    /// a character gaining a rule for one of them must be worked out again.
+    /// </summary>
+    Task<IReadOnlySet<string>> GetStatisticsReferencedByRequirements();
 }

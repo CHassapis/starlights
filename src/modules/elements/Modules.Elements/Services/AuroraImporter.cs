@@ -40,9 +40,9 @@ public sealed record AuroraImporterOptions(string ContentPath, IReadOnlyList<str
 
 /// <summary>
 /// Maps Aurora XML elements onto Starlights elements: grant → include rule, stat → statistic rule,
-/// select → selection rule. Rules with a requirements expression (or an equipped condition) are
-/// skipped, because the character builder does not evaluate those yet and would apply them unconditionally;
-/// the exceptions are conditions that always hold while the builder lacks the feature (see AlwaysMet).
+/// select → selection rule. A rule's requirements expression and its equipped condition ("[armor:none]") become
+/// the rule's requirements, which the character processor evaluates (equipment terms against what the character
+/// has equipped); conditions that always hold while the builder lacks the feature are dropped (see AlwaysMet).
 /// </summary>
 internal sealed class AuroraImporter : IAuroraImporter
 {
@@ -134,7 +134,7 @@ internal sealed class AuroraImporter : IAuroraImporter
 
         while (queue.TryDequeue(out var element))
         {
-            foreach (var rule in element.Rules.Where(r => !IsSkipped(r)))
+            foreach (var rule in element.Rules)
             {
                 if (rule.Name.LocalName == "grant")
                 {
@@ -238,12 +238,6 @@ internal sealed class AuroraImporter : IAuroraImporter
 
             foreach (var rule in aurora.Rules)
             {
-                if (IsSkipped(rule))
-                {
-                    skippedConditional++;
-                    continue;
-                }
-
                 var requirements = RequirementsOf(rule, byId);
 
                 var level = Math.Max(0, ParseInt(rule.Attribute("level")) ?? 0);
@@ -480,8 +474,15 @@ internal sealed class AuroraImporter : IAuroraImporter
         @"^!(ID_[A-Z0-9_]*MULTICLASS[A-Z0-9_]*|ID_WOTC_TCOE_OPTION_CUSTOMIZED_[A-Z_]+|ID_INTERNAL_PHB24_FEATURE_REPLACEMENT_[A-Z0-9_]+|ID_INTERNAL_GRANT_OPTIONAL_BACKGROUND_FEATURE)$",
         RegexOptions.Compiled);
 
-    // rules that only apply while something is equipped: there is no equipment yet
-    private static bool IsSkipped(XElement rule) => rule.Attribute("equipped") is not null;
+    // an equipped condition's terms ("[armor:none]", "[primary:versatile]") as requirement terms the processor
+    // answers from the character's equipment: "[equipped:armor:none]"
+    private static readonly Regex EquippedTerm = new(@"\[([^\]]+)\]", RegexOptions.Compiled);
+
+    private static string? EquippedOf(XElement rule)
+    {
+        var equipped = ((string?)rule.Attribute("equipped"))?.Trim();
+        return string.IsNullOrEmpty(equipped) ? null : EquippedTerm.Replace(equipped, m => $"[equipped:{m.Groups[1].Value.Trim().ToLowerInvariant()}]");
+    }
 
     private static readonly Regex AuroraId = new(@"ID_[A-Za-z0-9_]+", RegexOptions.Compiled);
 
@@ -493,12 +494,17 @@ internal sealed class AuroraImporter : IAuroraImporter
     private static string? RequirementsOf(XElement rule, Dictionary<string, AuroraElement> catalog)
     {
         var requirements = ((string?)rule.Attribute("requirements"))?.Trim();
-        if (string.IsNullOrEmpty(requirements) || AlwaysMet.IsMatch(requirements))
+        var converted = string.IsNullOrEmpty(requirements) || AlwaysMet.IsMatch(requirements)
+            ? null
+            : AuroraId.Replace(requirements, m => catalog.ContainsKey(m.Value) ? ToGuid(m.Value).ToString() : m.Value);
+        var equipped = EquippedOf(rule);
+        return (converted, equipped) switch
         {
-            return null;
-        }
-
-        return AuroraId.Replace(requirements, m => catalog.ContainsKey(m.Value) ? ToGuid(m.Value).ToString() : m.Value);
+            (null, null) => null,
+            (null, _) => equipped,
+            (_, null) => converted,
+            _ => $"({converted}),({equipped})",
+        };
     }
 
     private static int? ParseInt(XAttribute? attribute) => int.TryParse(attribute?.Value, out var value) ? value : null;
@@ -533,7 +539,7 @@ internal sealed class AuroraImporter : IAuroraImporter
     /// </summary>
     private static IEnumerable<AuroraElement> ListItems(AuroraElement owner)
     {
-        foreach (var select in owner.Rules.Where(r => r.Name.LocalName == "select" && !IsSkipped(r)))
+        foreach (var select in owner.Rules.Where(r => r.Name.LocalName == "select"))
         {
             var selectName = (string?)select.Attribute("name");
             if (string.IsNullOrWhiteSpace(selectName))

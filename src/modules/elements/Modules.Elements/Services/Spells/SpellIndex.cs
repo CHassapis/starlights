@@ -236,7 +236,8 @@ internal sealed class SpellIndex : ISpellIndex
         var snapshot = await GetAsync(cancellationToken);
         var matches = SupportsExpression.Compile(SupportsExpression.FillSpellPlaceholders(supports, lists, slotLevels), numbersAreTerms: true);
         return snapshot.Spells
-            .Where(s => matches([.. s.Lists, s.Level.ToString(System.Globalization.CultureInfo.InvariantCulture)], s.AuroraId))
+            // a spell's lists, its level and its school ("1,(Abjuration||Illusion)" on Enspelled Armor)
+            .Where(s => matches([.. s.Lists, s.Level.ToString(System.Globalization.CultureInfo.InvariantCulture), .. (s.School is { Length: > 0 } school ? new[] { school } : [])], s.AuroraId))
             .ToList();
     }
 }

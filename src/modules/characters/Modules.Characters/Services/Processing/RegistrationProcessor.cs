@@ -20,18 +20,21 @@ public class RegistrationProcessor : IRegistrationProcessor
     private readonly IRegistrationManager _registrationManager;
     private readonly IElementsModuleQueries _elements;
     private readonly StatisticsCalculator _statisticsCalculator;
+    private readonly IItemCatalog? _items;
 
     public RegistrationProcessor(
         ILogger<RegistrationProcessor> logger,
         IPersistence persistence,
         IRegistrationManager registrationManager,
-        IElementsModuleQueries elements, StatisticsCalculator statisticsCalculator)
+        IElementsModuleQueries elements, StatisticsCalculator statisticsCalculator,
+        IItemCatalog? items = null)
     {
         _logger = logger;
         _persistence = persistence;
         _registrationManager = registrationManager;
         _elements = elements;
         _statisticsCalculator = statisticsCalculator;
+        _items = items;
     }
 
     // one character is processed by one caller at a time: a request that recalculates at once (an item equipped,
@@ -131,6 +134,8 @@ public class RegistrationProcessor : IRegistrationProcessor
             var context = new ProcessingContext(registration, character, _persistence);
             context.SetAssociatedElement(associatedElement);
             context.Items[RegisteredElementsKey] = registered;
+            // statistic requirements ("[innate speed:1]") are worked out from all of them, not from none
+            context.Items[RegistrationsKey] = registrations;
 
             // TODO: check if the registration itself still meets its requirements
 
@@ -526,12 +531,21 @@ public class RegistrationProcessor : IRegistrationProcessor
             return statistics.TryGetGroup(statisticName, out var group) ? group.Sum() : null;
         }
 
-        return RequirementsExpression.Evaluate(requirements, registered.Contains, Value);
+        // equipment terms ("[equipped:armor:none]") from what the character wears and holds, read once per pass
+        if (context.Items.TryGetValue(EquippedKey, out var held) is false || held is not EquippedState equipment)
+        {
+            var catalog = _items is null ? null : await _items.GetAsync();
+            equipment = EquippedState.From(character.Inventory, catalog);
+            context.Items[EquippedKey] = equipment;
+        }
+
+        return RequirementsExpression.Evaluate(requirements, registered.Contains, Value, equipment.Holds);
     }
 
     private const string RegisteredElementsKey = "RegisteredElements";
     private const string RegistrationsKey = "Registrations";
     private const string StatisticsKey = "RequirementStatistics";
+    private const string EquippedKey = "Equipped";
 
     private static readonly Dictionary<string, string> AbilityNames = new()
     {

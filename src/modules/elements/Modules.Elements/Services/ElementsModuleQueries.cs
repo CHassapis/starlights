@@ -110,6 +110,37 @@ internal class ElementsModuleQueries : IElementsModuleQueries
         return ids;
     }
 
+    private static (DateTime Loaded, IReadOnlySet<string> Names)? s_referencedStatistics;
+
+    private static readonly Dictionary<string, string> AbilityAbbreviations = new()
+    {
+        ["str"] = "strength", ["dex"] = "dexterity", ["con"] = "constitution",
+        ["int"] = "intelligence", ["wis"] = "wisdom", ["cha"] = "charisma",
+    };
+
+    public async Task<IReadOnlySet<string>> GetStatisticsReferencedByRequirements()
+    {
+        if (s_referencedStatistics is { } cached && DateTime.UtcNow - cached.Loaded < TimeSpan.FromMinutes(5))
+        {
+            return cached.Names;
+        }
+
+        var requirements = await _persistence.GetRepository<IElementsRepository>().GetRuleRequirementsAsync();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(string.Join(" ", requirements), @"\[([^\]:]+(?::[^\]:]+)*):\d+\]"))
+        {
+            var name = m.Groups[1].Value.Trim().ToLowerInvariant();
+            if (name.StartsWith("equipped", StringComparison.Ordinal) || name is "level" or "character" || name.StartsWith("level:", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            names.Add(AbilityAbbreviations.GetValueOrDefault(name, name).Replace(' ', '-'));
+        }
+
+        s_referencedStatistics = (DateTime.UtcNow, names);
+        return names;
+    }
+
     public async Task<List<ElementDataModel>> GetElementsWithRules(IReadOnlyCollection<Guid> elementIds)
     {
         if (elementIds.Count == 0)

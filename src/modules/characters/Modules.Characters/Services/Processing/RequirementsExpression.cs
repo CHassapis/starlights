@@ -5,7 +5,8 @@ namespace Starlights.Modules.Characters.Services.Processing;
 /// <c>,</c> is AND, <c>|</c> or <c>||</c> is OR, <c>!</c> is NOT, parentheses group. An element id term holds when
 /// the character has that element registered; a bracket term <c>[name:N]</c> when that value is at least N:
 /// <c>[level:5]</c> and <c>[character:5]</c> the character level, <c>[level:warlock:3]</c> a class level,
-/// <c>[str:13]</c> an ability score, anything else a statistic (<c>[innate speed:fly:1]</c>).
+/// <c>[str:13]</c> an ability score, anything else a statistic (<c>[innate speed:fly:1]</c>); an equipment term
+/// <c>[equipped:armor:none]</c> (Aurora's equipped conditions) when the character's equipment matches it.
 /// Anything unknown (a value the character does not have, ids of elements that were not imported) does not hold,
 /// so "!ID_SOMETHING_UNKNOWN" is met.
 /// </summary>
@@ -15,7 +16,7 @@ internal static class RequirementsExpression
         Evaluate(expression, hasElement, name => name is "level" or "character" ? characterLevel : null);
 
     /// <param name="value">A bracket term's value by its lowercase Aurora name ("str", "level:warlock"); null when unknown.</param>
-    public static bool Evaluate(string expression, Func<Guid, bool> hasElement, Func<string, int?> value)
+    public static bool Evaluate(string expression, Func<Guid, bool> hasElement, Func<string, int?> value, Func<string, bool>? equipped = null)
     {
         var tokens = Tokenize(expression);
         var position = 0;
@@ -32,6 +33,10 @@ internal static class RequirementsExpression
             if (term.StartsWith('[') && term.EndsWith(']'))
             {
                 var inner = term[1..^1];
+                if (inner.StartsWith("equipped:", StringComparison.OrdinalIgnoreCase))
+                {
+                    return equipped?.Invoke(inner["equipped:".Length..].Trim().ToLowerInvariant()) ?? false;
+                }
                 var cut = inner.LastIndexOf(':');
                 if (cut > 0 && int.TryParse(inner[(cut + 1)..].Trim(), out var least))
                 {
