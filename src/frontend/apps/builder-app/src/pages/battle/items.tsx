@@ -93,6 +93,16 @@ export function Items({
               </div>
             )}
 
+            {item.spells.length > 0 && (
+              <p className="mt-2 text-xs text-violet-100/80">
+                Casts{" "}
+                {item.spells
+                  .map((s) => `${s.spell.name} (${s.cost ? `${s.cost} charge${s.cost === 1 ? "" : "s"}${s.upcast ? ", more for a higher level" : ""}` : "no charge"}${s.dc ? `, save DC ${s.dc}` : ""})`)
+                  .join(", ")}
+                : cast them from the Spells tab.
+              </p>
+            )}
+
             {powers.length > 0 && (
               <ul className="mt-2 space-y-1.5">
                 {powers.map((p) => {

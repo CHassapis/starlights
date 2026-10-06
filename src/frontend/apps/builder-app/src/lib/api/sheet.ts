@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import type { BuilderChoice } from "@/lib/api/builder";
 import { useItemCatalog } from "@/lib/api/items";
-import { useSpellIndex } from "@/lib/api/magic";
+import { useSpellIndex, type SpellFigures } from "@/lib/api/magic";
 import { attackModes, generatedNameOf, isActive, isCarried, resolve, type AttackMode, type CharacterFacts, type Inventory, type Resolved } from "@/lib/rules/items";
+import { itemSpells, type ItemSpellRef } from "@/lib/rules/item-spells";
 import { EMPTY_MAGIC, type KnownSpell, type MagicState, type Spellcasting } from "@/lib/rules/magic";
 import { summarizeProficiencies, type Proficiencies } from "@/lib/rules/proficiencies";
 import {
@@ -185,11 +186,32 @@ export interface SheetItem {
   /** what its rules give while active, in words ("+1 AC", "+1 to all saving throws") */
   bonuses: string[];
   html: string;
+  /** the spells it casts (a wand's, a staff's), read from its text, with their charge costs */
+  spells: ItemSpell[];
+}
+
+export interface ItemSpell extends ItemSpellRef {
+  spell: SheetSpell;
+}
+
+/** A spell by name in the spell index: the 2024 one for a 2024 book's item, else the 2014 one. */
+function spellFinder(spells: SpellFigures[] | undefined) {
+  const byName = new Map<string, SpellFigures[]>();
+  for (const f of spells ?? []) {
+    const key = f.name.toLowerCase().replace(/[’‘]/g, "'");
+    byName.set(key, [...(byName.get(key) ?? []), f]);
+  }
+  return (source: string | null | undefined) => (name: string) => {
+    const found = byName.get(name.toLowerCase().replace(/[’‘]/g, "'"));
+    const newer = /2024/.test(source ?? "");
+    const f = found?.find((x) => /2024/.test(x.source ?? "") === newer) ?? found?.[0];
+    return f ? { id: f.id, name: f.name, level: f.level ?? 0 } : undefined;
+  };
 }
 
 const CONSUMABLE = /potion|oil|elixir|scroll|philter|dust|ammunition|bead|ointment|salve/i;
 
-function sheetItems(inventory: Inventory, catalog: Parameters<typeof resolve>[1], texts: ReadonlyMap<string, { description: string }>): SheetItem[] {
+function sheetItems(inventory: Inventory, catalog: Parameters<typeof resolve>[1], texts: ReadonlyMap<string, { description: string }>): Omit<SheetItem, "spells">[] {
   const entries = new Map(inventory.items.map((e) => [e.id, resolve(e, catalog)] as [string, Resolved]));
   return [...entries.values()]
     .filter((r) => isCarried(r.entry, entries))
@@ -333,7 +355,26 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
     enabled: textIds.length > 0,
   });
 
-  const parts = [details, abilities, saves, skills, stats, registrations, classes, choices, story, batch, inventory, casting, magic, catalog, spellIndex, ...(textIds.length ? [texts] : [])];
+  // the spells magic items cast (a wand's, a staff's), read from the items' texts, and those spells' own texts
+  const finder = spellFinder(spellIndex.data?.spells);
+  const itemText = (e: Inventory["items"][number]) => {
+    const entry = texts.data?.entries.find((x) => x.id === e.elementId) ?? batch.data?.entries.find((x) => x.id === e.elementId);
+    return { html: e.custom?.description ?? entry?.description ?? "", source: entry?.source ?? null };
+  };
+  const itemSpellRefs = new Map(
+    (inventory.data?.items ?? []).map((e) => {
+      const { html, source } = itemText(e);
+      return [e.id, html && spellIndex.data ? itemSpells(html, finder(source)) : []] as const;
+    }),
+  );
+  const itemSpellIds = unique([...itemSpellRefs.values()].flat().map((r) => r.spellId));
+  const itemSpellTexts = useQuery({
+    queryKey: ["sheet", characterId, "item-spells", itemSpellIds.join(",")],
+    queryFn: () => apiClient.get<{ entries: BatchEntry[] }>(`/api/elements/compendium/batch?ids=${itemSpellIds.join(",")}`),
+    enabled: itemSpellIds.length > 0,
+  });
+
+  const parts = [details, abilities, saves, skills, stats, registrations, classes, choices, story, batch, inventory, casting, magic, catalog, spellIndex, ...(textIds.length ? [texts] : []), ...(itemSpellIds.length ? [itemSpellTexts] : [])];
   const error = parts.find((p) => p.error)?.error ?? null;
   const isLoading = parts.some((p) => p.isLoading);
   if (isLoading || error || !details.data || !abilities.data || !saves.data || !skills.data || !stats.data || !batch.data || !inventory.data || !casting.data || !catalog.data)
@@ -602,7 +643,13 @@ export function useSheetData(characterId: string): { data?: SheetData; isLoading
       attackModes: attackModes(inventory.data, catalog.data.byId, facts),
       equipment: sheetEquipment(inventory.data, catalog.data.byId, facts, itemTexts),
       itemCards: sheetItemCards(inventory.data, catalog.data.byId, itemTexts),
-      items: sheetItems(inventory.data, catalog.data.byId, itemTexts),
+      items: sheetItems(inventory.data, catalog.data.byId, itemTexts).map((i) => ({
+        ...i,
+        spells: (itemSpellRefs.get(i.entryId) ?? []).flatMap((ref) => {
+          const entry = itemSpellTexts.data?.entries.find((e) => e.id === ref.spellId);
+          return entry ? [{ ...ref, spell: spellFromEntry(entry, i.name) }] : [];
+        }),
+      })),
       rageDamage: stat("barbarian-rage:damage") ?? 0,
       spellPages,
       cardSpells,

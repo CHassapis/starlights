@@ -187,7 +187,7 @@ export function CharacterBattlePage() {
   // spells that cannot be cast now: in a spellbook or class list but not prepared
   const unprepared = new Set<string>();
   if (magicState) for (const c of casters) for (const s of c.spells) if (!isCastable(c, magicState, s)) unprepared.add(s.name);
-  const castable = (s: BattleSpell) => !unprepared.has(s.name) || s.origin.startsWith("Prepared");
+  const castable = (s: BattleSpell) => !!s.item || !unprepared.has(s.name) || s.origin.startsWith("Prepared");
 
   const markUsed = (slot: Slot) => {
     const field = SLOT_FIELD[slot];
@@ -211,13 +211,20 @@ export function CharacterBattlePage() {
   };
 
   // a spell from a magic item with charges (a wand, a staff, Enspelled Armor) spends a charge, not a slot
-  const chargedItemOf = (spell: BattleSpell) => (data.items ?? []).find((i) => i.charges && spell.origin && (spell.origin.includes(i.elementName) || spell.origin.includes(i.name)));
+  const chargedItemOf = (spell: BattleSpell) =>
+    spell.item
+      ? (data.items ?? []).find((i) => i.entryId === spell.item!.entryId)
+      : (data.items ?? []).find((i) => i.charges && spell.origin && (spell.origin.includes(i.elementName) || spell.origin.includes(i.name)));
 
   const cast = (spell: BattleSpell, level: number, usePact: boolean) => {
     const item = chargedItemOf(spell);
-    if (item && item.charges) {
-      if (item.chargesUsed >= item.charges) return toast.error(`${item.name} has no charges left`);
-      saveInventory.updateEntry(item.entryId, { chargesUsed: item.chargesUsed + 1 }, failed);
+    // an item spell's charges for the level; a spell the item's rules gave (Enspelled Armor) one charge
+    const charges = spell.item ? chargesFor(spell, level) : 1;
+    if (spell.item && item?.requiresAttunement && !item.attuned) return toast.error(`Attune to ${item.name} first (Equipment tab)`);
+    if (item && (item.charges || spell.item)) {
+      const left = Math.max(0, (item.charges ?? 0) - item.chargesUsed);
+      if (charges > left) return toast.error(left > 0 ? `${item.name} has only ${left} charge${left === 1 ? "" : "s"} left` : `${item.name} has no charges left`);
+      if (charges > 0) saveInventory.updateEntry(item.entryId, { chargesUsed: item.chargesUsed + charges }, failed);
     } else if (spell.level > 0) {
       if (usePact) {
         if (!pact || pactLeft <= 0) return toast.error("No pact slots left");
@@ -235,7 +242,9 @@ export function CharacterBattlePage() {
     markUsed(spell.slot);
     const key = /^(aid|magic weapon)$/i.test(spell.name) ? `${spell.name}@${level}` : spell.name;
     const effect = effectFor(key, { ...effectCtx, edition: /\(2024\)/.test(spell.source) ? "2024" : spell.source ? "2014" : edition });
-    const done = `${spell.name} cast${spell.level > 0 ? ` with a ${usePact ? `pact (${ordinal(level)}-level)` : `${ordinal(level)}-level`} slot` : ""}`;
+    const done = spell.item
+      ? `${spell.name} cast from ${spell.item.name}${level > 0 ? ` at ${ordinal(level)} level` : ""} (${charges ? `${charges} charge${charges === 1 ? "" : "s"}` : "no charges"})`
+      : `${spell.name} cast${spell.level > 0 ? ` with a ${usePact ? `pact (${ordinal(level)}-level)` : `${ordinal(level)}-level`} slot` : ""}`;
     if (effect && SELF_SPELLS.has(spell.name.toLowerCase())) {
       setEffect(key, true);
       toast.success(`${done}: ${effect.summary}`);
@@ -1200,10 +1209,12 @@ function SlotsPanel({ ctx }: { ctx: Ctx }) {
 
 function SpellList({ ctx, spells, grouped }: { ctx: Ctx; spells: BattleSpell[]; grouped?: boolean }) {
   const all = [...spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-  if (!grouped) return <div className="grid gap-2 md:grid-cols-2">{all.map((s) => <SpellCard key={`${s.name}|${s.level}|${s.origin}`} ctx={ctx} spell={s} />)}</div>;
+  if (!grouped) return <div className="grid gap-2 md:grid-cols-2">{all.map((s) => <SpellCard key={`${s.name}|${s.level}|${s.origin}|${s.item?.entryId ?? ""}`} ctx={ctx} spell={s} />)}</div>;
   // spells the character has but cannot cast now (a wizard's unprepared spellbook) go last, folded away
-  const sorted = all.filter((s) => ctx.castable(s));
+  const sorted = all.filter((s) => ctx.castable(s) && !s.item);
   const resting = all.filter((s) => !ctx.castable(s));
+  // spells cast from magic items, by item
+  const fromItems = all.filter((s) => s.item);
   const levels = [...new Set(sorted.map((s) => s.level))];
   return (
     <div className="flex flex-col gap-4">
@@ -1212,7 +1223,7 @@ function SpellList({ ctx, spells, grouped }: { ctx: Ctx; spells: BattleSpell[]; 
           <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-white/55">Not prepared ({resting.length}): prepare them on the Magic tab</summary>
           <div className="mt-2 grid gap-2 md:grid-cols-2">
             {resting.map((s) => (
-              <SpellCard key={`${s.name}|${s.level}|${s.origin}`} ctx={ctx} spell={s} />
+              <SpellCard key={`${s.name}|${s.level}|${s.origin}|${s.item?.entryId ?? ""}`} ctx={ctx} spell={s} />
             ))}
           </div>
         </details>
@@ -1222,21 +1233,37 @@ function SpellList({ ctx, spells, grouped }: { ctx: Ctx; spells: BattleSpell[]; 
           <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-white/55">{level === 0 ? "Cantrips" : `${ordinal(level)} level`}</h3>
           <div className="grid gap-2 md:grid-cols-2">
             {sorted.filter((s) => s.level === level).map((s) => (
-              <SpellCard key={`${s.name}|${s.level}|${s.origin}`} ctx={ctx} spell={s} />
+              <SpellCard key={`${s.name}|${s.level}|${s.origin}|${s.item?.entryId ?? ""}`} ctx={ctx} spell={s} />
             ))}
           </div>
         </div>
       ))}
+      {fromItems.length > 0 && (
+        <div>
+          <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-violet-200/70">From magic items (their charges)</h3>
+          <div className="grid gap-2 md:grid-cols-2">
+            {[...fromItems].sort((a, b) => a.castingName.localeCompare(b.castingName) || a.item!.cost - b.item!.cost).map((s) => (
+              <SpellCard key={`${s.name}|${s.level}|${s.origin}|${s.item?.entryId ?? ""}`} ctx={ctx} spell={s} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
   const lookup = useLoreLookup();
-  const levels = spell.level === 0 ? [0] : Array.from({ length: 10 - spell.level }, (_, i) => spell.level + i).filter((l) => (ctx.slotTotals[l] ?? 0) > 0 || l === spell.level);
-  const pactUsable = !!ctx.pact && spell.level > 0 && spell.level <= ctx.pact.level;
+  const item = ctx.chargedItemOf(spell);
+  const chargesLeft = item ? Math.max(0, (item.charges ?? 0) - item.chargesUsed) : 0;
+  const levels = spell.item
+    ? itemLevels(spell, chargesLeft)
+    : spell.level === 0
+      ? [0]
+      : Array.from({ length: 10 - spell.level }, (_, i) => spell.level + i).filter((l) => (ctx.slotTotals[l] ?? 0) > 0 || l === spell.level);
+  const pactUsable = !spell.item && !!ctx.pact && spell.level > 0 && spell.level <= ctx.pact.level;
   const firstFree = levels.find((l) => ctx.slotsLeft(l) > 0);
-  const [choice, setChoice] = useState<string>(pactUsable && ctx.pactLeft > 0 ? "pact" : String(firstFree ?? spell.level));
+  const [choice, setChoice] = useState<string>(spell.item ? String(spell.item.level) : pactUsable && ctx.pactLeft > 0 ? "pact" : String(firstFree ?? spell.level));
   const usePact = choice === "pact";
   const castAt = usePact && ctx.pact ? ctx.pact.level : Number(choice);
   const effect = withBonus(spellEffect(spell, castAt, ctx.data.level, spell.modifier), spell.damageBonus);
@@ -1244,8 +1271,8 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
   const ready = ctx.castable(spell);
   const field = SLOT_FIELD[spell.slot];
   const spent = field ? ctx.turn[field] : false;
-  const item = ctx.chargedItemOf(spell);
-  const noSlot = item ? item.chargesUsed >= (item.charges ?? 0) : spell.level > 0 && (usePact ? ctx.pactLeft <= 0 : ctx.slotsLeft(castAt) <= 0);
+  const needsAttunement = !!spell.item && !!item?.requiresAttunement && !item.attuned;
+  const noSlot = spell.item ? chargesFor(spell, castAt) > chargesLeft : item ? item.chargesUsed >= (item.charges ?? 0) : spell.level > 0 && (usePact ? ctx.pactLeft <= 0 : ctx.slotsLeft(castAt) <= 0);
   const blocked = spell.slot === "Reaction" ? ctx.noReactions : ctx.incapacitated;
   const bonus = spell.attackBonus - ctx.d20Penalty + ctx.fx.attackBonus;
   return (
@@ -1261,8 +1288,21 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
             {[spell.time, spell.range, spell.duration, spell.components].filter(Boolean).join(" · ")}
           </div>
           {!ready && <div className="text-[11px] text-amber-200/80">Not prepared</div>}
+          {needsAttunement && <div className="text-[11px] text-amber-200/80">Attune to {item!.name} first (Equipment tab)</div>}
         </div>
-        {item && (
+        {spell.item && levels.length > 1 ? (
+          <select aria-label="Charges" value={choice} onChange={(e) => setChoice(e.target.value)} className="h-7 rounded-md border border-violet-300/40 bg-black/60 px-1 text-xs text-violet-100">
+            {levels.map((l) => (
+              <option key={l} value={l}>
+                {ordinal(l)}: {chargesFor(spell, l)} of {chargesLeft} charges
+              </option>
+            ))}
+          </select>
+        ) : spell.item ? (
+          <span className="rounded-md border border-violet-300/40 px-1.5 py-1 text-[11px] text-violet-100">
+            {chargesFor(spell, castAt) ? `${chargesFor(spell, castAt)} of ${chargesLeft} charges` : "no charge"}
+          </span>
+        ) : item && (
           <span className="rounded-md border border-violet-300/40 px-1.5 py-1 text-[11px] text-violet-100">
             {item.name}: {Math.max(0, (item.charges ?? 0) - item.chargesUsed)} charges
           </span>
@@ -1277,7 +1317,7 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
             {pactUsable && <option value="pact">Pact {ordinal(ctx.pact!.level)} ({ctx.pactLeft} left)</option>}
           </select>
         )}
-        <Button size="sm" className="h-7 bg-sky-500 text-black hover:bg-sky-400" disabled={!ready || noSlot || spent || blocked} onClick={() => ctx.cast(spell, castAt, usePact)}>
+        <Button size="sm" className="h-7 bg-sky-500 text-black hover:bg-sky-400" disabled={!ready || noSlot || spent || blocked || needsAttunement} onClick={() => ctx.cast(spell, castAt, usePact)}>
           Cast
         </Button>
       </div>
@@ -1304,6 +1344,19 @@ function SpellCard({ ctx, spell }: { ctx: Ctx; spell: BattleSpell }) {
       </details>
     </div>
   );
+}
+
+/** The charges an item spell costs at a level: its cost, plus one per level above the item's own when it allows that. */
+function chargesFor(spell: BattleSpell, level: number): number {
+  return spell.item ? spell.item.cost + Math.max(0, level - spell.item.level) : 0;
+}
+
+/** The levels an item can cast its spell at: its own, and higher ones for more charges (no more than it allows, 9th at most). */
+function itemLevels(spell: BattleSpell, chargesLeft: number): number[] {
+  const it = spell.item!;
+  if (!it.upcast || it.level === 0) return [it.level];
+  const most = Math.max(it.cost, Math.min(it.maxCost ?? Infinity, chargesLeft));
+  return Array.from({ length: Math.min(9, it.level + most - it.cost) - it.level + 1 }, (_, i) => it.level + i);
 }
 
 /** A feature's bonus to a spell's damage, added to its first damage roll (each beam's, for Eldritch Blast). */

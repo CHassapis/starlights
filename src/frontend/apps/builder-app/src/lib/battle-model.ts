@@ -60,6 +60,8 @@ export interface BattleSpell extends SheetSpell {
   /** the modifier a feature adds to its damage (Agonizing Blast, Potent Spellcasting, Empowered Evocation) */
   damageBonus: number;
   damageBonusFrom: string | null;
+  /** cast from a magic item (a wand, a staff): its charges pay for it, more charges for a higher level when it allows */
+  item?: { entryId: string; name: string; cost: number; level: number; upcast: boolean; maxCost: number | null };
 }
 
 export interface BattleModel {
@@ -266,6 +268,24 @@ export function buildBattleModel(data: SheetData): BattleModel {
     const reason = bonus ? (agonizing && /^Eldritch Blast$/i.test(s.name) ? "Agonizing Blast" : potent && s.level === 0 ? "Potent Spellcasting" : "Empowered Evocation") : null;
     return { ...s, slot: castingAction(s.time) as Slot, ...casting, damageBonus: bonus, damageBonusFrom: reason };
   });
+  // the spells magic items cast, unless the item's rules already gave the spell (Enspelled Armor)
+  for (const item of data.items ?? []) {
+    for (const ref of item.spells ?? []) {
+      if (data.cardSpells.some((s) => s.name === ref.spell.name && (s.origin.includes(item.elementName) || s.origin.includes(item.name)))) continue;
+      const casting = castingFor(data, ref.spell);
+      spells.push({
+        ...ref.spell,
+        slot: ref.bonusAction ? "Bonus Action" : (castingAction(ref.spell.time) as Slot),
+        attackBonus: ref.attack ?? casting.attackBonus,
+        saveDc: ref.dc ?? casting.saveDc,
+        modifier: casting.modifier,
+        castingName: item.name,
+        damageBonus: 0,
+        damageBonusFrom: null,
+        item: { entryId: item.entryId, name: item.name, cost: ref.cost, level: ref.level, upcast: ref.upcast, maxCost: ref.maxCost },
+      });
+    }
+  }
 
   return {
     edition,
