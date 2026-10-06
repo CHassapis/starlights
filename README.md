@@ -1,13 +1,79 @@
 # Project Starlights
 
-> **About this fork (branch `aurora-server`).** A self-hosted build of Project Starlights, packaged to run in Docker on a home
-> server for one D&D group by C Hassapis. All credit for Starlights and for Aurora Builder goes to their creator,
-> **Bas Driessen** ([swdriessen/starlights](https://github.com/swdriessen/starlights), [aurorabuilder.com](https://www.aurorabuilder.com));
-> the content files come from the [Aurora Legacy](https://github.com/AuroraLegacy/elements) community and the Compendium's
-> data from [5etools](https://github.com/5etools-mirror-3/5etools-src). This fork adds character sheets laid out like
-> Aurora's, multiclassing, Save / Discard in the builder, the Battle Action Simulator, campaigns with encounters, and the
-> Compendium of Lore. Unofficial fan project, not affiliated with or endorsed by Wizards of the Coast; the books' data is not
-> part of this repository. The original README follows.
+> **About this fork (branch `aurora-server`).** A self-hosted build of Project Starlights by C Hassapis, packaged to
+> run in Docker for a D&D group. All credit for Starlights and Aurora Builder goes to their creator, **Bas Driessen**
+> ([swdriessen/starlights](https://github.com/swdriessen/starlights), [aurorabuilder.com](https://www.aurorabuilder.com)).
+> The content comes from [Aurora Legacy](https://github.com/AuroraLegacy/elements) and the Compendium's data from
+> [5etools](https://github.com/5etools-mirror-3/5etools-src). Unofficial fan project, not affiliated with or endorsed by
+> Wizards of the Coast; no book content is part of this repository. The original README follows the fork's sections.
+
+## What this fork adds
+
+- **Docker install** for one machine: `deploy/setup.sh` fetches the content and sets everything up (see below).
+- **Character sheets like Aurora's**, on screen and as PDF; bring in players' Aurora character files.
+- **Builder**: multiclassing, 2014 and 2024 rules (or both), Save / Discard, items that cast spells, extra feats,
+  languages and proficiencies.
+- **Battle Action Simulator**: attacks, spells, slots and charges, magic items (wands, staffs), familiars, conditions.
+- **Campaigns** with a DM's side: sessions, NPCs, places, quests, maps, handouts, magic items to hand out, notes, and a
+  Gold tab with the party fund and stash. Players only see what the DM reveals.
+- **Encounters run as fights**: initiative, turns, monster hit points (hidden from players), and the party's hit points
+  and conditions straight from their simulators.
+- **Trading**: players give each other items and coins from their Equipment tab.
+- **Homebrew page**: make magic items and monsters in a form, or upload Aurora element files. Homebrew is off by
+  default: a player ticks it in a character's Sources, and a DM switches on "Use homebrew" in a campaign's settings.
+- **Compendium of Lore**: the books, creatures, spells and items from the 5etools data, linkable from campaigns.
+- Player names instead of accounts, with optional passwords; an admin password for the DM.
+
+## Install with Docker
+
+You need a Linux machine (or WSL) with Docker and the compose plugin, `git`, `curl` and `openssl`, and about 3 GB of
+disk. Then:
+
+```bash
+git clone -b aurora-server https://github.com/CHassapis/starlights.git
+cd starlights/deploy
+./setup.sh
+```
+
+`setup.sh` takes a while the first time. It:
+
+1. writes `deploy/.env` with random passwords (your **admin password** is `STARLIGHTS_MASTER_PASSWORD` in it);
+2. clones the content into `deploy/data`: Aurora Legacy's elements and the 5etools data;
+3. builds and starts the database, the API and the web app;
+4. imports the content (about 14,000 elements) and builds the Compendium of Lore.
+
+Then open `http://<your machine>:8093`, pick a player name, and make a character. Use the key button in the header with
+the admin password to act as the DM and to make homebrew. Change the port with `STARLIGHTS_PORT` in `.env`.
+
+Keep the site on your own network (or behind a VPN such as Tailscale). The book content it serves is for your table's
+private use; don't put it on the open internet.
+
+### How Aurora Legacy and 5etools are connected
+
+| Content | Where it lives | Used for |
+|---|---|---|
+| [AuroraLegacy/elements](https://github.com/AuroraLegacy/elements) | `deploy/data/aurora-elements` | classes, species, backgrounds, feats, spells, items: the builder's rules |
+| [5etools-src](https://github.com/5etools-mirror-3/5etools-src) | `deploy/data/5etools-src` | the Compendium of Lore, deities Aurora lacks, creatures for encounters |
+| Your homebrew | `deploy/data/homebrew` | made on the Homebrew page |
+
+Both are plain git clones, so you can point them at your own fork. Optional extras:
+
+- **Aurora's PDF sheets**: if you own Aurora Builder, copy the sheet templates and fonts from its install folder into
+  `deploy/data/aurora-sheets` for PDF sheets laid out like Aurora's. Without them the on-screen sheet still works.
+- **Background pictures**: put `home-1.webp` … `home-5.webp`, `lore.webp` and `battle.webp` in `deploy/data/art`.
+
+### Updating
+
+```bash
+cd starlights && git pull                                # new code
+cd deploy && docker compose build && docker compose up -d
+./admin.sh update                                        # newest Aurora Legacy and 5etools content
+```
+
+`./admin.sh` also has `import`, `reprocess` (after an import, so characters get new choices) and `lore`. Run it without
+arguments for help. Back up `deploy/data` (the database is in `deploy/data/mssql`).
+
+## The original README
 
 This is a work-in-progress project intended as an online toolset to enhance tabletop role‑playing games. Its initial focus is creating characters for Dungeons & Dragons in the form of an online version of [Aurora](https://www.aurorabuilder.com), which was my original creation years ago.
 

@@ -44,11 +44,26 @@ export default function AboutPage() {
       <section className="space-y-2">
         <h2 className="font-heading text-xl font-semibold">This build adds</h2>
         <ul className="list-disc space-y-1 pl-5 text-sm">
-          <li>Running it all in Docker on a home server, with backups and a password for the site</li>
-          <li>Character sheets laid out like Aurora's, multiclassing, and Save / Discard in the builder</li>
-          <li>The Battle Action Simulator, with magic items, wands and staffs, familiars and conditions</li>
-          <li>Campaigns with a DM's view, encounters run as fights, and the Compendium of Lore</li>
+          <li>Running it all in Docker on a home server, with nightly content updates, backups and a password for the site</li>
+          <li>Character sheets laid out like Aurora's (on screen and as PDF), bringing in players' Aurora files, multiclassing, and Save / Discard in the builder</li>
+          <li>The Battle Action Simulator: attacks, spells, magic items that cast (wands, staffs), familiars and conditions</li>
+          <li>Campaigns with a DM's view: sessions, NPCs, quests, maps, handouts, magic items to hand out, and a Gold tab that keeps the party stash</li>
+          <li>Encounters run as fights: initiative, monster hit points, the party's hit points and conditions straight from their simulators</li>
+          <li>Players give each other items and coins from their Equipment tab</li>
+          <li>A Homebrew page to make your own magic items and monsters. Homebrew stays off until a player ticks it in their Sources or a DM switches it on for a campaign</li>
+          <li>The Compendium of Lore: the books, creatures, spells and items to read and link from campaigns</li>
         </ul>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="font-heading text-xl font-semibold">Run your own</h2>
+        <p className="text-sm text-muted-foreground">
+          The code is on{" "}
+          <a href="https://github.com/CHassapis/starlights/tree/aurora-server" target="_blank" rel="noreferrer" className="underline">
+            GitHub (branch aurora-server)
+          </a>
+          . Its README explains how to install it with Docker: one script fetches the Aurora Legacy content and the 5etools data and sets everything up.
+        </p>
       </section>
 
       <section className="space-y-2">
