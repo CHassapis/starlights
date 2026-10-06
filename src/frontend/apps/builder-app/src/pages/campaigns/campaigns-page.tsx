@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useCampaignActions, useCampaigns } from "@/lib/api/campaigns";
 import { usePlayer } from "@/lib/player";
-import { textareaClass } from "./campaign-dialogs";
+import { textareaClass } from "./campaign-shared";
 
 /** The campaigns: everyone sees that they exist; one with a password shows only its name until it is given. */
 export function CampaignsPage() {

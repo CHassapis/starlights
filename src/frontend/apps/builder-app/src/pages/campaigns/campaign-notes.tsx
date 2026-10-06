@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { useCampaignActions, type CampaignEntry, type CampaignView, type NoteScope } from "@/lib/api/campaigns";
 import { usePlayer } from "@/lib/player";
 import { cn } from "@/lib/utils";
-import { Prose, textareaClass } from "./campaign-dialogs";
+import { Prose } from "./campaign-dialogs";
+import { textareaClass } from "./campaign-shared";
 
 const scopeOf = (e: CampaignEntry) => (String(e.data.scope ?? "private") as NoteScope);
 const authorOf = (e: CampaignEntry) => String(e.data.author ?? "");

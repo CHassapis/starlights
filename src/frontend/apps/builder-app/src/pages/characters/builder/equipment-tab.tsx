@@ -514,7 +514,11 @@ function Coins({ inventory, onChange }: { inventory: Partial<Record<(typeof COIN
 /** A number that saves when you leave the field or press Enter. */
 function NumberField({ value, onCommit, label }: { value: number; onCommit: (n: number) => void; label: string }) {
   const [text, setText] = useState(String(value));
-  useEffect(() => setText(String(value)), [value]);
+  const [shown, setShown] = useState(value);
+  if (shown !== value) {
+    setShown(value);
+    setText(String(value));
+  }
   const commit = () => {
     const n = Math.max(0, Math.min(1_000_000_000, Math.floor(Number(text) || 0)));
     setText(String(n));
@@ -536,8 +540,12 @@ function NumberField({ value, onCommit, label }: { value: number; onCommit: (n: 
 /** A text box that saves a moment after typing stops. */
 function SavedText({ label, value, rows = 4, placeholder, onCommit }: { label: string; value: string; rows?: number; placeholder?: string; onCommit: (v: string) => void }) {
   const [text, setText] = useState(value);
+  const [shown, setShown] = useState(value);
+  if (shown !== value) {
+    setShown(value);
+    setText(value);
+  }
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => setText(value), [value]);
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
   return (
     <label className="block space-y-1 text-sm">

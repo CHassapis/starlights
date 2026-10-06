@@ -12,29 +12,9 @@ import { creatureDetails, type CompendiumLink } from "@/lib/lore/campaign-links"
 import { useLoreMeta } from "@/lib/lore/data";
 import { COIN_KINDS, formatCoins, isEmpty, shareOut, type Coins } from "@/lib/rules/ledger";
 import { cn } from "@/lib/utils";
+import { CODEX_KINDS, KIND_NAMES, textareaClass } from "./campaign-shared";
 
-export const KIND_NAMES: Record<EntryKind, string> = {
-  session: "Session",
-  npc: "NPC",
-  encounter: "Encounter",
-  place: "Place",
-  faction: "Faction",
-  item: "Item",
-  handout: "Handout",
-  quest: "Quest",
-  ledger: "Gold line",
-  map: "Map",
-  magicitem: "Magic item",
-  note: "Note",
-};
-
-export const RARITIES = ["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"];
-
-/** The codex: everything with a picture and a status that is not an NPC, encounter, map or magic item. */
-export const CODEX_KINDS: EntryKind[] = ["place", "faction", "item", "handout"];
-
-export const textareaClass =
-  "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+const RARITIES = ["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"];
 
 // the compendium's picker and link chips load only when a dialog uses them
 const CompendiumPicker = lazy(() => import("@/components/lore/compendium-picker").then((m) => ({ default: m.CompendiumPicker })));

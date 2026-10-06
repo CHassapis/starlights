@@ -13,7 +13,7 @@ import { shrinkImage } from "@/lib/image";
 import { cn } from "@/lib/utils";
 
 // the character's story as named text fields; the keys match what the Aurora import fills in
-export const STORY_DETAILS: [string, string][] = [
+const STORY_DETAILS: [string, string][] = [
   ["gender", "Gender"],
   ["age", "Age"],
   ["height", "Height"],
@@ -22,13 +22,13 @@ export const STORY_DETAILS: [string, string][] = [
   ["skin", "Skin"],
   ["hair", "Hair"],
 ];
-export const STORY_PERSONALITY: [string, string][] = [
+const STORY_PERSONALITY: [string, string][] = [
   ["traits", "Personality traits"],
   ["ideals", "Ideals"],
   ["bonds", "Bonds"],
   ["flaws", "Flaws"],
 ];
-export const STORY_LONG: [string, string, number][] = [
+const STORY_LONG: [string, string, number][] = [
   ["backstory", "Backstory", 12],
   ["appearance", "Appearance", 4],
   ["background", "Background details", 4],
@@ -38,7 +38,7 @@ export const STORY_LONG: [string, string, number][] = [
   ["notes", "Notes", 6],
 ];
 
-export function useCharacterStory(characterId: string) {
+function useCharacterStory(characterId: string) {
   return useQuery({
     queryKey: ["builder", characterId, "story"],
     queryFn: () => apiClient.get<{ fields: Record<string, string> }>(`/api/characters/${characterId}/story`),
@@ -54,7 +54,9 @@ const textareaClass =
 export function StoryTab({ characterId }: { characterId: string }) {
   const qc = useQueryClient();
   const { data, isLoading } = useCharacterStory(characterId);
-  const [fields, setFields] = useState<Record<string, string> | null>(null);
+  // the server's fields until the player edits them; then the edited copy (saved a moment after typing stops)
+  const [edits, setEdits] = useState<Record<string, string> | null>(null);
+  const fields = edits ?? data?.fields ?? null;
   const [dirty, setDirty] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,10 +64,6 @@ export function StoryTab({ characterId }: { characterId: string }) {
     mutationFn: (next: Record<string, string>) => apiClient.put<{ fields: Record<string, string> }, void>(`/api/characters/${characterId}/story`, { fields: next }),
     onSuccess: (_, next) => qc.setQueryData(["builder", characterId, "story"], { fields: next }),
   });
-
-  useEffect(() => {
-    if (data && fields === null) setFields(data.fields);
-  }, [data, fields]);
 
   // save whatever is pending when leaving the tab
   useEffect(
@@ -79,7 +77,7 @@ export function StoryTab({ characterId }: { characterId: string }) {
 
   function change(key: string, value: string) {
     const next = { ...fields, [key]: value };
-    setFields(next);
+    setEdits(next);
     setDirty(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {

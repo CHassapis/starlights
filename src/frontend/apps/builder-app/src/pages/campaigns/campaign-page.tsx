@@ -17,7 +17,8 @@ import { formatCoins, gpValue, ledgerRows, partyFund, totalsByRecipient, type Le
 import { normalizeText } from "@/lib/rules/picker";
 import { cn } from "@/lib/utils";
 import { ItemPicker } from "@/components/item-picker";
-import { CODEX_KINDS, DmNotes, EntryDialog, GiveDialog, KIND_NAMES, Prose, ShareOutDialog, textareaClass, UnlockCampaign } from "./campaign-dialogs";
+import { DmNotes, EntryDialog, GiveDialog, Prose, ShareOutDialog, UnlockCampaign } from "./campaign-dialogs";
+import { CODEX_KINDS, KIND_NAMES, textareaClass } from "./campaign-shared";
 import { PartySummary } from "./party-summary";
 import { CampaignNotes } from "./campaign-notes";
 
