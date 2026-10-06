@@ -37,7 +37,7 @@ import { MagicTab } from "./magic-tab";
 import { AuroraUpdateDialog } from "../aurora-import-dialog";
 import { CharacterCampaigns } from "./character-campaigns";
 import { ExtrasCard } from "./extras-card";
-import { editionOf, restrictedForEdition, useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
+import { editionOf, switchEdition, useCharacterSources, useSetCharacterSources, useSources } from "@/lib/api/sources";
 import { EditionPicker } from "@/components/edition-picker";
 import { cn } from "@/lib/utils";
 
@@ -484,7 +484,7 @@ function SourcesTab({ characterId }: { characterId: string }) {
       <p className="text-sm text-muted-foreground">Which rules does this character use?</p>
       <EditionPicker
         value={sourceData && characterSources ? editionOf(characterSources.restricted, sourceData.sources) : null}
-        onChange={(edition) => sourceData && save(restrictedForEdition(edition, sourceData.sources))}
+        onChange={(edition) => sourceData && characterSources && save(switchEdition(edition, characterSources.restricted, sourceData.sources))}
       />
       <p className="pt-3 text-sm text-muted-foreground">
         Or tick the books yourself. The dropdowns only offer content from ticked books; picks you already made stay.

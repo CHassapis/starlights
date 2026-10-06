@@ -319,20 +319,20 @@ export const spellLevelLine = (s: SheetSpell) =>
  */
 export function useSheetData(characterId: string): { data?: SheetData; isLoading: boolean; error: Error | null } {
   const base = `/api/characters/${characterId}`;
-  const q = <T,>(key: string, url: string) => useQuery({ queryKey: ["sheet", characterId, key], queryFn: () => apiClient.get<T>(url) });
-  const details = q<{ character: { name: string; level: number; portraitUrl?: string; playerName?: string } }>("details", base);
-  const abilities = q<{ abilityScores: AbilityScore[] }>("abilities", `${base}/ability-scores`);
-  const saves = q<{ savingThrows: Bonus[] }>("saves", `${base}/saving-throws`);
-  const skills = q<{ skills: Bonus[] }>("skills", `${base}/skills`);
-  const stats = q<{ statistics: StatisticGroup[] }>("statistics", `${base}/statistics`);
-  const registrations = q<{ registrations: Registration[] }>("registrations", `${base}/registrations`);
-  const classes = q<{ classes: { name: string; level: number; isPrimary: boolean; registrationId: string }[] }>("classes", `${base}/classes`);
-  const choices = q<{ choices: BuilderChoice[] }>("choices", `${base}/builder/choices`);
-  const story = q<{ fields: Record<string, string> }>("story", `${base}/story`);
-  const inventory = q<Inventory>("inventory", `${base}/inventory`);
-  const casting = q<Spellcasting>("spellcasting", `${base}/spellcasting`);
-  const magic = q<MagicState>("magic", `${base}/magic`);
-  const defenses = q<Defenses>("defenses", `${base}/defenses`);
+  const useSheetQuery = <T,>(key: string, url: string) => useQuery({ queryKey: ["sheet", characterId, key], queryFn: () => apiClient.get<T>(url) });
+  const details = useSheetQuery<{ character: { name: string; level: number; portraitUrl?: string; playerName?: string } }>("details", base);
+  const abilities = useSheetQuery<{ abilityScores: AbilityScore[] }>("abilities", `${base}/ability-scores`);
+  const saves = useSheetQuery<{ savingThrows: Bonus[] }>("saves", `${base}/saving-throws`);
+  const skills = useSheetQuery<{ skills: Bonus[] }>("skills", `${base}/skills`);
+  const stats = useSheetQuery<{ statistics: StatisticGroup[] }>("statistics", `${base}/statistics`);
+  const registrations = useSheetQuery<{ registrations: Registration[] }>("registrations", `${base}/registrations`);
+  const classes = useSheetQuery<{ classes: { name: string; level: number; isPrimary: boolean; registrationId: string }[] }>("classes", `${base}/classes`);
+  const choices = useSheetQuery<{ choices: BuilderChoice[] }>("choices", `${base}/builder/choices`);
+  const story = useSheetQuery<{ fields: Record<string, string> }>("story", `${base}/story`);
+  const inventory = useSheetQuery<Inventory>("inventory", `${base}/inventory`);
+  const casting = useSheetQuery<Spellcasting>("spellcasting", `${base}/spellcasting`);
+  const magic = useSheetQuery<MagicState>("magic", `${base}/magic`);
+  const defenses = useSheetQuery<Defenses>("defenses", `${base}/defenses`);
   const catalog = useItemCatalog();
   const spellIndex = useSpellIndex();
 

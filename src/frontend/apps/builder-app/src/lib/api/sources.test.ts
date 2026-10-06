@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/api-client", () => ({ apiClient: {} }));
-import { defaultRestrictedSources, editionOf, homebrewSources, restrictedForEdition, type SourceBook } from "./sources";
+import { defaultRestrictedSources, editionOf, homebrewSources, restrictedForEdition, switchEdition, type SourceBook } from "./sources";
 
 const books: SourceBook[] = [
   { name: "Player's Handbook", group: "core", elements: 1 },
@@ -22,9 +22,16 @@ describe("sources", () => {
     expect(editionOf(restrictedForEdition("2014", books), books)).toBe("2014");
   });
 
-  it("a character with homebrew ticked is no longer a plain edition", () => {
-    const ticked = restrictedForEdition("mixed", books).filter((b) => b !== "Homebrew");
-    expect(editionOf(ticked, books)).toBeNull();
+  it("ticking homebrew keeps the edition, and so do characters made before homebrew started off", () => {
+    const ticked = restrictedForEdition("2024", books).filter((b) => b !== "Homebrew");
+    expect(editionOf(ticked, books)).toBe("2024");
+    expect(editionOf(["Unearthed Arcana: Artificer"], books)).toBe("mixed");
+    expect(editionOf(["Unearthed Arcana: Artificer", "Xanathar's Guide to Everything"], books)).toBeNull();
+  });
+
+  it("picking an edition leaves the homebrew as the player ticked it", () => {
+    const after = switchEdition("2014", ["Unearthed Arcana: Artificer", "Curse of Strahd (homebrew)"], books);
+    expect(after.sort()).toEqual(["Curse of Strahd (homebrew)", "Player's Handbook (2024)", "Unearthed Arcana: Artificer"]);
   });
 
   it("lists the homebrew books a campaign hides", () => {

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { apiClient } from "@/lib/api-client";
+import { withNewBooksOff } from "@/lib/api/homebrew";
 import { isAdmin } from "@/lib/player";
 
 interface HomebrewFile {
@@ -33,11 +34,12 @@ function FilesTab() {
   };
 
   const upload = useMutation({
-    mutationFn: async (files: File[]) => {
-      for (const file of files) {
-        await apiClient.post("/api/elements/homebrew", { fileName: file.name, content: await file.text() });
-      }
-    },
+    mutationFn: (files: File[]) =>
+      withNewBooksOff(async () => {
+        for (const file of files) {
+          await apiClient.post("/api/elements/homebrew", { fileName: file.name, content: await file.text() });
+        }
+      }),
     onSuccess: (_, files) => toast.success(`${files.length} homebrew ${files.length === 1 ? "file" : "files"} added`),
     onError: (e) => toast.error("Could not add the homebrew", { description: e.message }),
     onSettled: refresh,

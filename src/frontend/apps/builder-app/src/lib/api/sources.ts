@@ -50,16 +50,26 @@ export function restrictedForEdition(edition: RulesEdition, sources: SourceBook[
   return [...off];
 }
 
-/** The edition a set of switched-off books matches exactly, or null when the books were ticked by hand. */
+/**
+ * The edition a set of switched-off books matches exactly, or null when the books were ticked by hand. Homebrew is
+ * left out of it: a player ticking their group's homebrew still plays the edition they picked.
+ */
 export function editionOf(restricted: string[], sources: SourceBook[]): RulesEdition | null {
-  const have = new Set(restricted);
+  const rules = sources.filter((s) => s.group !== "homebrew");
+  const have = new Set(restricted.filter((name) => rules.some((s) => s.name === name)));
   const editions: RulesEdition[] = ["mixed", "2014", "2024"];
   return (
     editions.find((edition) => {
-      const off = restrictedForEdition(edition, sources);
+      const off = restrictedForEdition(edition, rules);
       return off.length === have.size && off.every((s) => have.has(s));
     }) ?? null
   );
+}
+
+/** A character's books after picking an edition: the edition's books, with the homebrew left as the player ticked it. */
+export function switchEdition(edition: RulesEdition, restricted: string[], sources: SourceBook[]): string[] {
+  const homebrew = new Set(homebrewSources(sources));
+  return [...restrictedForEdition(edition, sources).filter((name) => !homebrew.has(name)), ...restricted.filter((name) => homebrew.has(name))];
 }
 
 export function useCharacterSources(characterId: string) {
