@@ -12,7 +12,7 @@ import { creatureDetails, type CompendiumLink } from "@/lib/lore/campaign-links"
 import { useLoreMeta } from "@/lib/lore/data";
 import { COIN_KINDS, formatCoins, isEmpty, shareOut, type Coins } from "@/lib/rules/ledger";
 import { cn } from "@/lib/utils";
-import { CODEX_KINDS, KIND_NAMES, textareaClass, useCampaignRestricted } from "./campaign-shared";
+import { CODEX_KINDS, KIND_NAMES, textareaClass, useCampaignRestricted, WHEREABOUTS } from "./campaign-shared";
 
 const RARITIES = ["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"];
 
@@ -271,6 +271,17 @@ export function EntryDialog({
                   Choose an item…
                 </Button>
               )}
+            </Field>
+          )}
+          {k === "magicitem" && (
+            <Field label="Where is it, when no one carries it?" hint="Who carries it shows by itself, from the characters' equipment (after Give, a trade, or a player adding it).">
+              <select value={(form.data.whereabouts as string) ?? ""} onChange={(e) => setData({ whereabouts: e.target.value || null })} className={cn(textareaClass, "h-9")}>
+                {WHEREABOUTS.map((w) => (
+                  <option key={w.value} value={w.value}>
+                    {w.label}
+                  </option>
+                ))}
+              </select>
             </Field>
           )}
           {k === "magicitem" && (

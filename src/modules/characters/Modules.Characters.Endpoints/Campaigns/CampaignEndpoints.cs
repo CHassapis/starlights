@@ -45,7 +45,8 @@ public sealed record PartyMemberModel(Guid CharacterId, string Name, string? Pla
 /// <summary>A campaign; DmToken only in the answer to its creation (the creator's DM token).</summary>
 public sealed record CampaignModel(Guid Id, string Name, string Description, string? CoverUrl, IReadOnlyList<Guid> Party, bool Locked, DateTimeOffset UpdatedAt, string? DmName = null, bool HasDmPassword = false, string? DmToken = null, bool UseHomebrew = false);
 
-public sealed record CampaignResponse(CampaignModel Campaign, List<PartyMemberModel> Party, List<CampaignEntryModel> Entries, bool Dm);
+/// <summary>Carried: which party member has which of the campaign's magic items (worked out from their equipment).</summary>
+public sealed record CampaignResponse(CampaignModel Campaign, List<PartyMemberModel> Party, List<CampaignEntryModel> Entries, bool Dm, List<ItemHolder>? Carried = null);
 
 public sealed record SaveCampaignRequest(string? Name, string? Description, string? CoverUrl, List<Guid>? Party, string? DmName = null, string? DmPassword = null, bool? UseHomebrew = null);
 
@@ -184,6 +185,7 @@ public sealed class GetCampaignEndpoint : EndpointWithoutRequest<CampaignRespons
         var locked = await _access.GetLockedPlayersAsync();
         var tokens = HttpContext.Request.Headers[PlayerAccess.TokenHeader].ToString();
         var party = new List<PartyMemberModel>();
+        var equipment = new List<(Guid, string, Domain.Characters.CharacterInventory)>();
         foreach (var id in campaign.Party)
         {
             var character = await characters.GetCharacterAsync(id);
@@ -192,6 +194,7 @@ public sealed class GetCampaignEndpoint : EndpointWithoutRequest<CampaignRespons
                 party.Add(new PartyMemberModel(id, "A character no longer here", null, null, null, null, false, true));
                 continue;
             }
+            equipment.Add((id, character.Name, character.Inventory));
             if (locked.Contains(character.PlayerName) && !_access.HasToken(tokens, character.PlayerName))
             {
                 party.Add(new PartyMemberModel(id, character.Name, character.PlayerName, null, null, null, true, false));
@@ -212,7 +215,10 @@ public sealed class GetCampaignEndpoint : EndpointWithoutRequest<CampaignRespons
         }
 
         var reader = await CampaignAccess.VerifiedPlayer(HttpContext, _access);
-        await Send.OkAsync(new CampaignResponse(CampaignAccess.Model(campaign), party, CampaignView.Entries(entries, dm, reader), dm), ct);
+        var shown = CampaignView.Entries(entries, dm, reader);
+        var visible = shown.Select(e => e.Id).ToHashSet();
+        var carried = CampaignItemHolders.Find(entries.Where(e => visible.Contains(e.Id)), campaign.Name, equipment);
+        await Send.OkAsync(new CampaignResponse(CampaignAccess.Model(campaign), party, shown, dm, carried), ct);
     }
 }
 

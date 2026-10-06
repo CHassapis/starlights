@@ -28,3 +28,14 @@ export function useCampaignRestricted(useHomebrew: boolean | undefined): string[
   const { data } = useSources();
   return useHomebrew || !data ? [] : homebrewSources(data.sources);
 }
+
+/** Where a magic item is when no party member carries it (the DM sets it; who carries it is worked out). */
+export const WHEREABOUTS: { value: string; label: string }[] = [
+  { value: "", label: "Not found yet" },
+  { value: "stash", label: "In the party stash" },
+  { value: "sold", label: "Sold or given away" },
+  { value: "used", label: "Used up or destroyed" },
+  { value: "lost", label: "Lost" },
+];
+
+export const whereaboutsLabel = (value: unknown) => WHEREABOUTS.find((w) => w.value === (typeof value === "string" ? value : ""))?.label ?? WHEREABOUTS[0].label;

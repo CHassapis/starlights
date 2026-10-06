@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiClient } from "@/lib/api-client";
-import { CampaignLockedError, unlockCampaignDm, useCampaign, useCampaignActions, type CampaignEntry, type CampaignView, type EntryKind, type PartyMember } from "@/lib/api/campaigns";
+import { CampaignLockedError, unlockCampaignDm, useCampaign, useCampaignActions, type CampaignEntry, type CampaignView, type EntryKind, type PartyMember, type ItemHolder } from "@/lib/api/campaigns";
 import { shrinkImage } from "@/lib/image";
 import type { CompendiumLink } from "@/lib/lore/campaign-links";
 import { formatCoins, gpValue, ledgerRows, partyFund, totalsByRecipient, type LedgerLine } from "@/lib/rules/ledger";
@@ -18,7 +18,7 @@ import { normalizeText } from "@/lib/rules/picker";
 import { cn } from "@/lib/utils";
 import { ItemPicker } from "@/components/item-picker";
 import { DmNotes, EntryDialog, GiveDialog, Prose, ShareOutDialog, UnlockCampaign } from "./campaign-dialogs";
-import { CODEX_KINDS, KIND_NAMES, textareaClass, useCampaignRestricted } from "./campaign-shared";
+import { CODEX_KINDS, KIND_NAMES, textareaClass, useCampaignRestricted, whereaboutsLabel } from "./campaign-shared";
 import { PartySummary } from "./party-summary";
 import { CampaignNotes } from "./campaign-notes";
 
@@ -640,7 +640,18 @@ function Maps({ view, canEdit, onEdit }: TabProps) {
  * characters; the DM gives them (or items of the books) to party members, straight into their equipment.
  */
 function MagicItems({ view, canEdit, onEdit }: TabProps) {
-  const items = view.entries.filter((e) => e.kind === "magicitem").sort((a, b) => a.title.localeCompare(b.title));
+  const [show, setShow] = useState("all");
+  const holdersOf = (e: CampaignEntry) => (view.carried ?? []).filter((h) => h.entryId === e.id);
+  const items = view.entries
+    .filter((e) => e.kind === "magicitem")
+    .filter((e) => {
+      const holders = holdersOf(e);
+      if (show === "all") return true;
+      if (show === "carried") return holders.length > 0;
+      if (show.startsWith("char:")) return holders.some((h) => h.characterId === show.slice(5));
+      return holders.length === 0 && (typeof e.data.whereabouts === "string" ? e.data.whereabouts : "") === show.slice(6);
+    })
+    .sort((a, b) => a.title.localeCompare(b.title));
   const [giving, setGiving] = useState<CampaignEntry | null>(null);
   const [picking, setPicking] = useState(false);
   const [book, setBook] = useState<{ elementId: string; baseElementId?: string | null; name: string } | null>(null);
@@ -658,6 +669,22 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
           </Button>
         </div>
       )}
+      <label className="flex items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Show</span>
+        <select value={show} onChange={(e) => setShow(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm">
+          <option value="all">Every item</option>
+          <option value="carried">Carried by the party</option>
+          {view.party
+            .filter((p) => !p.missing)
+            .map((p) => (
+              <option key={p.characterId} value={`char:${p.characterId}`}>
+                Carried by {p.name}
+              </option>
+            ))}
+          <option value="where:stash">In the party stash</option>
+          {canEdit && <option value="where:">Not found yet</option>}
+        </select>
+      </label>
       {items.length === 0 && <p className="text-sm text-muted-foreground">{canEdit ? "Make your own magic items here; they stay in this campaign." : "No magic items revealed yet."}</p>}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((it) => (
@@ -677,6 +704,7 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
                     .filter(Boolean)
                     .join(", ")}
                 </span>
+                <Whereabouts entry={it} holders={holdersOf(it)} canEdit={canEdit} />
                 {canEdit && typeof it.data.bookName === "string" && <span className="block text-xs text-muted-foreground">Given as {it.data.bookName}</span>}
                 <HiddenBadge entry={it} canEdit={canEdit} />
                 <span className="line-clamp-2 block text-xs text-muted-foreground">{it.body}</span>
@@ -701,6 +729,7 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
               <DialogDescription>{[open.data.category, open.data.rarity].filter(Boolean).join(", ")}</DialogDescription>
             </DialogHeader>
             {open.imageUrl && <img src={open.imageUrl} alt="" className="max-h-80 w-full rounded-md border object-contain" />}
+            <Whereabouts entry={open} holders={holdersOf(open)} canEdit={canEdit} />
             <Prose text={open.body} />
             <EntryLinks entry={open} />
             <DmNotes text={open.dmNotes} />
@@ -724,6 +753,21 @@ function MagicItems({ view, canEdit, onEdit }: TabProps) {
       />
     </div>
   );
+}
+
+/** Who carries a magic item (from the party's equipment), or where the DM says it is. */
+function Whereabouts({ entry, holders, canEdit }: { entry: CampaignEntry; holders: ItemHolder[]; canEdit: boolean }) {
+  if (holders.length > 0) {
+    return (
+      <span className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+        <UsersIcon className="size-3.5 shrink-0" />
+        Carried by {holders.map((h) => (h.quantity > 1 ? `${h.name} (×${h.quantity})` : h.name)).join(", ")}
+      </span>
+    );
+  }
+  const where = typeof entry.data.whereabouts === "string" ? entry.data.whereabouts : "";
+  if (!where && !canEdit) return null;
+  return <span className="block text-xs text-muted-foreground">{whereaboutsLabel(where)}</span>;
 }
 
 /** The DM side, locked: the campaign's DM password (or the site's admin password) opens it on this device. */

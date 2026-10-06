@@ -75,3 +75,48 @@ public static class CampaignView
         return new CampaignEntryModel(e.Id, e.Kind, e.Title, e.Number, e.OccurredOn, e.Visible || e.Kind == CampaignEntry.Ledger, e.Body, dm ? e.DmNotes : null, e.ImageUrl, data, e.Sort, e.UpdatedAt);
     }
 }
+
+/// <summary>A party member carrying one of the campaign's magic items (how many of it).</summary>
+public sealed record ItemHolder(Guid EntryId, Guid CharacterId, string Name, int Quantity);
+
+/// <summary>
+/// Who has the campaign's magic items: each party member's equipment is searched for the item of the content a
+/// magic item entry names (data.elementId), or for the campaign's own item the DM gave (a homebrew copy under the
+/// entry's title, with the campaign as its source). Always up to date after gifts, trades and players' own changes.
+/// </summary>
+public static class CampaignItemHolders
+{
+    public static List<ItemHolder> Find(IEnumerable<CampaignEntry> entries, string campaignName, IEnumerable<(Guid Id, string Name, Domain.Characters.CharacterInventory Inventory)> party)
+    {
+        var members = party.ToList();
+        var holders = new List<ItemHolder>();
+        foreach (var entry in entries.Where(e => e.Kind == CampaignEntry.MagicItem))
+        {
+            Guid? elementId = null;
+            try
+            {
+                using var data = JsonDocument.Parse(string.IsNullOrWhiteSpace(entry.Data) ? "{}" : entry.Data);
+                if (data.RootElement.TryGetProperty("elementId", out var v) && v.ValueKind == JsonValueKind.String && Guid.TryParse(v.GetString(), out var id))
+                {
+                    elementId = id;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+            foreach (var (characterId, name, inventory) in members)
+            {
+                var count = inventory.Items
+                    .Where(i => elementId is { } e
+                        ? i.ElementId == e
+                        : i.ElementId is null && i.Custom?.Source == campaignName && string.Equals(i.Name, entry.Title, StringComparison.OrdinalIgnoreCase))
+                    .Sum(i => Math.Max(1, i.Quantity));
+                if (count > 0)
+                {
+                    holders.Add(new ItemHolder(entry.Id, characterId, name, count));
+                }
+            }
+        }
+        return holders;
+    }
+}

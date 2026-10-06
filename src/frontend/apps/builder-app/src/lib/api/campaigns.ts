@@ -79,11 +79,20 @@ export interface CampaignEntry {
   updatedAt: string;
 }
 
+/** A party member carrying one of the campaign's magic items, worked out from their equipment. */
+export interface ItemHolder {
+  entryId: string;
+  characterId: string;
+  name: string;
+  quantity: number;
+}
+
 export interface CampaignView {
   campaign: Campaign;
   party: PartyMember[];
   entries: CampaignEntry[];
   dm: boolean;
+  carried?: ItemHolder[];
 }
 
 export type EntryInput = Omit<CampaignEntry, "id" | "updatedAt" | "dmNotes"> & { dmNotes: string };
