@@ -66,7 +66,8 @@ export function EncounterPage() {
   }
 
   const f = fight ?? { revision: 0, active: false, round: 1, turn: null, shareStats: false, combatants: [] };
-  const apply = (fn: (x: Fight) => Fight) => change.mutate(fn, { onError: (e) => toast.error(e.message) });
+  // the change applies to the fight as shown now (read before the change itself shows)
+  const apply = (fn: (x: Fight) => Fight) => change.mutate({ change: fn, base: fightQuery.data?.fight ?? f }, { onError: (e) => toast.error(e.message) });
   const order = inOrder(f.combatants);
   const links = ((entry?.data.links as CompendiumLink[] | undefined) ?? []).filter((l) => l.category === "bestiary");
 

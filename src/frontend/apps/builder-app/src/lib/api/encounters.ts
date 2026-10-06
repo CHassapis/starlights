@@ -39,28 +39,28 @@ export function useFight(campaignId: string, entryId: string) {
 }
 
 /**
- * The DM changes the fight: the change is applied to the latest copy and saved; when someone changed it meanwhile
- * (a player marked a condition), it is applied again to theirs.
+ * The DM changes the fight: the change is applied to the copy the DM sees (base, read before the change shows) and
+ * saved; when someone changed it meanwhile (a player marked a condition), it is applied again to the server's copy.
  */
 export function useChangeFight(campaignId: string, entryId: string) {
   const qc = useQueryClient();
   const key = fightKey(campaignId, entryId);
   const url = `/api/campaigns/${campaignId}/entries/${entryId}/fight`;
   return useMutation({
-    mutationFn: async (change: (f: Fight) => Fight) => {
-      let latest = qc.getQueryData<FightView | null>(key) ?? null;
+    mutationFn: async ({ change, base }: { change: (f: Fight) => Fight; base: Fight }) => {
+      let start = base;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const base = latest?.fight ?? EMPTY_FIGHT;
         try {
-          return normal(await apiClient.put<{ fight: Fight; revision: number }, FightView>(url, { fight: change(base), revision: base.revision }));
+          return normal(await apiClient.put<{ fight: Fight; revision: number }, FightView>(url, { fight: change(start), revision: start.revision }));
         } catch (e) {
           if (!(e instanceof ApiError) || e.status !== 409) throw e;
-          latest = normal(JSON.parse(e.body) as FightView);
+          start = normal(JSON.parse(e.body) as FightView).fight;
         }
       }
       throw new Error("The encounter keeps changing; try again.");
     },
-    onMutate: async (change) => {
+    // (onMutate runs before mutationFn: the change is shown here, applied to the base the caller read)
+    onMutate: async ({ change }) => {
       // show the change at once
       await qc.cancelQueries({ queryKey: key });
       const before = qc.getQueryData<FightView | null>(key);

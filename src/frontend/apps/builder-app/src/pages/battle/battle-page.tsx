@@ -134,7 +134,8 @@ export function CharacterBattlePage() {
   const fights = useActiveFights(id);
   const markFight = useMarkFight();
   const [targetPick, setTargetPick] = useState<TargetPick | null>(null);
-  const [within5, setWithin5] = useState(true);
+  // the target is within 5 ft of the character: for ranged attacks (melee ones are always within reach)
+  const [within5, setWithin5] = useState(false);
   const [manualTarget, setManualTarget] = useState<string[]>([]);
 
   if (sheet.isLoading || combat.isLoading) return <Loading />;
@@ -192,7 +193,7 @@ export function CharacterBattlePage() {
   const targetConditions: FightCondition[] = target ? target.conditions : manualTarget.map((name) => ({ name }));
   const usedAc = target?.ac ?? targetAc;
   const ownDisadvantage = [...conditionInfo.filter((c) => c.attackDisadvantage).map((c) => c.name), ...(exhaustion.attackDisadvantage ? ["exhausted"] : [])];
-  const rollFor = (melee: boolean) => attackRoll({ melee, within5, manual: advantage, ownDisadvantage, ownInvisible: state.conditions.includes("Invisible"), target: targetConditions });
+  const rollFor = (melee: boolean) => attackRoll({ melee, within5: melee || within5, manual: advantage, ownDisadvantage, ownInvisible: state.conditions.includes("Invisible"), target: targetConditions });
   const targetSaveFor = (ability: string) => ({ ...targetSave(targetConditions, ability), bonus: target?.saves?.[ability.slice(0, 3).toLowerCase()] });
   const toggleMark = (name: string, on: boolean) => {
     if (target && pickedFight) {
@@ -1023,7 +1024,7 @@ function WeaponCard({ ctx, weapon, slot, attacks }: { ctx: Ctx; weapon: WeaponAt
   const chance = hitChanceWithDie(bonus, ctx.targetAc, roll.advantage, ctx.fx.die);
   const hit = chance.hit;
   // a hit within 5 ft on a Paralyzed or Unconscious target is a critical hit
-  const crit = roll.autoCrit && weapon.melee ? chance.hit : chance.crit;
+  const crit = roll.autoCrit ? chance.hit : chance.crit;
   // Rage: attacks using Strength (melee; thrown too under the 2024 rules), finesse ones when Strength is the better
   const usesStrength = !weapon.properties.includes("Finesse") || ctx.model.mod("STR") >= ctx.model.mod("DEX");
   const strengthBased = usesStrength && (weapon.mode === "Thrown" ? ctx.model.edition === "2024" : weapon.melee);
@@ -1685,7 +1686,7 @@ function TargetPanel(p: {
           )}
         </label>
         <label className="flex items-center gap-1.5 text-white/70">
-          <input type="checkbox" checked={p.within5} onChange={(e) => p.setWithin5(e.target.checked)} /> within 5 ft
+          <input type="checkbox" checked={p.within5} onChange={(e) => p.setWithin5(e.target.checked)} /> within 5 ft of you (for ranged attacks)
         </label>
         <span className="flex-1" />
         <span className="text-white/55">Your own:</span>
