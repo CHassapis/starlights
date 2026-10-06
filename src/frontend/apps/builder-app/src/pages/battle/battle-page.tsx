@@ -370,6 +370,7 @@ export function CharacterBattlePage() {
           {readout}
         </pre>
       )}
+      <KeepMaxHp maxHp={maxHp} cached={state.maxHitPoints ?? null} ready={!!combat.data} update={updateCombat} />
       <Header id={id} data={data} model={model} onRest={setRest} />
       <Vitals data={data} model={model} state={state} hp={hp} maxHp={maxHp} speed={speed} ac={ac} onDamage={damage} onHeal={(n) => updateCombat((c) => heal(c, n))} onTemp={(n) => updateCombat((c) => gainTemporary(c, n))} />
       <Status data={data} state={state} edition={edition} exhaustionText={exhaustion.text} updateCombat={updateCombat} hp={hp} />
@@ -1563,6 +1564,14 @@ function RestDialog({ kind, onClose, ctx, totalHitDice }: { kind: "short" | "lon
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Saves the maximum hit points worked out here with the fight state, so the DM's fight board can show them. */
+function KeepMaxHp({ maxHp, cached, ready, update }: { maxHp: number; cached: number | null; ready: boolean; update: (change: (c: CombatState) => CombatState) => void }) {
+  useEffect(() => {
+    if (ready && maxHp > 0 && cached !== maxHp) update((c) => ({ ...c, maxHitPoints: maxHp }));
+  }, [ready, maxHp, cached, update]);
+  return null;
 }
 
 // ---- the target (encounter mode)

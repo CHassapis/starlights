@@ -342,6 +342,8 @@ export interface CombatState {
   version: number;
   damage: number;
   temporaryHitPoints: number;
+  /** the maximum the simulator last worked out, kept for the DM's fight board */
+  maxHitPoints?: number | null;
   hitDiceSpent: number;
   uses: Record<string, number>;
   concentration: string | null;

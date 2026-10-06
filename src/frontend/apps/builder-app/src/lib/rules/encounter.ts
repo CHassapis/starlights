@@ -16,6 +16,8 @@ export interface FightCondition {
   name: string;
   /** who marked it (a character's name, or "DM") */
   by?: string;
+  /** set by the player on their own sheet or simulator (the DM can't take it off) */
+  fromSheet?: boolean;
 }
 
 export interface Combatant {
@@ -33,6 +35,9 @@ export interface Combatant {
   link?: { category: string; key: string; name: string } | null;
   notes?: string;
   hidden?: boolean;
+  /** a player character's, from their simulator (the DM's view only) */
+  tempHp?: number;
+  deathSaves?: { successes: number; failures: number };
   /** what players see of a monster: unhurt, hurt, bloodied, down */
   health?: "unhurt" | "hurt" | "bloodied" | "down";
   conditions: FightCondition[];

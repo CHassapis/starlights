@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Starlights.Modules.Characters.Domain.Characters;
 using Starlights.Modules.Characters.Services.Campaigns;
 
 namespace Starlights.Modules.Characters.Tests.Campaigns;
@@ -64,6 +65,36 @@ public class FightViewTests
         FightView.Validate(Sample()).Should().BeNull();
         FightView.Validate(FightView.Parse("""{"combatants":[{"id":"a","name":"x"},{"id":"a","name":"y"}]}""")).Should().NotBeNull();
         FightView.Validate(FightView.Parse("""{"combatants":[{"id":"a"}]}""")).Should().NotBeNull();
+    }
+
+    private static readonly Guid Ash = Guid.Parse("0d6e1d8a-1f7e-4c4e-9d55-3a1c1b0e0001");
+
+    [TestMethod]
+    public void WithParty_ShowsTheDmEachPlayersHitPointsAndTheConditionsTheySet()
+    {
+        var combat = new CharacterCombat { MaxHitPoints = 38, Damage = 12, TemporaryHitPoints = 5, Conditions = ["Prone"], Concentration = "Bless", Exhaustion = 1 };
+        var fight = FightView.WithParty(Sample(), new Dictionary<Guid, CharacterCombat> { [Ash] = combat });
+        var pc = fight["combatants"]!.AsArray()[0]!.AsObject();
+        pc["hp"]!.GetValue<int>().Should().Be(26);
+        pc["maxHp"]!.GetValue<int>().Should().Be(38);
+        pc["tempHp"]!.GetValue<int>().Should().Be(5);
+        pc["conditions"]!.AsArray().Select(c => c!["name"]!.ToString()).Should().BeEquivalentTo(["Prone", "Exhaustion 1", "Concentrating"]);
+
+        // players see the conditions, not the hit points
+        var player = FightView.ForPlayers(fight)["combatants"]!.AsArray()[0]!.AsObject();
+        player.ContainsKey("hp").Should().BeFalse();
+        player["conditions"]!.AsArray().Should().HaveCount(3);
+    }
+
+    [TestMethod]
+    public void StripParty_KeepsWhatTheDmMarked_AndDropsWhatCameFromTheSheets()
+    {
+        var shown = FightView.WithParty(Sample(), new Dictionary<Guid, CharacterCombat> { [Ash] = new() { MaxHitPoints = 30, Conditions = ["Prone"] } });
+        FightView.Mark(shown, "p1", "Frightened", on: true, by: "DM").Should().BeTrue();
+        FightView.StripParty(shown);
+        var pc = shown["combatants"]!.AsArray()[0]!.AsObject();
+        pc.ContainsKey("hp").Should().BeFalse();
+        pc["conditions"]!.AsArray().Select(c => c!["name"]!.ToString()).Should().BeEquivalentTo(["Frightened"]);
     }
 
     [TestMethod]

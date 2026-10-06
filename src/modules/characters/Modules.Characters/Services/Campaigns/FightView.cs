@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Starlights.Modules.Characters.Domain.Characters;
 
 namespace Starlights.Modules.Characters.Services.Campaigns;
 
@@ -127,6 +128,86 @@ public static class FightView
             ["shareStats"] = shareStats,
             ["combatants"] = visible,
         };
+    }
+
+    // what WithParty adds to a player character, never stored with the fight
+    private static readonly string[] PartyFields = ["hp", "maxHp", "tempHp", "deathSaves"];
+
+    /// <summary>
+    /// The party as their own simulators have them now: each player character's hit points (when the simulator has
+    /// worked out its maximum), temporary hit points, death saves at 0, and the conditions, exhaustion and
+    /// concentration its player set, merged with what the DM marked (marked fromSheet, so the DM can't take them
+    /// off). Returns a copy; StripParty takes it all out again before the DM's fight is saved.
+    /// </summary>
+    public static JsonObject WithParty(JsonObject fight, IReadOnlyDictionary<Guid, CharacterCombat> party)
+    {
+        var copy = (JsonObject)fight.DeepClone();
+        foreach (var o in (copy["combatants"] as JsonArray ?? []).OfType<JsonObject>())
+        {
+            if (o["kind"]?.ToString() != "pc" || !Guid.TryParse(o["characterId"]?.ToString(), out var id) || !party.TryGetValue(id, out var combat))
+            {
+                continue;
+            }
+            if (combat.MaxHitPoints is int max and > 0)
+            {
+                var hp = Math.Max(0, max - combat.Damage);
+                o["hp"] = hp;
+                o["maxHp"] = max;
+                if (hp == 0)
+                {
+                    o["deathSaves"] = new JsonObject { ["successes"] = combat.DeathSaveSuccesses, ["failures"] = combat.DeathSaveFailures };
+                }
+            }
+            if (combat.TemporaryHitPoints > 0)
+            {
+                o["tempHp"] = combat.TemporaryHitPoints;
+            }
+            if (o["conditions"] is not JsonArray conditions)
+            {
+                conditions = [];
+                o["conditions"] = conditions;
+            }
+            var marked = conditions.OfType<JsonObject>().Select(c => c["name"]?.ToString() ?? string.Empty).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            void Add(string name, string by)
+            {
+                if (marked.Add(name))
+                {
+                    conditions.Add(new JsonObject { ["name"] = name, ["by"] = by, ["fromSheet"] = true });
+                }
+            }
+            foreach (var condition in combat.Conditions)
+            {
+                Add(condition, "their sheet");
+            }
+            if (combat.Exhaustion > 0)
+            {
+                Add($"Exhaustion {combat.Exhaustion}", "their sheet");
+            }
+            if (!string.IsNullOrWhiteSpace(combat.Concentration))
+            {
+                Add("Concentrating", $"on {combat.Concentration}");
+            }
+        }
+        return copy;
+    }
+
+    /// <summary>Takes out what WithParty added (the DM's page sends the fight back as it was shown).</summary>
+    public static void StripParty(JsonObject fight)
+    {
+        foreach (var o in (fight["combatants"] as JsonArray ?? []).OfType<JsonObject>().Where(o => o["kind"]?.ToString() == "pc"))
+        {
+            foreach (var field in PartyFields)
+            {
+                o.Remove(field);
+            }
+            if (o["conditions"] is JsonArray conditions)
+            {
+                foreach (var c in conditions.OfType<JsonObject>().Where(c => c["fromSheet"]?.GetValueKind() == JsonValueKind.True).ToList())
+                {
+                    conditions.Remove(c);
+                }
+            }
+        }
     }
 
     /// <summary>

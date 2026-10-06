@@ -21,6 +21,20 @@ internal class CharactersRepository : RepositoryBase<Character>, ICharactersRepo
         return Task.FromResult(true);
     }
 
+    public async Task<Dictionary<Guid, CharacterCombatState>> GetCombatStatesAsync(IReadOnlyCollection<Guid> characterIds)
+    {
+        if (characterIds.Count == 0)
+        {
+            return [];
+        }
+        var keys = characterIds.Select(id => new CharacterId(id)).ToList();
+        var rows = await Entities.AsNoTracking()
+            .Where(c => keys.Contains(c.Id))
+            .Select(c => new { c.Id, c.Name, Combat = EF.Property<CharacterCombat>(c, "_combat") })
+            .ToListAsync();
+        return rows.ToDictionary(r => r.Id.Value, r => new CharacterCombatState(r.Id.Value, r.Name, r.Combat ?? new CharacterCombat()));
+    }
+
     public async Task<Character?> GetCharacterAsync(Guid identifier)
     {
         return await Entities

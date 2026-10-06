@@ -282,6 +282,7 @@ function Row({ c, dm, current, shareStats, update, remove }: { c: Combatant; dm:
           </span>
         )}
         <span className="flex-1" />
+        {dm && c.kind === "pc" && <PartyHp c={c} />}
         {dm && c.kind !== "pc" && c.hp !== undefined && (
           <span className="inline-flex items-center gap-1 text-sm">
             <HeartIcon className="size-3.5 text-red-500" />
@@ -316,9 +317,9 @@ function Row({ c, dm, current, shareStats, update, remove }: { c: Combatant; dm:
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {c.conditions.map((k) => (
-          <span key={k.name} title={[MARKS.find((m) => m.name === k.name)?.note, k.by && `marked by ${k.by}`].filter(Boolean).join(" · ")} className="inline-flex items-center gap-1 rounded-full border border-violet-400/50 bg-violet-500/10 px-2 py-0.5 text-xs">
+          <span key={k.name} title={[MARKS.find((m) => m.name === k.name)?.note, k.fromSheet ? (k.name === "Concentrating" ? `concentrating ${k.by}` : "set by the player in their simulator") : k.by && `marked by ${k.by}`].filter(Boolean).join(" · ")} className={cn("inline-flex items-center gap-1 rounded-full border border-violet-400/50 bg-violet-500/10 px-2 py-0.5 text-xs", k.fromSheet && "border-dashed")}>
             {k.name}
-            {dm && (
+            {dm && !k.fromSheet && (
               <button type="button" aria-label={`Take ${k.name} off ${c.name}`} onClick={() => update({ conditions: c.conditions.filter((x) => x.name !== k.name) })}>
                 <XIcon className="size-3" />
               </button>
@@ -343,5 +344,34 @@ function Row({ c, dm, current, shareStats, update, remove }: { c: Combatant; dm:
         {dm && c.notes !== undefined && <span className="text-xs text-muted-foreground">{c.notes}</span>}
       </div>
     </li>
+  );
+}
+
+/**
+ * A player character's hit points as their own simulator has them (refreshed every few seconds): current of
+ * maximum, temporary hit points, and death saves at 0. Unknown until the player opens their simulator once.
+ */
+function PartyHp({ c }: { c: Combatant }) {
+  if (c.hp === undefined || c.maxHp === undefined) {
+    return <span className="text-xs text-muted-foreground">HP shows once they open their simulator</span>;
+  }
+  const share = c.maxHp > 0 ? c.hp / c.maxHp : 0;
+  const tone = c.hp <= 0 ? "bg-zinc-500" : share <= 0.5 ? "bg-red-500" : share < 1 ? "bg-amber-500" : "bg-emerald-500";
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm" title="From the player's simulator">
+      <HeartIcon className="size-3.5 text-red-500" />
+      <span className="font-mono">
+        {c.hp}/{c.maxHp}
+      </span>
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden>
+        <span className={cn("block h-full", tone)} style={{ width: `${Math.round(Math.min(1, share) * 100)}%` }} />
+      </span>
+      {!!c.tempHp && <span className="rounded bg-sky-500/15 px-1 text-xs text-sky-700 dark:text-sky-300">+{c.tempHp} temp</span>}
+      {c.hp <= 0 && c.deathSaves && (
+        <span className="text-xs text-muted-foreground">
+          death saves {c.deathSaves.successes}✓ {c.deathSaves.failures}✗
+        </span>
+      )}
+    </span>
   );
 }

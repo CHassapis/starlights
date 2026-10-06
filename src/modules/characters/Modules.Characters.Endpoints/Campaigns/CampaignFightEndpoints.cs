@@ -23,9 +23,19 @@ public sealed record ActiveFightsResponse(List<FightResponse> Fights);
 
 internal static class CampaignFights
 {
-    public static FightResponse Response(Campaign campaign, CampaignEntry entry, bool dm)
+    public static async Task<FightResponse> ResponseAsync(IPersistence persistence, Campaign campaign, CampaignEntry entry, bool dm)
     {
         var fight = FightView.Parse(entry.Fight);
+        // the party as their simulators have them now: hit points (for the DM), conditions and concentration (for all)
+        var ids = (fight["combatants"] as JsonArray ?? []).OfType<JsonObject>()
+            .Select(o => Guid.TryParse(o["characterId"]?.ToString(), out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .ToList();
+        if (ids.Count > 0)
+        {
+            var states = await persistence.GetRepository<ICharactersRepository>().GetCombatStatesAsync(ids);
+            fight = FightView.WithParty(fight, states.ToDictionary(s => s.Key, s => s.Value.Combat));
+        }
         var shown = dm ? fight : FightView.ForPlayers(fight);
         // an encounter the DM has not revealed keeps its title to itself
         var title = dm || entry.Visible ? entry.Title : "Encounter";
@@ -76,7 +86,7 @@ public sealed class GetFightEndpoint : EndpointWithoutRequest<FightResponse>
             await Send.NotFoundAsync(ct);
             return;
         }
-        await Send.OkAsync(CampaignFights.Response(campaign, entry, dm), ct);
+        await Send.OkAsync(await CampaignFights.ResponseAsync(_persistence, campaign, entry, dm), ct);
     }
 }
 
@@ -126,13 +136,15 @@ public sealed class SaveFightEndpoint : Endpoint<SaveFightRequest, FightResponse
         {
             // changed since (a player marked a condition): the DM's page reloads it and tries again
             HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
-            await HttpContext.Response.WriteAsJsonAsync(CampaignFights.Response(campaign, entry, dm: true), ct);
+            await HttpContext.Response.WriteAsJsonAsync(await CampaignFights.ResponseAsync(_persistence, campaign, entry, dm: true), ct);
             return;
         }
+        // what the party's simulators add is shown, never stored
+        FightView.StripParty(fight);
         fight["revision"] = req.Revision + 1;
         entry.SetFight(fight.ToJsonString());
         await _persistence.SaveChangesAsync();
-        await Send.OkAsync(CampaignFights.Response(campaign, entry, dm: true), ct);
+        await Send.OkAsync(await CampaignFights.ResponseAsync(_persistence, campaign, entry, dm: true), ct);
     }
 }
 
@@ -186,7 +198,7 @@ public sealed class MarkFightEndpoint : Endpoint<MarkFightRequest, FightResponse
         fight["revision"] = FightView.Revision(fight) + 1;
         entry.SetFight(fight.ToJsonString());
         await _persistence.SaveChangesAsync();
-        await Send.OkAsync(CampaignFights.Response(campaign, entry, dm), ct);
+        await Send.OkAsync(await CampaignFights.ResponseAsync(_persistence, campaign, entry, dm), ct);
     }
 }
 
@@ -229,7 +241,7 @@ public sealed class GetActiveFightsEndpoint : EndpointWithoutRequest<ActiveFight
             {
                 if (entry.Kind == "encounter" && FightView.Active(FightView.Parse(entry.Fight)))
                 {
-                    fights.Add(CampaignFights.Response(campaign, entry, dm));
+                    fights.Add(await CampaignFights.ResponseAsync(_persistence, campaign, entry, dm));
                 }
             }
         }

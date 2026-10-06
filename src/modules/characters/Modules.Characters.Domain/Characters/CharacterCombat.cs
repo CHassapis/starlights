@@ -15,6 +15,12 @@ public sealed record CharacterCombat
 
     public int TemporaryHitPoints { get; init; }
 
+    /// <summary>
+    /// The maximum hit points the simulator worked out last time (with what changes them now, Aid or exhaustion),
+    /// kept so a DM's fight board can show current and maximum hit points. Null until the simulator has been opened.
+    /// </summary>
+    public int? MaxHitPoints { get; init; }
+
     /// <summary>Hit dice spent on short rests.</summary>
     public int HitDiceSpent { get; init; }
 
@@ -46,7 +52,7 @@ public sealed record CharacterCombat
     /// <summary>What is wrong with the state, or null when it is fine.</summary>
     public string? Validate()
     {
-        if (Damage is < 0 or > 100_000 || TemporaryHitPoints is < 0 or > 100_000 || HitDiceSpent is < 0 or > 100)
+        if (Damage is < 0 or > 100_000 || TemporaryHitPoints is < 0 or > 100_000 || HitDiceSpent is < 0 or > 100 || MaxHitPoints is < 0 or > 100_000)
         {
             return "Damage, temporary hit points and hit dice spent must be zero or more (and not absurdly large).";
         }
