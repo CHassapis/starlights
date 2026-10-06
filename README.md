@@ -10,6 +10,8 @@
 ## What this fork adds
 
 - **Docker install** for one machine: `deploy/setup.sh` fetches the content and sets everything up (see below).
+- **Character wizard** for new players: class, species, background, ability scores, the books' starting equipment
+  (packages or gold) and spells, one step at a time, with a skip to the full builder.
 - **Character sheets like Aurora's**, on screen and as PDF; bring in players' Aurora character files.
 - **Builder**: multiclassing, 2014 and 2024 rules (or both), Save / Discard, items that cast spells, extra feats,
   languages and proficiencies.

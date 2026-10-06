@@ -45,6 +45,7 @@ export default function AboutPage() {
         <h2 className="font-heading text-xl font-semibold">This build adds</h2>
         <ul className="list-disc space-y-1 pl-5 text-sm">
           <li>Running it all in Docker on a home server, with nightly content updates, backups and a password for the site</li>
+          <li>A step-by-step character wizard for new players, with the books' starting equipment (or gold), and a skip for experienced ones</li>
           <li>Character sheets laid out like Aurora's (on screen and as PDF), bringing in players' Aurora files, multiclassing, and Save / Discard in the builder</li>
           <li>The Battle Action Simulator: attacks, spells, magic items that cast (wands, staffs), familiars and conditions</li>
           <li>Campaigns with a DM's view: sessions, NPCs, quests, maps, handouts, magic items to hand out, and a Gold tab that keeps the party stash</li>
