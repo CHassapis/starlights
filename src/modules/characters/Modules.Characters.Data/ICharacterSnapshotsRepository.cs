@@ -18,6 +18,9 @@ public interface ICharacterSnapshotsRepository : IRepository
     /// <summary>Puts the character back as the captured JSON describes it (in one transaction).</summary>
     Task RestoreAsync(Guid characterId, string data);
 
+    /// <summary>Whether the character still has changes being worked through (events not yet processed).</summary>
+    Task<bool> IsProcessingAsync(Guid characterId);
+
     void Add(CharacterSnapshot snapshot);
 
     void Remove(CharacterSnapshot snapshot);

@@ -41,6 +41,22 @@ internal class CharacterSnapshotsRepository : RepositoryBase<CharacterSnapshot>,
 
     public void Add(CharacterSnapshot snapshot) => Entities.Add(snapshot);
 
+    public async Task<bool> IsProcessingAsync(Guid characterId)
+    {
+        var connection = Context.Database.GetDbConnection();
+        await EnsureOpenAsync(connection);
+        await using var command = connection.CreateCommand();
+        command.Transaction = Context.Database.CurrentTransaction?.GetDbTransaction();
+        // the events about the character (their JSON names it) that the processor has not handled yet
+        command.CommandText = "SELECT COUNT(*) FROM characters.event_messages WHERE ProcessedOn IS NULL AND ErrorMessage IS NULL AND Payload LIKE @pattern";
+        var pattern = command.CreateParameter();
+        pattern.ParameterName = "@pattern";
+        pattern.DbType = DbType.String;
+        pattern.Value = $"%\"CharacterId\":\"{characterId:D}\"%";
+        command.Parameters.Add(pattern);
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+    }
+
     public void Remove(CharacterSnapshot snapshot) => Entities.Remove(snapshot);
 
     public async Task<string> CaptureAsync(Guid characterId)

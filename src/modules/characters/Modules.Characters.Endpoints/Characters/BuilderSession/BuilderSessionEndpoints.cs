@@ -69,6 +69,17 @@ public sealed class StartBuilderSessionEndpoint : EndpointWithoutRequest<Builder
         var snapshots = _persistence.GetRepository<ICharacterSnapshotsRepository>();
         if (await snapshots.GetAsync(id) is null)
         {
+            // a character just created or changed is still being worked through (its skills, saves, statistics): the
+            // snapshot waits for that (twice quiet in a row, 15 seconds at most), so it is never mistaken for a change
+            var quiet = 0;
+            for (var waited = 0; quiet < 2 && waited < 15_000; waited += 250)
+            {
+                quiet = await snapshots.IsProcessingAsync(id) ? 0 : quiet + 1;
+                if (quiet < 2)
+                {
+                    await Task.Delay(250, ct);
+                }
+            }
             snapshots.Add(CharacterSnapshot.Take(id, await snapshots.CaptureAsync(id)));
             await _persistence.SaveChangesAsync();
         }
