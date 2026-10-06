@@ -5,7 +5,6 @@
  *   2014 lists:   "cast one of the following spells … : burning hands (1 charge), fireball (3 charges)"
  *   2024 tables:  <tr><td><i>Fireball (level 5 version)</i></td><td>5</td></tr>
  *   one spell:    "1 or more" charges for one spell, its level for 1 charge, a level higher per additional charge
- *   (the level for 1 charge, one level higher per additional charge)
  *   free spells:  spells cast "at will" or "without using any charges"
  * Items whose spells are random (a d100 table) or not named ("cast its spell") are left to their text.
  */
