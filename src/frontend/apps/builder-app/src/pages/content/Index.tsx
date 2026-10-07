@@ -62,7 +62,7 @@ export function ContentPage() {
           downloads them, imports them, builds the Compendium and updates every character.
         </p>
       </header>
-      {data.selfManaged ? <Sources data={data} busy={save.isPending} onSave={(body) => save.mutate(body, { onError: (e) => toast.error("Could not save", { description: e.message }) })} /> : <ManagedElsewhere data={data} />}
+      {data.selfManaged ? <Sources data={data} busy={save.isPending} onSave={(body) => save.mutate(body, { onError: (e) => toast.error("Could not save", { description: e.message.match(/"generalErrors":\["([^"]+)/)?.[1] ?? e.message }) })} /> : <ManagedElsewhere data={data} />}
       <Job job={data.job} />
     </div>
   );
