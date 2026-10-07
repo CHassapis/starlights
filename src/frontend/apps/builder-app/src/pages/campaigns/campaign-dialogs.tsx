@@ -399,9 +399,18 @@ export function EntryDialog({
             </div>
           )}
           {k !== "ledger" && (
-            <Field group label="From the Compendium" hint="Links to creatures, items, spells and places in the books: players get a preview card once you reveal this">
+            <Field
+              group
+              label="From the Compendium"
+              hint="Links to creatures, items, spells and places in the books: players get a preview card once you reveal this. The eye keeps a link for you alone, for a stat block that would give away who someone really is."
+            >
               <Suspense fallback={null}>
-                <CompendiumLinks links={links} onRemove={(l) => setData({ links: links.filter((x) => x !== l) })} className="mb-1.5" />
+                <CompendiumLinks
+                  links={links}
+                  onRemove={(l) => setData({ links: links.filter((x) => x !== l) })}
+                  onToggleDmOnly={(l) => setData({ links: links.map((x) => (x === l ? { ...x, dmOnly: x.dmOnly ? undefined : true } : x)) })}
+                  className="mb-1.5"
+                />
               </Suspense>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => setPicker("everything")}>

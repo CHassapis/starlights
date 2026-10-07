@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AwesomeAssertions;
 using Starlights.Modules.Characters.Domain.Campaigns;
 using Starlights.Modules.Characters.Services.Campaigns;
@@ -41,6 +42,30 @@ public class CampaignViewTests
 
         view.Should().OnlyContain(e => e.DmNotes == null);
         string.Join("|", view.Select(e => $"{e.Title} {e.Body} {e.Data.GetRawText()}")).Should().NotContain("Strahd is waiting").And.NotContain("overpaid").And.NotContain("Tatyana");
+    }
+
+    [TestMethod]
+    public void Players_SeeAnAlias_ButNeverItsDmOnlyStatBlockLink()
+    {
+        // a revealed alias: players may read "the youngest hag", not the night hag stat block that says who she is
+        var alias = Entry("npc", "The youngest hag", visible: true, dmNotes: "Really the third sister", data: """
+            {"role":"Of the old mill","links":[
+              {"category":"bestiary","key":"night%20hag_xmm","name":"Night Hag","dmOnly":true},
+              {"category":"bestiary","key":"green%20hag_xmm","name":"Green Hag","dmOnly":"yes"},
+              {"category":"items","key":"hag%20eye_xdmg","name":"Hag Eye","dmOnly":false}]}
+            """);
+
+        var player = CampaignView.Entries([alias], dm: false).Single();
+        var sent = JsonSerializer.Serialize(player);
+
+        player.Title.Should().Be("The youngest hag");
+        player.Data.GetProperty("role").GetString().Should().Be("Of the old mill");
+        player.Data.GetProperty("links").EnumerateArray().Select(l => l.GetProperty("name").GetString()).Should().Equal("Hag Eye");
+        sent.Should().NotContain("night%20hag").And.NotContain("Night Hag").And.NotContain("Green Hag").And.NotContain("dmOnly").And.NotContain("third sister");
+
+        var dm = CampaignView.Entries([alias], dm: true).Single();
+        dm.Data.GetProperty("links").GetArrayLength().Should().Be(3);
+        JsonSerializer.Serialize(dm).Should().Contain("night%20hag_xmm");
     }
 
     [TestMethod]

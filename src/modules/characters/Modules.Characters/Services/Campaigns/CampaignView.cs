@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Starlights.Modules.Characters.Domain.Campaigns;
 
 namespace Starlights.Modules.Characters.Services.Campaigns;
@@ -21,7 +22,7 @@ public sealed record CampaignEntryModel(
 /// <summary>
 /// What of a campaign the reader may see. Every response with campaign entries goes through here: for players the
 /// entries the DM has not revealed are left out (ledger lines always stay, so the party fund adds up the same for
-/// everyone) and no entry carries the DM's notes.
+/// everyone), no entry carries the DM's notes, and Compendium links the DM marked dmOnly are taken out.
 /// </summary>
 public static class CampaignView
 {
@@ -65,7 +66,7 @@ public static class CampaignView
         try
         {
             using var parsed = JsonDocument.Parse(string.IsNullOrWhiteSpace(e.Data) ? "{}" : e.Data);
-            data = parsed.RootElement.Clone();
+            data = dm ? parsed.RootElement.Clone() : WithoutDmLinks(parsed.RootElement);
         }
         catch (JsonException)
         {
@@ -73,6 +74,32 @@ public static class CampaignView
             data = empty.RootElement.Clone();
         }
         return new CampaignEntryModel(e.Id, e.Kind, e.Title, e.Number, e.OccurredOn, e.Visible || e.Kind == CampaignEntry.Ledger, e.Body, dm ? e.DmNotes : null, e.ImageUrl, data, e.Sort, e.UpdatedAt);
+    }
+
+    /// <summary>
+    /// An entry's details as players get them: its Compendium links marked dmOnly (the stat block behind an alias,
+    /// "the youngest hag" linking a night hag) are left out, and the mark itself with them.
+    /// </summary>
+    private static JsonElement WithoutDmLinks(JsonElement data)
+    {
+        if (data.ValueKind != JsonValueKind.Object || !data.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
+        {
+            return data.Clone();
+        }
+        var node = JsonNode.Parse(data.GetRawText())!.AsObject();
+        var shown = new JsonArray();
+        foreach (var link in links.EnumerateArray())
+        {
+            if (link.ValueKind == JsonValueKind.Object && link.TryGetProperty("dmOnly", out var dmOnly) && dmOnly.ValueKind != JsonValueKind.False && dmOnly.ValueKind != JsonValueKind.Null)
+            {
+                continue;
+            }
+            var copy = JsonNode.Parse(link.GetRawText());
+            (copy as JsonObject)?.Remove("dmOnly");
+            shown.Add(copy);
+        }
+        node["links"] = shown;
+        return JsonSerializer.SerializeToElement(node);
     }
 }
 

@@ -176,8 +176,9 @@ public sealed class CampaignEntry : EntityBase<Guid>
     public string? ImageUrl { get; private set; }
 
     /// <summary>
-    /// The kind's own details as JSON, all of it readable by players: a quest's or person's status, a session's
-    /// level, a ledger line's coins, recipient and items. Never anything secret.
+    /// The kind's own details as JSON, readable by players: a quest's or person's status, a session's level, a
+    /// ledger line's coins, recipient and items, links into the Compendium. Never anything secret, except links
+    /// marked "dmOnly" (an alias's real stat block), which CampaignView takes out for players.
     /// </summary>
     public string Data { get; private set; } = "{}";
 

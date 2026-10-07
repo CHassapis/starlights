@@ -11,6 +11,8 @@ export interface CompendiumLink {
   name: string;
   ch?: number;
   anchor?: string;
+  /** only the DM sees it (the stat block behind an alias): the server leaves it out of what players get */
+  dmOnly?: boolean;
 }
 
 const get = async <T>(url: string) => (await (await fetch(url)).json()) as T;

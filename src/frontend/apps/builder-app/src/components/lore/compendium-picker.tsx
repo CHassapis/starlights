@@ -3,7 +3,7 @@
  * adventure, a creature, or a map printed in the books. The lists load when the picker first opens.
  */
 import { useQuery } from "@tanstack/react-query";
-import { BookOpenIcon, MapIcon, SearchIcon } from "lucide-react";
+import { BookOpenIcon, EyeIcon, EyeOffIcon, MapIcon, SearchIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -136,12 +136,27 @@ function sectionHref(l: CompendiumLink): string {
 }
 
 /** A campaign entry's links into the compendium, as chips (with previews for entries). */
-export function CompendiumLinks({ links, onRemove, className }: { links: CompendiumLink[]; onRemove?: (link: CompendiumLink) => void; className?: string }) {
+/**
+ * An entry's links as chips. A DM-only link (the stat block behind an alias) has a crossed eye; with onToggleDmOnly
+ * the DM can switch that on and off. Players never get DM-only links: the server leaves them out.
+ */
+export function CompendiumLinks({
+  links,
+  onRemove,
+  onToggleDmOnly,
+  className,
+}: {
+  links: CompendiumLink[];
+  onRemove?: (link: CompendiumLink) => void;
+  onToggleDmOnly?: (link: CompendiumLink) => void;
+  className?: string;
+}) {
   if (!links.length) return null;
   return (
     <ul className={cn("flex flex-wrap gap-1.5 text-xs", className)}>
       {links.map((l, i) => (
-        <li key={i} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5">
+        <li key={i} className={cn("inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5", l.dmOnly && "border-dashed border-amber-500/60")}>
+          {l.dmOnly && !onToggleDmOnly && <EyeOffIcon className="size-3 text-amber-600 dark:text-amber-400" aria-label="Only the DM sees this link" />}
           {l.category === "books" || l.category === "adventures" ? (
             <Link to={sectionHref(l)} className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline">
               {l.ch != null && l.anchor == null ? <MapIcon className="size-3" /> : <BookOpenIcon className="size-3" />}
@@ -151,6 +166,18 @@ export function CompendiumLinks({ links, onRemove, className }: { links: Compend
             <LoreLink category={l.category} k={l.key}>
               {l.name}
             </LoreLink>
+          )}
+          {onToggleDmOnly && (
+            <button
+              type="button"
+              className={cn("hover:text-foreground", l.dmOnly ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}
+              aria-pressed={!!l.dmOnly}
+              aria-label={l.dmOnly ? `Show the link to ${l.name} to players` : `Keep the link to ${l.name} for the DM only`}
+              title={l.dmOnly ? "Only the DM sees this link. Click to show it to players." : "Players see this link once the entry is revealed. Click to keep it for the DM only."}
+              onClick={() => onToggleDmOnly(l)}
+            >
+              {l.dmOnly ? <EyeOffIcon className="size-3" /> : <EyeIcon className="size-3" />}
+            </button>
           )}
           {onRemove && (
             <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Remove the link to ${l.name}`} onClick={() => onRemove(l)}>
