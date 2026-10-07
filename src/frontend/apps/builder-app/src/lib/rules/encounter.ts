@@ -37,6 +37,8 @@ export interface Combatant {
   hidden?: boolean;
   /** a player character's, from their simulator (the DM's view only) */
   tempHp?: number;
+  /** a player character's passive Perception, from their simulator (the DM's view only) */
+  passive?: number;
   deathSaves?: { successes: number; failures: number };
   /** what players see of a monster: unhurt, hurt, bloodied, down */
   health?: "unhurt" | "hurt" | "bloodied" | "down";

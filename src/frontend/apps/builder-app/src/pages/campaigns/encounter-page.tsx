@@ -328,10 +328,11 @@ function Row({ c, stats, dm, current, shareStats, update, remove }: { c: Combata
         {current && <Badge className="bg-amber-500 text-black">Their turn</Badge>}
         {looks && <span className={cn("text-xs font-medium", HEALTH_TONE[looks])}>{looks}</span>}
         {(dm || shareStats) && c.ac != null && (
-          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground" title={c.kind === "pc" ? "From their simulator: armor, magic items and active effects" : undefined}>
             <ShieldIcon className="size-3" /> AC {c.ac}
           </span>
         )}
+        {dm && c.kind === "pc" && c.passive != null && <span className="text-xs text-muted-foreground" title="Passive Perception">PP {c.passive}</span>}
         <span className="flex-1" />
         {dm && c.kind === "pc" && <PartyHp c={c} />}
         {dm && c.kind !== "pc" && c.hp !== undefined && (

@@ -344,6 +344,9 @@ export interface CombatState {
   temporaryHitPoints: number;
   /** the maximum the simulator last worked out, kept for the DM's fight board */
   maxHitPoints?: number | null;
+  /** the armor class and passive Perception the simulator shows now, kept for the DM's fight board */
+  armorClass?: number | null;
+  passivePerception?: number | null;
   hitDiceSpent: number;
   uses: Record<string, number>;
   concentration: string | null;

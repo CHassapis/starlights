@@ -21,6 +21,12 @@ public sealed record CharacterCombat
     /// </summary>
     public int? MaxHitPoints { get; init; }
 
+    /// <summary>The armor class the simulator shows now (worn armor, magic items, Shield or Mage Armor), for the DM's fight board.</summary>
+    public int? ArmorClass { get; init; }
+
+    /// <summary>Passive Wisdom (Perception), for the DM's fight board.</summary>
+    public int? PassivePerception { get; init; }
+
     /// <summary>Hit dice spent on short rests.</summary>
     public int HitDiceSpent { get; init; }
 
@@ -52,7 +58,8 @@ public sealed record CharacterCombat
     /// <summary>What is wrong with the state, or null when it is fine.</summary>
     public string? Validate()
     {
-        if (Damage is < 0 or > 100_000 || TemporaryHitPoints is < 0 or > 100_000 || HitDiceSpent is < 0 or > 100 || MaxHitPoints is < 0 or > 100_000)
+        if (Damage is < 0 or > 100_000 || TemporaryHitPoints is < 0 or > 100_000 || HitDiceSpent is < 0 or > 100 || MaxHitPoints is < 0 or > 100_000
+            || ArmorClass is < 0 or > 100 || PassivePerception is < 0 or > 100)
         {
             return "Damage, temporary hit points and hit dice spent must be zero or more (and not absurdly large).";
         }

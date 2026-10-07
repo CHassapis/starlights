@@ -131,7 +131,7 @@ public static class FightView
     }
 
     // what WithParty adds to a player character, never stored with the fight
-    private static readonly string[] PartyFields = ["hp", "maxHp", "tempHp", "deathSaves"];
+    private static readonly string[] PartyFields = ["hp", "maxHp", "tempHp", "deathSaves", "ac", "passive"];
 
     /// <summary>
     /// The party as their own simulators have them now: each player character's hit points (when the simulator has
@@ -161,6 +161,15 @@ public static class FightView
             if (combat.TemporaryHitPoints > 0)
             {
                 o["tempHp"] = combat.TemporaryHitPoints;
+            }
+            // the character's own numbers as the simulator works them out (magic items and active effects included)
+            if (combat.ArmorClass is int ac and > 0)
+            {
+                o["ac"] = ac;
+            }
+            if (combat.PassivePerception is int passive and > 0)
+            {
+                o["passive"] = passive;
             }
             if (o["conditions"] is not JsonArray conditions)
             {

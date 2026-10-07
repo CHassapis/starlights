@@ -72,28 +72,32 @@ public class FightViewTests
     [TestMethod]
     public void WithParty_ShowsTheDmEachPlayersHitPointsAndTheConditionsTheySet()
     {
-        var combat = new CharacterCombat { MaxHitPoints = 38, Damage = 12, TemporaryHitPoints = 5, Conditions = ["Prone"], Concentration = "Bless", Exhaustion = 1 };
+        var combat = new CharacterCombat { MaxHitPoints = 38, Damage = 12, TemporaryHitPoints = 5, Conditions = ["Prone"], Concentration = "Bless", Exhaustion = 1, ArmorClass = 18, PassivePerception = 14 };
         var fight = FightView.WithParty(Sample(), new Dictionary<Guid, CharacterCombat> { [Ash] = combat });
         var pc = fight["combatants"]!.AsArray()[0]!.AsObject();
         pc["hp"]!.GetValue<int>().Should().Be(26);
         pc["maxHp"]!.GetValue<int>().Should().Be(38);
         pc["tempHp"]!.GetValue<int>().Should().Be(5);
+        pc["ac"]!.GetValue<int>().Should().Be(18);
+        pc["passive"]!.GetValue<int>().Should().Be(14);
         pc["conditions"]!.AsArray().Select(c => c!["name"]!.ToString()).Should().BeEquivalentTo(["Prone", "Exhaustion 1", "Concentrating"]);
 
         // players see the conditions, not the hit points
         var player = FightView.ForPlayers(fight)["combatants"]!.AsArray()[0]!.AsObject();
         player.ContainsKey("hp").Should().BeFalse();
+        player.ContainsKey("ac").Should().BeFalse();
         player["conditions"]!.AsArray().Should().HaveCount(3);
     }
 
     [TestMethod]
     public void StripParty_KeepsWhatTheDmMarked_AndDropsWhatCameFromTheSheets()
     {
-        var shown = FightView.WithParty(Sample(), new Dictionary<Guid, CharacterCombat> { [Ash] = new() { MaxHitPoints = 30, Conditions = ["Prone"] } });
+        var shown = FightView.WithParty(Sample(), new Dictionary<Guid, CharacterCombat> { [Ash] = new() { MaxHitPoints = 30, Conditions = ["Prone"], ArmorClass = 16 } });
         FightView.Mark(shown, "p1", "Frightened", on: true, by: "DM").Should().BeTrue();
         FightView.StripParty(shown);
         var pc = shown["combatants"]!.AsArray()[0]!.AsObject();
         pc.ContainsKey("hp").Should().BeFalse();
+        pc.ContainsKey("ac").Should().BeFalse();
         pc["conditions"]!.AsArray().Select(c => c!["name"]!.ToString()).Should().BeEquivalentTo(["Frightened"]);
     }
 

@@ -80,7 +80,7 @@ import { expended, expendSlot, isCastable, longRest as slotsLong, ordinal, pactS
 import { cn } from "@/lib/utils";
 import { BattleBackdrop } from "./battle-index";
 import { Companions } from "./companions";
-import { Items } from "./items";
+import { Items, ItemUses } from "./items";
 
 // ---- this turn (kept for the browser tab, so a reload keeps it)
 
@@ -378,7 +378,7 @@ export function CharacterBattlePage() {
           {readout}
         </pre>
       )}
-      <KeepMaxHp maxHp={maxHp} cached={state.maxHitPoints ?? null} ready={!!combat.data} update={updateCombat} />
+      <KeepStats maxHp={maxHp} ac={ac.total} passive={data.passivePerception} state={state} ready={!!combat.data} update={updateCombat} />
       <Header id={id} data={data} model={model} onRest={setRest} />
       <Vitals data={data} model={model} state={state} hp={hp} maxHp={maxHp} speed={speed} ac={ac} onDamage={damage} onHeal={(n) => updateCombat((c) => heal(c, n))} onTemp={(n) => updateCombat((c) => gainTemporary(c, n))} />
       <Status data={data} state={state} edition={edition} exhaustionText={exhaustion.text} updateCombat={updateCombat} hp={hp} />
@@ -877,6 +877,20 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
   const { model, data } = ctx;
   const bySlot = (slot: Slot) => model.features.filter((f) => f.slot === slot);
   const spellsBy = (slot: Slot) => model.spells.filter((s) => s.slot === slot && ctx.castable(s));
+  const itemUsesFor = (slot: "Action" | "Bonus Action" | "Reaction") => (
+    <ItemUses
+      items={data.items ?? []}
+      slot={slot}
+      edition={model.edition}
+      spent={!!ctx.turn[SLOT_FIELD[slot]!]}
+      blocked={slot === "Reaction" ? ctx.noReactions : ctx.incapacitated}
+      setCharges={ctx.setCharges}
+      consume={ctx.consume}
+      tempHp={(n) => ctx.updateCombat((c) => gainTemporary(c, n))}
+      heal={(n) => ctx.updateCombat((c) => heal(c, n))}
+      markUsed={ctx.use}
+    />
+  );
   const limited = model.features.filter((f) => f.parsedUsage);
   return (
     <Tabs defaultValue="action" className="gap-3">
@@ -921,6 +935,7 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
             <FeatureList ctx={ctx} features={bySlot("Action")} />
           </Panel>
         )}
+        {itemUsesFor("Action")}
         <Panel title="Every creature can" icon={<ShieldIcon className="size-4 text-white/60" />}>
           <StandardList ctx={ctx} />
         </Panel>
@@ -938,6 +953,7 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
           </Panel>
         )}
         <SlotSection ctx={ctx} features={bySlot("Bonus Action")} spells={spellsBy("Bonus Action")} empty="Nothing on the sheet uses a bonus action. Some spells and features may still give you one." />
+        {itemUsesFor("Bonus Action")}
       </TabsContent>
 
       <TabsContent value="reaction" className="space-y-3">
@@ -946,6 +962,7 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
           {model.opportunity && <WeaponCard ctx={ctx} weapon={model.opportunity} slot="Reaction" attacks={1} />}
         </Panel>
         <SlotSection ctx={ctx} features={bySlot("Reaction")} spells={spellsBy("Reaction")} empty="" />
+        {itemUsesFor("Reaction")}
       </TabsContent>
 
       <TabsContent value="spells" className="space-y-3">
@@ -1596,10 +1613,12 @@ function RestDialog({ kind, onClose, ctx, totalHitDice }: { kind: "short" | "lon
 }
 
 /** Saves the maximum hit points worked out here with the fight state, so the DM's fight board can show them. */
-function KeepMaxHp({ maxHp, cached, ready, update }: { maxHp: number; cached: number | null; ready: boolean; update: (change: (c: CombatState) => CombatState) => void }) {
+/** Keeps the numbers the DM's fight board shows (maximum HP, armor class with magic items and effects, passive Perception) up to date. */
+function KeepStats({ maxHp, ac, passive, state, ready, update }: { maxHp: number; ac: number; passive: number; state: CombatState; ready: boolean; update: (change: (c: CombatState) => CombatState) => void }) {
+  const stale = maxHp > 0 && (state.maxHitPoints !== maxHp || state.armorClass !== ac || state.passivePerception !== passive);
   useEffect(() => {
-    if (ready && maxHp > 0 && cached !== maxHp) update((c) => ({ ...c, maxHitPoints: maxHp }));
-  }, [ready, maxHp, cached, update]);
+    if (ready && stale) update((c) => ({ ...c, maxHitPoints: maxHp, armorClass: ac, passivePerception: passive }));
+  }, [ready, stale, maxHp, ac, passive, update]);
   return null;
 }
 

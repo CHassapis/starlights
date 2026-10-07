@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { SheetItem } from "@/lib/api/sheet";
 import { average, formatRoll, itemHealing, plainSpellText, rollDice, type CombatState, type ItemRider } from "@/lib/rules/battle";
+import { itemUses, type ItemUse, type UseSlot } from "@/lib/rules/item-uses";
 import { cn } from "@/lib/utils";
 
 export function Items({
@@ -160,5 +161,92 @@ export function Items({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The magic items' uses that take this action (a potion to drink, a brooch's reaction, a charm's bonus action), each
+ * with a button that rolls its dice, applies what it can (temporary hit points, healing), spends its charges and
+ * marks the action as used. Things for someone else (a bonus to a save, damage reduced for an ally) are rolled and
+ * shown, for the player to call out.
+ */
+export function ItemUses({
+  items,
+  slot,
+  edition,
+  spent,
+  blocked,
+  setCharges,
+  consume,
+  tempHp,
+  heal,
+  markUsed,
+}: {
+  items: SheetItem[];
+  slot: UseSlot;
+  edition: "2014" | "2024";
+  spent: boolean;
+  blocked: boolean;
+  setCharges: (entryId: string, used: number) => void;
+  consume: (entryId: string) => void;
+  tempHp: (amount: number) => void;
+  heal: (amount: number) => void;
+  markUsed: (slot: UseSlot) => void;
+}) {
+  const rows = items
+    .filter((i) => !(i.requiresAttunement && !i.attuned))
+    .flatMap((item) => itemUses(item.html, { consumable: item.consumable, edition, castsSpells: item.spells.length > 0 }).filter((u) => u.slot === slot).map((use) => ({ item, use })));
+  if (rows.length === 0) return null;
+  return (
+    <section className="rounded-xl border border-white/10 bg-neutral-900/75 p-3 shadow-xl backdrop-blur-md sm:p-4">
+      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-white/80">
+        <GemIcon className="size-4 text-violet-300" /> Magic items
+      </h2>
+      <div className="grid gap-2 md:grid-cols-2">
+        {rows.map(({ item, use }) => {
+          const left = item.charges ? item.charges - item.chargesUsed : null;
+          const noCharge = use.charges > 0 && (left === null || left < use.charges);
+          return (
+            <div key={`${item.entryId}-${use.id}`} className="rounded-lg border border-white/10 bg-black/35 p-3">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-white">{item.name}</div>
+                  <div className="text-xs text-white/75">{use.label}</div>
+                  <div className="text-[11px] text-white/50">
+                    {use.consumes ? `Used up${item.quantity > 1 ? ` (${item.quantity} left)` : ""}` : use.charges ? `${use.charges} charge${use.charges === 1 ? "" : "s"} · ${left ?? 0} left` : "No charge"}
+                    {use.roll ? ` · ${formatRoll(use.roll, false)} (${average(use.roll)} avg)` : ""}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-7 bg-violet-500 text-white hover:bg-violet-400"
+                  disabled={spent || blocked || noCharge}
+                  title={noCharge ? "No charges left" : spent ? `Your ${slot.toLowerCase()} is used this turn` : undefined}
+                  onClick={() => {
+                    const amount = use.roll ? rollDice(use.roll) : 0;
+                    if (use.kind === "tempHp") tempHp(amount);
+                    if (use.kind === "heal") heal(amount);
+                    if (use.charges && item.charges) setCharges(item.entryId, item.chargesUsed + use.charges);
+                    if (use.consumes) consume(item.entryId);
+                    markUsed(slot);
+                    const said: Record<ItemUse["kind"], string> = {
+                      tempHp: `gained ${amount} temporary hit points`,
+                      heal: `healed ${amount} hit points`,
+                      saveBonus: `add +${amount} to the saving throw`,
+                      reduceDamage: `reduce the damage by ${amount}`,
+                      other: "used",
+                    };
+                    toast.success(`${item.name}: ${said[use.kind]}`, { description: use.kind === "reduceDamage" ? "Tell the DM (or the ally) to take that much less." : undefined });
+                  }}
+                >
+                  Use
+                </Button>
+              </div>
+              {use.text && <p className="mt-1 text-[11px] text-white/50">{use.text}</p>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
