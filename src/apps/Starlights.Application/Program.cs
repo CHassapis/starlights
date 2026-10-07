@@ -67,6 +67,9 @@ public sealed partial class Program
             options.AdditionalAssemblies.Add(typeof(EventPublisherComponent).Assembly);
         });
 
+        // the Content page's job: brings Aurora Legacy and 5etools in from their GitHub links (self-hosting kit)
+        builder.Services.AddSingleton<Starlights.Application.Content.ContentSync>();
+
         var app = builder.Build();
 
         app.MapDefaultEndpoints();

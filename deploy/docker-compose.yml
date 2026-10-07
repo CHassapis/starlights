@@ -1,6 +1,6 @@
 # Starlights (aurora-server) on one machine with Docker. Run ./setup.sh from this folder the first time: it fills
-# in .env, fetches Aurora Legacy's content and the 5etools data into ./data, builds and starts everything, and
-# imports the content. Afterwards: `docker compose up -d` / `docker compose down`, and ./admin.sh for content.
+# in .env, builds and starts everything, and has the app download and import Aurora Legacy and the 5etools data.
+# Afterwards: `docker compose up -d` / `docker compose down`; the content links are on the app's Content page.
 #
 # ./data holds the books' content and your group's data (database, portraits, homebrew). It is never part of the
 # repository; keep the site on your own network (or behind a password), not open to the internet.
@@ -58,15 +58,19 @@ services:
       Elements__SampleContent: "false"
       Admin__Key: ${STARLIGHTS_ADMIN_KEY}
       Admin__MasterPassword: ${STARLIGHTS_MASTER_PASSWORD}
-      Aurora__ContentPath: /data/aurora-elements
+      # the app brings its own content in from the links on its Content page (Aurora Legacy, 5etools)
+      Content__SelfManaged: "true"
+      Content__Folder: /data/content
+      Content__FiveEToolsSource: /data/content/5etools
+      Content__LorePath: /data/lore
+      Aurora__ContentPath: /data/content/aurora-elements
+      FiveETools__Path: /data/content/5etools/data
       Aurora__HomebrewPath: /data/homebrew
-      FiveETools__Path: /data/5etools
       Sheets__TemplatesPath: /data/aurora-sheets
     volumes:
-      # github.com/AuroraLegacy/elements (setup.sh clones it)
-      - ./data/aurora-elements:/data/aurora-elements:ro
-      # the "data" folder of github.com/5etools-mirror-3/5etools-src (setup.sh clones it)
-      - ./data/5etools-src/data:/data/5etools:ro
+      # the downloaded content and the Compendium of Lore built from it (written by the app)
+      - ./data/content:/data/content
+      - ./data/lore:/data/lore
       # optional: Aurora Builder's sheet templates and fonts, for PDF sheets laid out like Aurora's
       - ./data/aurora-sheets:/data/aurora-sheets:ro
       # your group's portraits, campaign pictures and homebrew (written by the app)
@@ -86,7 +90,7 @@ services:
     ports:
       - "${STARLIGHTS_PORT:-8093}:80"
     volumes:
-      # the Compendium of Lore, built from the 5etools data by ./admin.sh lore
+      # the Compendium of Lore, built by the app from the 5etools data
       - ./data/lore:/srv/lore-data:ro
       # optional: background pictures (home-1.webp … home-5.webp, lore.webp, battle.webp)
       - ./data/art:/srv/art:ro

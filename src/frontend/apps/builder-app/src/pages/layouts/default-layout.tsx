@@ -1,11 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { BookOpenIcon, CrownIcon, FlaskConicalIcon, LibraryBigIcon, OrbitIcon, ScrollTextIcon, SwordsIcon, UserIcon } from "lucide-react";
+import { BookOpenIcon, CrownIcon, DatabaseIcon, FlaskConicalIcon, LibraryBigIcon, OrbitIcon, ScrollTextIcon, SwordsIcon, UserIcon } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { ModeToggle } from "@/components/mode-toggle";
 import { GitHubIconButton } from "@/components/navigation/github-icon-button";
-import { usePlayer } from "@/lib/player";
+import { useIsAdmin, usePlayer } from "@/lib/player";
 import { AdminButton } from "@/components/admin-button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PlayerChooser } from "@/pages/characters/player-picker";
@@ -183,9 +183,11 @@ const MAIN_LINKS = [
 ];
 
 function MainLinks({ className, compact }: { className?: string; compact?: boolean }) {
+  // the admin also gets the Content page (where the rules and the Compendium come from)
+  const links = useIsAdmin() ? [...MAIN_LINKS, { to: "/content", label: "Content", icon: DatabaseIcon }] : MAIN_LINKS;
   return (
     <nav aria-label="Main" className={cn("items-center gap-0.5", compact ? "flex" : "", className)}>
-      {MAIN_LINKS.map(({ to, label, icon: LinkIcon }) => (
+      {links.map(({ to, label, icon: LinkIcon }) => (
         <NavLink
           key={to}
           to={to}
@@ -196,12 +198,12 @@ function MainLinks({ className, compact }: { className?: string; compact?: boole
               "flex items-center gap-1.5 rounded-md text-sm transition-colors hover:bg-muted hover:text-foreground",
               compact ? "p-2" : "px-2.5 py-1.5",
               isActive ? "text-foreground bg-muted/60" : "text-muted-foreground",
-              compact && (to === "/compendium" || to === "/homebrew") && "hidden sm:flex",
+              compact && (to === "/compendium" || to === "/homebrew" || to === "/content") && "hidden sm:flex",
             )
           }
         >
           <LinkIcon className={compact ? "size-5" : "size-4"} />
-          {!compact && <span className={cn(to === "/compendium" || to === "/homebrew" ? "hidden lg:inline" : "")}>{label}</span>}
+          {!compact && <span className={cn(to === "/compendium" || to === "/homebrew" || to === "/content" ? "hidden lg:inline" : "")}>{label}</span>}
         </NavLink>
       ))}
     </nav>

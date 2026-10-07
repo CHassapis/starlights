@@ -11,6 +11,7 @@ import CharactersCreatePage from "./pages/characters/create/Index.tsx";
 import CharactersDetailsPage from "./pages/characters/details/Index.tsx";
 import { CompendiumPage } from "./pages/compendium/Index.tsx";
 import { HomebrewPage } from "./pages/homebrew/Index.tsx";
+import { ContentPage } from "./pages/content/Index.tsx";
 import { CharacterBuilderPage } from "./pages/characters/builder/builder-page.tsx";
 import { CharacterSheetPage } from "./pages/characters/sheet/sheet-page.tsx";
 import { PlayerProvider } from "./lib/player.tsx";
@@ -57,6 +58,7 @@ const router = createBrowserRouter([
       { path: "lib", element: <LibraryDevelopmentPage /> },
       { path: "compendium", element: <CompendiumPage /> },
       { path: "homebrew", element: <HomebrewPage /> },
+      { path: "content", element: <ContentPage /> },
     ],
   },
   {

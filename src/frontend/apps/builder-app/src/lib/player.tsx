@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
 
 // There are no accounts: each browser remembers who is playing, and characters are filed under that name.
 // Players can lock their characters with a password; unlocking stores a token here that goes with every request.
@@ -53,12 +53,31 @@ export function isAdmin(): boolean {
   return ADMIN in readTokens();
 }
 
+const ADMIN_EVENT = "starlights-admin";
+
 export function saveAdminToken(token: string) {
   writeTokens({ ...readTokens(), [ADMIN]: token });
+  window.dispatchEvent(new Event(ADMIN_EVENT));
 }
 
 export function forgetAdminToken() {
   forgetUnlockToken(ADMIN);
+  window.dispatchEvent(new Event(ADMIN_EVENT));
+}
+
+/** Whether this browser unlocked the admin, kept up to date when it unlocks or locks again. */
+export function useIsAdmin(): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      window.addEventListener(ADMIN_EVENT, changed);
+      window.addEventListener("storage", changed);
+      return () => {
+        window.removeEventListener(ADMIN_EVENT, changed);
+        window.removeEventListener("storage", changed);
+      };
+    },
+    isAdmin,
+  );
 }
 
 /** The X-Player-Token header value: every token this browser holds (without the DM's, to see what players see). */
