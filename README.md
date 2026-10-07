@@ -24,11 +24,13 @@
 - **Builder**: multiclassing, 2014 and 2024 rules (or both), Save / Discard, items that cast spells, extra feats,
   languages and proficiencies.
 - **Battle Action Simulator**: attacks, spells, slots and charges, familiars, conditions; magic items under the action
-  they take (wands and staffs cast, potions, charms with charges); prepare spells right there, and cast one the player
-  forgot to prepare (the DM's call).
+  they take (wands and staffs cast, potions, charms with charges), and a potion or healing charm used on another
+  party member goes straight into their simulator; prepare spells right there, and cast one the player forgot to
+  prepare (the DM's call).
 - **Campaigns** with a DM's side: sessions, NPCs, places, quests, maps, handouts, magic items to hand out, notes, and a
   Gold tab with the party fund and stash. The Magic items tab shows who carries each item. Players only see what the
-  DM reveals.
+  DM reveals; a Compendium link can stay the DM's alone (the stat block behind an alias). **Export campaign** saves
+  all of it as one file.
 - **Encounters run as fights**: initiative, turns, monster hit points (hidden from players), and the party's hit points,
   armor class (magic items included), passive Perception and conditions straight from their simulators.
 - **Trading**: players give each other items and coins from their Equipment tab.
@@ -97,6 +99,26 @@ itself after a reboot.
 4. **Encounters → Run the fight**: add the party and the monsters, roll initiative, track hit points; players follow
    along in their simulators.
 5. **Magic items → Give to…** puts an item straight into a character's equipment and notes it in the Gold tab.
+6. **Campaign settings → Export campaign** saves the whole campaign as one `.zip` (see below).
+
+### Exporting a campaign
+
+The DM (the campaign's DM password or the admin) can download a campaign as one `.zip` file to keep or read
+elsewhere. It holds `campaign.json` and a `pictures/` folder:
+
+| Included | Left out on purpose |
+|---|---|
+| the campaign's name, description, cover, party, DM name and settings (Use homebrew; whether it has passwords) | the campaign's password, the DM password and players' passwords (no hashes either) |
+| every entry as the DM sees it: sessions, codex, quests, maps, handouts, notes, DM notes, links (DM-only ones too) | players' **private** notes (only their authors can read them, not even the DM) |
+| the ledger (Gold tab: party fund and stash lines) and the magic items with where each one is | unlock tokens, the admin key and every server setting |
+| encounters with their running fights (initiative, monster hit points, conditions) | the books' content (Aurora Legacy, 5etools): ids and links point into it |
+| each party member: all of their build (the same capture as the builder's Save/Discard), equipment, spells, story and fight state; who carries which magic item | the build of a character whose player locked it, unless the DM holds that player's unlock token (then only name and player) |
+| the books' and homebrew items the campaign's magic items are, by id, name and book | homebrew files themselves (back up `data/homebrew`), other campaigns and characters |
+| the campaign's pictures and the party's portraits and story pictures | |
+
+The export holds your DM notes: keep it private. Starlights can't import it yet; it is a readable, complete copy
+(`campaign.json` maps each picture to the address the campaign uses). For a full backup of the server, see
+[Backups](#backups-and-restoring).
 
 ### Homebrew
 

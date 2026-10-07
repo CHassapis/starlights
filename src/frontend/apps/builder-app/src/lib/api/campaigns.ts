@@ -101,6 +101,23 @@ const BASE = import.meta.env.VITE_API_BASE ?? "https://localhost:7246";
 
 export class CampaignLockedError extends Error {}
 
+/**
+ * The DM's export of a campaign: one .zip with campaign.json (everything of the campaign and its party) and its
+ * pictures. Fetched with the reader's tokens (a link could not send them) and saved as a file.
+ */
+export async function downloadCampaignExport(campaignId: string) {
+  const tokens = unlockTokenHeader();
+  const res = await fetch(`${BASE}/api/campaigns/${campaignId}/export`, { headers: { ...(tokens ? { "X-Player-Token": tokens } : {}), ...playerNameHeader() } });
+  if (!res.ok) throw new Error(res.status === 403 ? "Only this campaign's DM can export it." : `The export did not work (${res.status}).`);
+  const name = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "starlights-campaign.zip";
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 /** The campaign list; locked campaigns the reader has not opened show only their names. */
 export function useCampaigns() {
   return useQuery({

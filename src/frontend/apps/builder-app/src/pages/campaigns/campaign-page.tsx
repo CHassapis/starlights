@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftIcon, CoinsIcon, CrownIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, SwordsIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon, CoinsIcon, CrownIcon, DownloadIcon, EyeOffIcon, LockIcon, PencilIcon, PlusIcon, ScrollTextIcon, SearchIcon, SettingsIcon, SwordsIcon, Trash2Icon, UsersIcon } from "lucide-react";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiClient } from "@/lib/api-client";
-import { CampaignLockedError, unlockCampaignDm, useCampaign, useCampaignActions, type CampaignEntry, type CampaignView, type EntryKind, type PartyMember, type ItemHolder } from "@/lib/api/campaigns";
+import { CampaignLockedError, downloadCampaignExport, unlockCampaignDm, useCampaign, useCampaignActions, type CampaignEntry, type CampaignView, type EntryKind, type PartyMember, type ItemHolder } from "@/lib/api/campaigns";
 import { shrinkImage } from "@/lib/image";
 import type { CompendiumLink } from "@/lib/lore/campaign-links";
 import { formatCoins, gpValue, ledgerRows, partyFund, totalsByRecipient, type LedgerLine } from "@/lib/rules/ledger";
@@ -847,6 +847,7 @@ function CampaignSettings({ view, onClose }: { view: CampaignView; onClose: () =
   const [password, setPassword] = useState("");
   const [dmName, setDmName] = useState(view.campaign.dmName ?? "");
   const [dmPassword, setDmPassword] = useState("");
+  const [exporting, setExporting] = useState(false);
   const characters = useQuery({
     queryKey: ["campaign-settings-characters"],
     queryFn: () => apiClient.get<{ characters: { characterId: string; name: string; playerName: string }[] }>("/api/characters"),
@@ -972,6 +973,29 @@ function CampaignSettings({ view, onClose }: { view: CampaignView; onClose: () =
               onClick={() => actions.setDm.mutate({ name: dmName, password: dmPassword }, { onSuccess: () => (toast.success("Saved"), setDmPassword("")), onError: failed })}
             >
               Save the DM
+            </Button>
+          </div>
+
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="flex items-center gap-1.5 text-sm font-medium">
+              <DownloadIcon className="size-4" /> Export the campaign
+            </p>
+            <p className="text-xs text-muted-foreground">
+              One .zip file to keep: the sessions, codex, quests, ledger and stash, magic items, notes, encounters, the party's characters and the pictures. It
+              holds your DM notes, so keep it private. Passwords and players' private notes are left out.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={exporting}
+              onClick={() => {
+                setExporting(true);
+                downloadCampaignExport(view.campaign.id)
+                  .catch((e: Error) => toast.error("Could not export the campaign", { description: e.message }))
+                  .finally(() => setExporting(false));
+              }}
+            >
+              {exporting ? <Spinner /> : <DownloadIcon />} Export campaign
             </Button>
           </div>
 

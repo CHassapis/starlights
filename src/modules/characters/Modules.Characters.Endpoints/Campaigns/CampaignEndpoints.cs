@@ -101,6 +101,22 @@ internal static class CampaignAccess
         return !await access.IsLockedAsync(name) || access.HasToken(context.Request.Headers[PlayerAccess.TokenHeader], name) ? name : null;
     }
 
+    /// <summary>A party member's level, classes ("Fighter 3 / Wizard 2" when multiclassed) and portrait, as the party shows them.</summary>
+    public static (int Level, string Build, string? PortraitUrl) Describe(Domain.Characters.Character character)
+    {
+        var classes = character.GetRequiredComponent<ClassComponent>();
+        var build = new StringBuilder();
+        foreach (var c in classes.Classes)
+        {
+            build.Append(build.Length > 0 ? " / " : string.Empty).Append(c.Name);
+            if (classes.IsMulticlass)
+            {
+                build.Append($" {c.Level}");
+            }
+        }
+        return (character.GetRequiredComponent<ProgressionComponent>().CharacterLevel, build.ToString(), character.GetRequiredComponent<AppearanceComponent>().PortraitUrl);
+    }
+
     /// <summary>Whether the reader may change the character: its player is not locked, or they hold the player's token.</summary>
     public static async Task<bool> CanEditCharacter(HttpContext context, PlayerAccess access, Guid characterId)
     {
@@ -200,18 +216,8 @@ public sealed class GetCampaignEndpoint : EndpointWithoutRequest<CampaignRespons
                 party.Add(new PartyMemberModel(id, character.Name, character.PlayerName, null, null, null, true, false));
                 continue;
             }
-            var classes = character.GetRequiredComponent<ClassComponent>();
-            var build = new StringBuilder();
-            foreach (var c in classes.Classes)
-            {
-                build.Append(build.Length > 0 ? " / " : string.Empty).Append(c.Name);
-                if (classes.IsMulticlass)
-                {
-                    build.Append($" {c.Level}");
-                }
-            }
-            party.Add(new PartyMemberModel(id, character.Name, character.PlayerName, character.GetRequiredComponent<ProgressionComponent>().CharacterLevel,
-                build.ToString(), character.GetRequiredComponent<AppearanceComponent>().PortraitUrl, false, false));
+            var (level, build, portrait) = CampaignAccess.Describe(character);
+            party.Add(new PartyMemberModel(id, character.Name, character.PlayerName, level, build, portrait, false, false));
         }
 
         var reader = await CampaignAccess.VerifiedPlayer(HttpContext, _access);
