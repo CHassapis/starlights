@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, FastForwardIcon, ScrollTextIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { BuilderChoice } from "@/lib/api/builder";
@@ -49,31 +49,46 @@ export function Wizard({
 }) {
   const [at, setAt] = useState(0);
   const step = STEPS[at];
+  const heading = useRef<HTMLElement>(null);
+  const pills = useRef<HTMLOListElement>(null);
+  const first = useRef(true);
+  // a new step starts at its top (on a phone Next is far down the page), and its button slides into view in the strip
+  useEffect(() => {
+    pills.current?.querySelector<HTMLElement>("[aria-current=step]")?.scrollIntoView({ block: "nearest", inline: "center" });
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    heading.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [at]);
   const of = (s: Step) => choices.filter((c) => s.sections?.includes(c.section));
   const open = (s: Step) => of(s).filter((c) => !c.optional && !c.selected).length;
   const shown = of(step);
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+      <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
         <p className="min-w-0 flex-1 text-sm">
-          <span className="font-medium">Step by step.</span> One thing at a time, with a short explanation. Know what you're doing?
+          <span className="font-medium">Step by step.</span>
+          <span className="hidden sm:inline"> One thing at a time, with a short explanation. Know what you're doing?</span>
         </p>
-        <Button size="sm" variant="outline" onClick={onExit}>
-          <FastForwardIcon /> Skip to the full builder
+        <Button size="sm" variant="outline" className="shrink-0" onClick={onExit}>
+          <FastForwardIcon /> <span className="sm:hidden">Full builder</span>
+          <span className="hidden sm:inline">Skip to the full builder</span>
         </Button>
       </div>
 
-      <ol className="flex flex-wrap gap-1.5" aria-label="Steps">
+      {/* one row that slides sideways on a phone, wrapping on wider screens */}
+      <ol ref={pills} className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0" aria-label="Steps">
         {STEPS.map((s, i) => {
           const left = open(s);
           return (
-            <li key={s.id}>
+            <li key={s.id} className="shrink-0">
               <button
                 type="button"
                 onClick={() => setAt(i)}
                 aria-current={i === at ? "step" : undefined}
-                className={cn("flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm", i === at ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")}
+                className={cn("flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-sm", i === at ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")}
               >
                 <span className="tabular-nums opacity-70">{i + 1}</span> {s.title}
                 {s.sections && (left === 0 ? <CheckIcon className="size-3.5" /> : <span className="rounded-full bg-amber-500/90 px-1.5 text-[10px] text-black">{left}</span>)}
@@ -85,7 +100,7 @@ export function Wizard({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] xl:grid-cols-[minmax(0,1fr)_28rem]">
         <section className="min-w-0 space-y-4">
-          <header>
+          <header ref={heading} className="scroll-mt-20">
             <h2 className="font-heading text-2xl font-semibold">
               {at + 1}. {step.title}
             </h2>

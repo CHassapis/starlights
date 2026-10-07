@@ -17,7 +17,6 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldSeparator, FieldSet } from "@/components/ui/field";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
@@ -118,8 +117,9 @@ function CharacterCreation() {
   });
 
   return (
-    <form className="flex flex-col gap-6" onSubmit={onSubmit}>
-      <FieldSet>
+    <form className="flex min-w-0 flex-col gap-6" onSubmit={onSubmit}>
+      {/* min-w-0: a fieldset is never narrower than its widest content by default, which pushed the form off a phone's screen */}
+      <FieldSet className="min-w-0">
         {/* <FieldLegend>Character</FieldLegend>
         <FieldDescription>Fill in your character information. You can change all these fields later.</FieldDescription>
         <FieldSeparator /> */}
@@ -185,11 +185,11 @@ function CharacterCreation() {
             <FieldLabel>Portrait</FieldLabel>
             <FieldDescription>Upload your own picture or pick one of these.</FieldDescription>
           </FieldContent>
-          <ScrollArea className="h-60 rounded-md border border-dashed whitespace-nowrap">
+          <div className="max-h-72 overflow-y-auto rounded-md border border-dashed">
             <div className="p-2">
               {portraitsLoading && <PortraitsLoading />}
               {portraitsIsError && <PortraitsError errorMessage={portraitsError.message} />}
-              <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-12 gap-2">
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-7 lg:grid-cols-8 xl:grid-cols-12">
                 <label
                   {...portraitDrop.handlers}
                   className={cn("relative flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded border border-dashed text-center text-xs text-muted-foreground hover:ring-2 hover:ring-tertiary", {
@@ -240,7 +240,7 @@ function CharacterCreation() {
               </div>
               {errors.PortraitUrl && <p className="text-sm text-red-600 mt-1">{errors.PortraitUrl.message}</p>}
             </div>
-          </ScrollArea>
+          </div>
         </Field>
         <FieldSeparator />
       </FieldSet>
@@ -265,14 +265,14 @@ function CharacterCreation() {
 export default function CharactersCreatePage() {
   return (
     <>
-      <div className="container mx-auto px-4 mt-12">
+      <div className="container mx-auto mt-4 px-4 sm:mt-12">
         <CardWrapper className="">
           <Card className="rounded-lg">
-            <CardHeader className="border-b">
+            <CardHeader className="border-b px-4 sm:px-6">
               <CardTitle>New Character</CardTitle>
               <CardDescription>Fill in your character information. You can change all these fields later.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 sm:px-6">
               <PlayerGate>
                 <CharacterCreation />
               </PlayerGate>

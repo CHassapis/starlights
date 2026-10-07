@@ -96,7 +96,7 @@ export function CharacterBuilderPage() {
 
   return (
     <div className="container mx-auto space-y-6 px-4 py-8 pb-24">
-      <BuilderHeader characterId={id} choices={choicesData?.choices ?? []} pending={choicesData?.pending ?? false} />
+      <BuilderHeader characterId={id} choices={choicesData?.choices ?? []} pending={choicesData?.pending ?? false} guided={guided} />
       <SaveBar characterId={id} name={header.data?.character.name ?? ""} />
 
       {guided ? (
@@ -224,7 +224,7 @@ export function CharacterBuilderPage() {
   );
 }
 
-function BuilderHeader({ characterId, choices, pending }: { characterId: string; choices: BuilderChoice[]; pending: boolean }) {
+function BuilderHeader({ characterId, choices, pending, guided }: { characterId: string; choices: BuilderChoice[]; pending: boolean; guided?: boolean }) {
   const { player } = usePlayer();
   const { data: headerData } = useCharacterHeader(characterId);
   const { data: classData } = useCharacterClassList(characterId);
@@ -261,13 +261,18 @@ function BuilderHeader({ characterId, choices, pending }: { characterId: string;
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" asChild>
-            <Link to={`/characters/${characterId}/sheet`}>
-              <FileTextIcon /> Character sheet
-            </Link>
-          </Button>
-          <AuroraUpdateDialog characterId={characterId} />
-          <CharacterCampaigns characterId={characterId} playerName={owner} />
+          {/* the step-by-step guide keeps the screen for the steps (its last step links to the sheet) */}
+          {!guided && (
+            <>
+              <Button variant="outline" asChild>
+                <Link to={`/characters/${characterId}/sheet`}>
+                  <FileTextIcon /> Character sheet
+                </Link>
+              </Button>
+              <AuroraUpdateDialog characterId={characterId} />
+              <CharacterCampaigns characterId={characterId} playerName={owner} />
+            </>
+          )}
           {(pending || setLevel.isPending) && (
             <span className="flex items-center gap-2 text-sm text-muted-foreground">
               <Spinner className="size-4" /> Updating…
