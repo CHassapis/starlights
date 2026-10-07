@@ -172,7 +172,7 @@ New code:
 
 ```bash
 cd starlights && git pull
-cd deploy && docker compose build && docker compose up -d
+cd deploy && STARLIGHTS_COMMIT=$(git rev-parse --short HEAD) docker compose build && docker compose up -d
 ```
 
 New content: press **Save and update now** on the Content page, or run `./admin.sh update`. The database changes a new

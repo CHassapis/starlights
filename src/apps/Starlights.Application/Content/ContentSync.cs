@@ -17,6 +17,37 @@ public sealed record ContentSettings(string AuroraLink, string FiveEToolsLink, s
 /// <summary>What the content job is doing or last did.</summary>
 public sealed record ContentJobStatus(bool Running, string? Step, IReadOnlyList<string> Log, DateTimeOffset? StartedAt, DateTimeOffset? FinishedAt, bool? Succeeded);
 
+/// <summary>One content source as this server has it: the commit or release in use, when it last changed and was checked.</summary>
+public sealed record ContentSourceStatus(string Name, string Link, string? Commit, string? Version, string? VersionDate, DateTimeOffset? ChangedAt, DateTimeOffset? CheckedAt);
+
+/// <summary>What the server's own nightly job (the homelab's) is doing or last did, from the status file it writes.</summary>
+public sealed record NightlyStatus(bool Running, DateTimeOffset? StartedAt, DateTimeOffset? FinishedAt, bool? Ok, IReadOnlyList<string> Changes, IReadOnlyList<string> Failures, DateTimeOffset? LastSuccessAt);
+
+/// <summary>
+/// The content as it is here: each source, whether an update is running, the last one that worked, and on a server
+/// that updates with its own scripts, the command that does it (the page can't run it).
+/// </summary>
+public sealed record ContentStatus(IReadOnlyList<ContentSourceStatus> Sources, bool Running, DateTimeOffset? LastSuccessAt, NightlyStatus? Nightly, string? UpdateCommand);
+
+/// <summary>What GitHub has for one source compared with what is here.</summary>
+public sealed record ContentSourceCheck(
+    string Name,
+    string Link,
+    bool? UpdateAvailable,
+    string? Current,
+    string? Latest,
+    DateTimeOffset? LatestDate,
+    int? CommitsBehind,
+    IReadOnlyList<CommitSummary> Commits,
+    int? FilesChanged,
+    IReadOnlyList<string> Files,
+    string? ReleaseNotes,
+    string WhatDownloads,
+    string? Problem);
+
+/// <summary>An update check (asked for on the page, never automatic); Cached when it is a recent one shown again.</summary>
+public sealed record ContentCheckResponse(DateTimeOffset CheckedAt, bool Cached, IReadOnlyList<ContentSourceCheck> Sources);
+
 /// <summary>
 /// Brings in the content from the two GitHub links an admin gives (Aurora Legacy's elements and the 5etools data),
 /// when the install manages its own content (Content:SelfManaged, the self-hosting kit): downloads each repository at
@@ -40,6 +71,8 @@ public sealed partial class ContentSync
     private string? _step;
     private DateTimeOffset? _started, _finished;
     private bool? _succeeded;
+    private ContentCheckResponse? _lastCheck;
+    private (string Path, DateTime Modified, FiveEToolsRelease? Release) _fiveETools = (string.Empty, default, null);
 
     public ContentSync(IServiceScopeFactory scopes, IConfiguration config, ILogger<ContentSync> logger)
     {
@@ -68,6 +101,7 @@ public sealed partial class ContentSync
     private string LorePath => _config["Content:LorePath"] ?? "/data/lore";
     private string LoreIngest => _config["Content:LoreIngest"] ?? "/app/lore-ingest/lore-ingest/ingest.ts";
     private string SettingsPath => Path.Combine(Folder, "content-sources.json");
+    private string FiveEToolsData => _config["FiveETools:Path"] ?? Path.Combine(FiveEToolsSource, "data");
 
     public ContentSettings Settings()
     {
@@ -109,6 +143,185 @@ public sealed partial class ContentSync
         {
             return new ContentJobStatus(_running, _step, [.. _log], _started, _finished, _succeeded);
         }
+    }
+
+    /// <summary>
+    /// The content as it is here, read from disk without asking GitHub: Aurora Legacy's commit (from its checkout, or
+    /// the one the content job last downloaded) and the 5etools release (its changelog), the last update that worked,
+    /// and whether one runs now (the content job, or the nightly job's status file on a server with its own scripts).
+    /// </summary>
+    public ContentStatus LocalStatus()
+    {
+        var settings = Settings();
+        var checkout = Directory.Exists(AuroraPath) ? ContentVersions.ReadCheckout(AuroraPath) : null;
+        var aurora = new ContentSourceStatus("Aurora Legacy", settings.AuroraLink, checkout?.Commit ?? settings.AuroraCommit, null, null,
+            checkout?.ChangedAt ?? (SelfManaged ? settings.UpdatedAt : null), checkout?.FetchedAt);
+        var release = FiveEToolsRelease();
+        var fiveETools = new ContentSourceStatus("5etools", settings.FiveEToolsLink, settings.FiveEToolsCommit, release?.Version, release?.Date,
+            SelfManaged ? settings.UpdatedAt : null, null);
+        var nightly = SelfManaged ? null : ReadNightly();
+        var job = Status();
+        return new ContentStatus(
+            [aurora, fiveETools],
+            SelfManaged ? job.Running : nightly?.Running ?? false,
+            SelfManaged ? settings.UpdatedAt : nightly?.LastSuccessAt,
+            nightly,
+            SelfManaged ? null : _config["Content:UpdateCommand"]);
+    }
+
+    private FiveEToolsRelease? FiveEToolsRelease()
+    {
+        var path = Path.Combine(FiveEToolsData, "changelog.json");
+        var modified = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : default;
+        lock (_gate)
+        {
+            if (_fiveETools.Path == path && _fiveETools.Modified == modified)
+            {
+                return _fiveETools.Release;
+            }
+        }
+        var release = modified == default ? null : ContentVersions.ReadFiveEToolsRelease(FiveEToolsData);
+        lock (_gate)
+        {
+            _fiveETools = (path, modified, release);
+        }
+        return release;
+    }
+
+    /// <summary>The status file the server's nightly job writes (Content:StatusFile), when there is one.</summary>
+    private NightlyStatus? ReadNightly()
+    {
+        var path = _config["Content:StatusFile"];
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return null;
+        }
+        try
+        {
+            return JsonSerializer.Deserialize<NightlyStatus>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Could not read the nightly status file {Path}", path);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Asks GitHub what is newer than the content here: Aurora Legacy's commits and changed files since the commit in
+    /// use (compare), the 5etools release against the one in the changelog. Only when the admin asks (the page's
+    /// button), at most once a minute, and an answer is kept 10 minutes: GitHub allows 60 checks an hour without a
+    /// sign-in, shared with the content job. Nothing is downloaded or changed.
+    /// </summary>
+    public async Task<ContentCheckResponse> CheckAsync(bool force, CancellationToken ct = default)
+    {
+        var last = _lastCheck;
+        var age = last is null ? TimeSpan.MaxValue : DateTimeOffset.UtcNow - last.CheckedAt;
+        if (last is not null && (age < TimeSpan.FromMinutes(1) || (!force && age < TimeSpan.FromMinutes(10))))
+        {
+            return last with { Cached = true };
+        }
+        var status = LocalStatus();
+        var settings = Settings();
+        var sources = new List<ContentSourceCheck>
+        {
+            await CheckAuroraAsync(settings, status.Sources[0], ct),
+            await CheckFiveEToolsAsync(settings, status.Sources[1], ct),
+        };
+        var answer = new ContentCheckResponse(DateTimeOffset.UtcNow, false, sources);
+        _lastCheck = answer;
+        return answer;
+    }
+
+    private async Task<ContentSourceCheck> CheckAuroraAsync(ContentSettings settings, ContentSourceStatus here, CancellationToken ct)
+    {
+        var downloads = SelfManaged
+            ? "Update downloads the whole repository at its newest commit, unpacks it next to the current one, then swaps it in and imports what changed."
+            : "The server's nightly job pulls these commits (git pull) and imports what changed.";
+        var fail = (string problem) => new ContentSourceCheck(here.Name, here.Link, null, here.Commit, null, null, null, [], null, [], null, downloads, problem);
+        var repo = GitHubRepo.Parse(settings.AuroraLink);
+        if (repo is null)
+        {
+            return fail("The link is not a GitHub repository link.");
+        }
+        try
+        {
+            var latest = await LatestCommitAsync(repo);
+            if (here.Commit == latest)
+            {
+                return new ContentSourceCheck(here.Name, here.Link, false, here.Commit, latest, null, 0, [], 0, [], null, downloads, null);
+            }
+            if (here.Commit is null || !ContentVersions.CommitId().IsMatch(here.Commit))
+            {
+                return new ContentSourceCheck(here.Name, here.Link, true, null, latest, null, null, [], null, [], null, downloads, null);
+            }
+            var compare = await GetGitHubAsync(repo.CompareUri(here.Commit, latest), ct);
+            if (compare is null)
+            {
+                return new ContentSourceCheck(here.Name, here.Link, true, here.Commit, latest, null, null, [], null, [], null, downloads,
+                    "GitHub couldn't compare the two commits (the history may have been rewritten); updating brings in the newest.");
+            }
+            var summary = ContentVersions.ParseCompare(compare);
+            return new ContentSourceCheck(here.Name, here.Link, summary.AheadBy > 0 || summary.Status != "identical", here.Commit, latest, summary.HeadDate,
+                summary.AheadBy, summary.Commits, summary.FilesChanged, summary.Files, null, downloads, null);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return fail(ex.Message);
+        }
+    }
+
+    private async Task<ContentSourceCheck> CheckFiveEToolsAsync(ContentSettings settings, ContentSourceStatus here, CancellationToken ct)
+    {
+        var downloads = SelfManaged
+            ? "Update downloads only its data folder, package.json and two script files at the newest commit, then rebuilds the Compendium of Lore."
+            : "The server's nightly job fetches the newest release, rebuilds the Compendium of Lore and imports the deities.";
+        var fail = (string problem) => new ContentSourceCheck(here.Name, here.Link, null, here.Version, null, null, null, [], null, [], null, downloads, problem);
+        var repo = GitHubRepo.Parse(settings.FiveEToolsLink);
+        if (repo is null)
+        {
+            return fail("The link is not a GitHub repository link.");
+        }
+        try
+        {
+            var json = await GetGitHubAsync(repo.LatestReleaseUri, ct);
+            if (json is not null && ContentVersions.ParseRelease(json) is { } release)
+            {
+                var newer = here.Version is null || ContentVersions.CompareVersions(release.Tag, here.Version) > 0;
+                return new ContentSourceCheck(here.Name, here.Link, newer, here.Version, release.Tag.TrimStart('v'), release.PublishedAt, null, [], null, [],
+                    newer ? release.Notes : null, downloads, null);
+            }
+            // a fork without releases: its newest commit against the one the content job downloaded
+            var latest = await LatestCommitAsync(repo);
+            bool? available = here.Commit is null ? (SelfManaged ? true : null) : latest != here.Commit;
+            return new ContentSourceCheck(here.Name, here.Link, available, here.Commit ?? here.Version, latest[..7], null, null, [], null, [], null, downloads,
+                available is null ? "This repository has no releases, so the version here can't be compared with it." : null);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return fail(ex.Message);
+        }
+    }
+
+    /// <summary>A GitHub API answer as JSON, or null when GitHub has nothing there (404); refuses on its rate limit.</summary>
+    private static async Task<string?> GetGitHubAsync(Uri uri, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        using var response = await Http.SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+        if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
+        {
+            throw new InvalidOperationException("GitHub's limit of 60 checks an hour was reached. Try again later.");
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitHub did not answer ({(int)response.StatusCode}). Try again later.");
+        }
+        return await response.Content.ReadAsStringAsync(ct);
     }
 
     /// <summary>Starts a run in the background; false when one is already running.</summary>
@@ -254,6 +467,7 @@ public sealed partial class ContentSync
         }
 
         Save(Settings() with { AuroraCommit = auroraCommit, FiveEToolsCommit = fiveECommit, UpdatedAt = DateTimeOffset.UtcNow });
+        _lastCheck = null;
         Step("Done");
     }
 
@@ -265,9 +479,12 @@ public sealed partial class ContentSync
         var body = (await response.Content.ReadAsStringAsync()).Trim();
         if (!response.IsSuccessStatusCode || !CommitId().IsMatch(body))
         {
-            throw new InvalidOperationException(response.StatusCode == HttpStatusCode.NotFound
-                ? $"{repo.Link} was not found (a private repository, a typo, or a branch that doesn't exist)."
-                : $"GitHub did not answer for {repo.Link} ({(int)response.StatusCode}). Try again later.");
+            throw new InvalidOperationException(response.StatusCode switch
+            {
+                HttpStatusCode.NotFound => $"{repo.Link} was not found (a private repository, a typo, or a branch that doesn't exist).",
+                HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests => "GitHub's limit of 60 checks an hour was reached. Try again later.",
+                _ => $"GitHub did not answer for {repo.Link} ({(int)response.StatusCode}). Try again later.",
+            });
         }
         return body;
     }

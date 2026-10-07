@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { apiClient } from "@/lib/api-client";
 import { useIsAdmin } from "@/lib/player";
+import { ContentStatusSection, ServerSection, type ContentStatus } from "./status";
 
 interface ContentSources {
   selfManaged: boolean;
@@ -20,6 +21,7 @@ interface ContentSources {
   defaultAurora: string;
   defaultFiveETools: string;
   job: { running: boolean; step?: string | null; log: string[]; startedAt?: string | null; finishedAt?: string | null; succeeded?: boolean | null };
+  status: ContentStatus;
 }
 
 const KEY = ["content-sources"];
@@ -31,7 +33,14 @@ export function ContentPage() {
     queryKey: KEY,
     queryFn: () => apiClient.get<ContentSources>("/api/admin/content-sources"),
     enabled: admin,
-    refetchInterval: (q) => (q.state.data?.job.running ? 2000 : false),
+    // every 2 seconds while the content job runs, every 30 while the server's nightly job does
+    refetchInterval: (q) => (q.state.data?.job.running ? 2000 : q.state.data?.status.running ? 30_000 : false),
+  });
+  const update = useMutation({
+    mutationFn: () => apiClient.post<{ force: boolean }, ContentSources["job"]>("/api/admin/content-sources/update", { force: false }),
+    onSuccess: (job) => qc.setQueryData<ContentSources>(KEY, (d) => (d ? { ...d, job, status: { ...d.status, running: true } } : d)),
+    onError: (e) => toast.error("Could not start the update", { description: e.message.match(/"generalErrors":\["([^"]+)/)?.[1] ?? e.message }),
+    onSettled: () => qc.invalidateQueries({ queryKey: KEY }).catch(() => {}),
   });
   const save = useMutation({
     mutationFn: (body: { auroraLink: string; fiveEToolsLink: string; update: boolean; force: boolean }) => apiClient.put<typeof body, ContentSources>("/api/admin/content-sources", body),
@@ -62,6 +71,8 @@ export function ContentPage() {
           downloads them, imports them, builds the Compendium and updates every character.
         </p>
       </header>
+      <ServerSection />
+      <ContentStatusSection status={data.status} step={data.job.step} onUpdate={data.selfManaged ? () => update.mutate() : undefined} updating={update.isPending} />
       {data.selfManaged ? <Sources data={data} busy={save.isPending} onSave={(body) => save.mutate(body, { onError: (e) => toast.error("Could not save", { description: e.message.match(/"generalErrors":\["([^"]+)/)?.[1] ?? e.message }) })} /> : <ManagedElsewhere data={data} />}
       <Job job={data.job} />
     </div>

@@ -23,7 +23,7 @@ mkdir -p data/portraits data/homebrew data/aurora-sheets data/art data/lore data
 # the API runs as user 1654 and SQL Server as 10001: give them their folders
 docker run --rm -v "$PWD/data:/d" alpine sh -c 'chown -R 1654:1654 /d/portraits /d/homebrew /d/content /d/lore && chown -R 10001:0 /d/mssql'
 
-docker compose build -q
+STARLIGHTS_COMMIT=$(git -C .. rev-parse --short HEAD 2>/dev/null || echo unknown) docker compose build -q
 docker compose up -d
 port=$(grep -E '^STARLIGHTS_PORT=' .env | cut -d= -f2-)
 echo -n "waiting for the API"

@@ -21,6 +21,9 @@ COPY src/frontend/apps/builder-app/lore-ingest/ /app/lore-ingest/lore-ingest/
 COPY src/frontend/apps/builder-app/src/lib/lore/categories.ts src/frontend/apps/builder-app/src/lib/lore/keys.ts src/frontend/apps/builder-app/src/lib/lore/monster-text.ts src/frontend/apps/builder-app/src/lib/lore/spell-text.ts src/frontend/apps/builder-app/src/lib/lore/tags.ts src/frontend/apps/builder-app/src/lib/lore/types.ts /app/lore-ingest/src/lib/lore/
 RUN rm -f /app/lore-ingest/lore-ingest/*.test.ts && echo '{"type":"module"}' > /app/lore-ingest/package.json
 ENV ASPNETCORE_HTTP_PORTS=8080
+# the git commit it was built from, for the admin's status (docker compose passes it in; "unknown" otherwise)
+ARG STARLIGHTS_COMMIT=unknown
+ENV STARLIGHTS_COMMIT=$STARLIGHTS_COMMIT
 USER app
 WORKDIR /app/api
 ENTRYPOINT ["dotnet", "Starlights.Application.dll"]

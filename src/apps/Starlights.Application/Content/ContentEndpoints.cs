@@ -3,7 +3,7 @@ using Starlights.Modules.Elements.Services.Content;
 
 namespace Starlights.Application.Content;
 
-public sealed record ContentSourcesResponse(bool SelfManaged, ContentSettings Settings, string DefaultAurora, string DefaultFiveETools, ContentJobStatus Job);
+public sealed record ContentSourcesResponse(bool SelfManaged, ContentSettings Settings, string DefaultAurora, string DefaultFiveETools, ContentJobStatus Job, ContentStatus Status);
 
 public sealed record SaveContentSourcesRequest(string? AuroraLink, string? FiveEToolsLink, bool Update = true, bool Force = false);
 
@@ -24,7 +24,7 @@ public sealed class GetContentSourcesEndpoint : EndpointWithoutRequest<ContentSo
     }
 
     public override async Task HandleAsync(CancellationToken ct) =>
-        await Send.OkAsync(new ContentSourcesResponse(_sync.SelfManaged, _sync.Settings(), ContentSync.DefaultAurora, ContentSync.DefaultFiveETools, _sync.Status()), ct);
+        await Send.OkAsync(new ContentSourcesResponse(_sync.SelfManaged, _sync.Settings(), ContentSync.DefaultAurora, ContentSync.DefaultFiveETools, _sync.Status(), _sync.LocalStatus()), ct);
 }
 
 /// <summary>Saves the two GitHub links and (by default) starts bringing the content in.</summary>
@@ -70,7 +70,7 @@ public sealed class SaveContentSourcesEndpoint : Endpoint<SaveContentSourcesRequ
         {
             _sync.Start(req.Force);
         }
-        await Send.OkAsync(new ContentSourcesResponse(_sync.SelfManaged, _sync.Settings(), ContentSync.DefaultAurora, ContentSync.DefaultFiveETools, _sync.Status()), ct);
+        await Send.OkAsync(new ContentSourcesResponse(_sync.SelfManaged, _sync.Settings(), ContentSync.DefaultAurora, ContentSync.DefaultFiveETools, _sync.Status(), _sync.LocalStatus()), ct);
     }
 }
 
@@ -106,4 +106,27 @@ public sealed class UpdateContentEndpoint : Endpoint<SaveContentSourcesRequest, 
         }
         await Send.OkAsync(_sync.Status(), ct);
     }
+}
+
+/// <summary>
+/// Whether GitHub has newer content than this server, and what changed (asked for with the page's button, never on
+/// its own; a recent answer is shown again, see <see cref="ContentSync.CheckAsync"/>). It only reads.
+/// </summary>
+public sealed class CheckContentEndpoint : EndpointWithoutRequest<ContentCheckResponse>
+{
+    private readonly ContentSync _sync;
+
+    public CheckContentEndpoint(ContentSync sync)
+    {
+        _sync = sync;
+    }
+
+    public override void Configure()
+    {
+        Get("admin/content-sources/check");
+        AllowAnonymous();
+    }
+
+    public override async Task HandleAsync(CancellationToken ct) =>
+        await Send.OkAsync(await _sync.CheckAsync(Query<bool>("force", isRequired: false), ct), ct);
 }

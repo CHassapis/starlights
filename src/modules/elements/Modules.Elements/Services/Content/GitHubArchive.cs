@@ -37,6 +37,15 @@ public sealed partial record GitHubRepo(string Owner, string Name, string? Branc
 
     /// <summary>The repository's files at one commit, as a .tar.gz.</summary>
     public Uri ArchiveUri(string commit) => new($"https://codeload.github.com/{Owner}/{Name}/tar.gz/{commit}");
+
+    /// <summary>What changed between two commits (commits and files), for the Content page; both must be commit ids.</summary>
+    public Uri CompareUri(string from, string to) =>
+        ContentVersions.CommitId().IsMatch(from) && ContentVersions.CommitId().IsMatch(to)
+            ? new($"https://api.github.com/repos/{Owner}/{Name}/compare/{from}...{to}")
+            : throw new ArgumentException("Only commit ids can be compared.");
+
+    /// <summary>The repository's newest release (5etools publishes one per version).</summary>
+    public Uri LatestReleaseUri => new($"https://api.github.com/repos/{Owner}/{Name}/releases/latest");
 }
 
 /// <summary>What an archive unpacked: files, bytes, and entries left out (links, paths outside the folder).</summary>

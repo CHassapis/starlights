@@ -32,6 +32,9 @@ services:
     build:
       context: ..
       dockerfile: deploy/backend.Dockerfile
+      args:
+        # shown on the Content page; setup.sh and the README's update command set it
+        STARLIGHTS_COMMIT: ${STARLIGHTS_COMMIT:-unknown}
     working_dir: /app/migrate-elements
     entrypoint: ["dotnet", "Modules.Elements.Data.EntityFramework.MigrationService.dll"]
     environment: *db
