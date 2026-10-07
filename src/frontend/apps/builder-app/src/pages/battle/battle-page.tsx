@@ -23,7 +23,7 @@ import {
   ZapIcon,
   ListChecksIcon,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { LoreLink } from "@/components/lore/lore-link";
@@ -1627,12 +1627,18 @@ function RestDialog({ kind, onClose, ctx, totalHitDice }: { kind: "short" | "lon
   );
 }
 
-/** Saves the maximum hit points worked out here with the fight state, so the DM's fight board can show them. */
 /** Keeps the numbers the DM's fight board shows (maximum HP, armor class with magic items and effects, passive Perception) up to date. */
 function KeepStats({ maxHp, ac, passive, state, ready, update }: { maxHp: number; ac: number; passive: number; state: CombatState; ready: boolean; update: (change: (c: CombatState) => CombatState) => void }) {
   const stale = maxHp > 0 && (state.maxHitPoints !== maxHp || state.armorClass !== ac || state.passivePerception !== passive);
+  // each set of numbers is saved once: until the save shows in the state, every render would save it again (and
+  // React gives up after 50 in a row)
+  const sent = useRef("");
   useEffect(() => {
-    if (ready && stale) update((c) => ({ ...c, maxHitPoints: maxHp, armorClass: ac, passivePerception: passive }));
+    const numbers = `${maxHp}|${ac}|${passive}`;
+    if (ready && stale && sent.current !== numbers) {
+      sent.current = numbers;
+      update((c) => ({ ...c, maxHitPoints: maxHp, armorClass: ac, passivePerception: passive }));
+    }
   }, [ready, stale, maxHp, ac, passive, update]);
   return null;
 }
