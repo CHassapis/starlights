@@ -197,8 +197,9 @@ public sealed partial class ContentSync
         if (fiveEChanged)
         {
             Step($"Downloading the 5etools data ({fiveECommit[..7]})");
-            // only what the import and the Compendium read: the data folder and the release number
-            await DownloadAsync(fiveETools, fiveECommit, FiveEToolsSource, p => p == "package.json" || p.StartsWith("data/", StringComparison.Ordinal), maxBytes: 3_000_000_000, maxFiles: 50_000);
+            // only what the import and the Compendium read: the data folder, the release number, and the book and
+            // source name tables in js/parser.js
+            await DownloadAsync(fiveETools, fiveECommit, FiveEToolsSource, p => p is "package.json" or "js/parser.js" || p.StartsWith("data/", StringComparison.Ordinal), maxBytes: 3_000_000_000, maxFiles: 50_000);
         }
         else
         {

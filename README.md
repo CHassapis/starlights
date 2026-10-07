@@ -14,19 +14,22 @@
 
 ## What this fork adds
 
-- **Docker install** for one machine: `deploy/setup.sh` fetches the content and sets everything up.
+- **Docker install** for one machine: `deploy/setup.sh` sets everything up, and the app downloads its own content.
+- **Content page**: paste the GitHub links for Aurora Legacy and 5etools (or your forks) and the server downloads,
+  imports and wires everything: the builder's rules, the Compendium of Lore, and every character updated.
 - **Character wizard** for new players: class, species, background, ability scores, the books' starting equipment
   (packages or gold) and spells, one step at a time, with a skip to the full builder.
 - **Character sheets like Aurora's**, on screen and as PDF; bring in players' Aurora character files.
 - **Builder**: multiclassing, 2014 and 2024 rules (or both), Save / Discard, items that cast spells, extra feats,
   languages and proficiencies.
-- **Battle Action Simulator**: attacks, spells, slots and charges, magic items (wands, staffs), familiars, conditions;
-  prepare spells right there, and cast one the player forgot to prepare (the DM's call).
+- **Battle Action Simulator**: attacks, spells, slots and charges, familiars, conditions; magic items under the action
+  they take (wands and staffs cast, potions, charms with charges); prepare spells right there, and cast one the player
+  forgot to prepare (the DM's call).
 - **Campaigns** with a DM's side: sessions, NPCs, places, quests, maps, handouts, magic items to hand out, notes, and a
   Gold tab with the party fund and stash. The Magic items tab shows who carries each item. Players only see what the
   DM reveals.
-- **Encounters run as fights**: initiative, turns, monster hit points (hidden from players), and the party's hit points
-  and conditions straight from their simulators.
+- **Encounters run as fights**: initiative, turns, monster hit points (hidden from players), and the party's hit points,
+  armor class (magic items included), passive Perception and conditions straight from their simulators.
 - **Trading**: players give each other items and coins from their Equipment tab.
 - **Homebrew page**: make magic items (weapons can have their own damage dice) and monsters in a form, or upload Aurora
   element files. Homebrew is off by default: a player ticks it in a character's Sources, and a DM switches on
@@ -42,10 +45,10 @@
   - **64-bit Intel/AMD (x86-64) only.** The database (Microsoft SQL Server) has no ARM version, so a Raspberry Pi
     won't work; an Apple Silicon Mac only through Docker Desktop's x86 emulation, slowly.
   - **4 GB of RAM** or more (the database takes up to 2 GB) and **about 3 GB of disk** (more with portraits).
-- **Linux** (or Windows with WSL 2 and Docker Desktop), with **Docker and its compose plugin**, `git`, `curl` and
-  `openssl`. On Ubuntu or Debian: `sudo apt install git curl openssl` and Docker from
+- **Linux** (or Windows with WSL 2 and Docker Desktop), with **Docker and its compose plugin**, `git`, `curl`,
+  `openssl` and `python3`. On Ubuntu or Debian: `sudo apt install git curl openssl python3` and Docker from
   [docs.docker.com/engine/install](https://docs.docker.com/engine/install/).
-- An internet connection for the first setup (it downloads about 400 MB of content and the Docker images).
+- An internet connection for the first setup (the app downloads about 200 MB of content, plus the Docker images).
 
 ### Setting it up
 
@@ -59,9 +62,9 @@ The first run takes 10 to 20 minutes (building the app is the slow part). `setup
 is done. It:
 
 1. writes `deploy/.env` with random passwords. Your **admin password** is `STARLIGHTS_MASTER_PASSWORD` in that file;
-2. clones the content into `deploy/data`: Aurora Legacy's elements and the 5etools data;
-3. builds and starts three containers: the database, the API and the web app;
-4. imports the content (about 14,000 elements) and builds the Compendium of Lore.
+2. builds and starts three containers: the database, the API and the web app;
+3. has the app download Aurora Legacy's elements and the 5etools data from GitHub, import them (about 14,000 elements)
+   and build the Compendium of Lore. It shows each step as it goes.
 
 When it finishes it prints the address, `http://<this machine>:8093` (for example `http://192.168.1.20:8093`), and the
 admin password. Everyone on your home network can open that address in a browser, on a phone too. The site restarts by
@@ -115,15 +118,25 @@ The settings live in `deploy/.env` (never share or commit it):
 
 ## How Aurora Legacy and 5etools are connected
 
-| Content | Where it lives | Used for |
-|---|---|---|
-| [AuroraLegacy/elements](https://github.com/AuroraLegacy/elements) | `deploy/data/aurora-elements` | classes, species, backgrounds, feats, spells, items: the builder's rules |
-| [5etools-src](https://github.com/5etools-mirror-3/5etools-src) | `deploy/data/5etools-src` | the Compendium of Lore, deities Aurora lacks, creatures for encounters, starting equipment |
-| Your homebrew | `deploy/data/homebrew` | made or uploaded on the Homebrew page |
+The app brings in its own content from two GitHub links, kept on its **Content** page (in the top bar once you unlock
+admin with the key button):
 
-Both are plain git clones made by `setup.sh`, so you can point them at your own fork (clone it into that folder
-instead, then `./admin.sh import AuroraLegacy.index --update` or `./admin.sh import 5etools --update` and
-`./admin.sh lore`). Optional extras:
+| Content | Standard link | Used for |
+|---|---|---|
+| Aurora Legacy | [github.com/AuroraLegacy/elements](https://github.com/AuroraLegacy/elements) | classes, species, backgrounds, feats, spells, items: the builder's rules |
+| 5etools | [github.com/5etools-mirror-3/5etools-src](https://github.com/5etools-mirror-3/5etools-src) | the Compendium of Lore, deities Aurora lacks, creatures for encounters, starting equipment |
+
+To use your own fork (or a branch, as `…/tree/branch-name`), paste its link and press **Save and update now**. The
+server then:
+
+1. downloads each repository at its newest commit (skipped when nothing changed; for 5etools only its `data` folder);
+2. sets up the base rules the first time;
+3. imports Aurora Legacy, the 5etools deities and the built-in extras;
+4. builds the Compendium of Lore;
+5. runs every character through the rules again, so they get new choices.
+
+Only GitHub links are accepted. The downloads live in `deploy/data/content`, the Compendium in `deploy/data/lore`, and
+your homebrew (`deploy/data/homebrew`) is never touched. Optional extras:
 
 - **Aurora's PDF sheets**: if you own Aurora Builder, copy the sheet templates and fonts from its install folder into
   `deploy/data/aurora-sheets` for PDF sheets laid out like Aurora's. Without them the on-screen sheet still works,
@@ -132,14 +145,15 @@ instead, then `./admin.sh import AuroraLegacy.index --update` or `./admin.sh imp
 
 ## Updating
 
+New code:
+
 ```bash
-cd starlights && git pull                                # new code
+cd starlights && git pull
 cd deploy && docker compose build && docker compose up -d
-./admin.sh update                                        # newest Aurora Legacy and 5etools content
 ```
 
-The database changes a new version needs are applied by themselves when it starts. To get new content every night,
-add a cron job (`crontab -e`):
+New content: press **Save and update now** on the Content page, or run `./admin.sh update`. The database changes a new
+version needs are applied by themselves when it starts. To get new content every night, add a cron job (`crontab -e`):
 
 ```
 30 3 * * * cd /path/to/starlights/deploy && ./admin.sh update >> data/update.log 2>&1
@@ -149,11 +163,10 @@ add a cron job (`crontab -e`):
 
 | Command | What it does |
 |---|---|
-| `./admin.sh update` | pulls Aurora Legacy and 5etools, imports what changed, rebuilds the Compendium, updates characters |
-| `./admin.sh import <index> [--update\|--replace]` | imports content: `AuroraLegacy.index` (everything), `5etools`, `starlights` (built-in extras), `homebrew` |
-| `./admin.sh reprocess` | runs every character through the rules again, so they get new or changed choices |
-| `./admin.sh lore` | rebuilds the Compendium of Lore from the 5etools data |
-| `./admin.sh init` | the base rules, once, on an empty database (`setup.sh` does it) |
+| `./admin.sh update [--force]` | the same as the Content page's button: downloads what changed, imports it, rebuilds the Compendium, updates characters (`--force`: everything again) |
+| `./admin.sh status` | what the content update is doing or last did |
+| `./admin.sh import <index> [--update\|--replace]` | imports one index again: `AuroraLegacy.index`, `5etools`, `starlights` (built-in extras), `homebrew` |
+| `./admin.sh reprocess` | runs every character through the rules again |
 
 ## Backups and restoring
 
@@ -193,7 +206,8 @@ personal use): install it on the server and on each player's device, then open `
 |---|---|
 | `setup.sh` waits forever for the API | `docker compose logs starlights-api starlights-db`. The most common causes: less than 2 GB of free RAM, or an ARM computer. |
 | "port is already allocated" | Another program uses 8093: set `STARLIGHTS_PORT=8094` (or another) in `.env` and run `docker compose up -d`. |
-| The Compendium of Lore says it isn't set up | `./admin.sh lore` |
+| The Compendium of Lore says it isn't set up | On the Content page press **Download everything again** (or `./admin.sh update --force`). |
+| The content update stopped | The Content page shows the step and the reason. "GitHub did not answer" usually means its limit of 60 checks an hour: try again later. |
 | New classes or options don't show after an update | `./admin.sh reprocess` |
 | A player forgot their password | Unlock admin with the key button, pick that player's name (top right), and use **Change password** to set a new one or remove it. |
 | You forgot the admin password | It's `STARLIGHTS_MASTER_PASSWORD` in `deploy/.env`. |

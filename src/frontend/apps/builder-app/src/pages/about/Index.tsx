@@ -44,12 +44,12 @@ export default function AboutPage() {
       <section className="space-y-2">
         <h2 className="font-heading text-xl font-semibold">This build adds</h2>
         <ul className="list-disc space-y-1 pl-5 text-sm">
-          <li>Running it all in Docker on a home server, with nightly content updates, backups and a password for the site</li>
+          <li>Running it all in Docker on a home server, with nightly content updates, backups and a password for the site; on a self-hosted install the admin's Content page takes the Aurora Legacy and 5etools links and brings everything in</li>
           <li>A step-by-step character wizard for new players, with the books' starting equipment (or gold), and a skip for experienced ones</li>
           <li>Character sheets laid out like Aurora's (on screen and as PDF), bringing in players' Aurora files, multiclassing, and Save / Discard in the builder</li>
-          <li>The Battle Action Simulator: attacks, spells, magic items that cast (wands, staffs), familiars and conditions; preparing spells, and casting one you forgot to prepare</li>
+          <li>The Battle Action Simulator: attacks, spells, familiars and conditions; magic items under the action they take (wands and staffs cast, potions, charms with charges); preparing spells, and casting one you forgot to prepare</li>
           <li>Campaigns with a DM's view: sessions, NPCs, quests, maps, handouts, magic items to hand out (showing who carries each), and a Gold tab that keeps the party stash</li>
-          <li>Encounters run as fights: initiative, monster hit points, the party's hit points and conditions straight from their simulators</li>
+          <li>Encounters run as fights: initiative, monster hit points, and the party's hit points, armor class, passive Perception and conditions straight from their simulators</li>
           <li>Players give each other items and coins from their Equipment tab</li>
           <li>A Homebrew page to make your own magic items and monsters. Homebrew stays off until a player ticks it in their Sources or a DM switches it on for a campaign</li>
           <li>The Compendium of Lore: the books, creatures, spells and items to read and link from campaigns</li>
