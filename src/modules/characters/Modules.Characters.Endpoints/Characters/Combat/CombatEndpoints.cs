@@ -1,4 +1,5 @@
 using FastEndpoints;
+using Microsoft.AspNetCore.Http;
 using Starlights.Modules.Characters.Data;
 using Starlights.Modules.Characters.Domain.Characters;
 using Starlights.Platform.Data;
@@ -35,7 +36,11 @@ public sealed class GetCharacterCombatEndpoint : EndpointWithoutRequest<Characte
     }
 }
 
-/// <summary>Replaces the character's state in a fight (the rules do not depend on it, so nothing is reprocessed).</summary>
+/// <summary>
+/// Replaces the character's state in a fight (the rules do not depend on it, so nothing is reprocessed). A state
+/// loaded before someone else changed it (Received is behind) is refused with 409 and the current state, so a
+/// simulator left open doesn't undo a party member's potion; Received itself is never taken from the request.
+/// </summary>
 public sealed class UpdateCharacterCombatEndpoint : Endpoint<CharacterCombat>
 {
     private readonly IPersistence _persistence;
@@ -68,7 +73,14 @@ public sealed class UpdateCharacterCombatEndpoint : Endpoint<CharacterCombat>
             return;
         }
 
-        character.UpdateCombat(req with { Version = 1 });
+        if (req.Received < character.Combat.Received)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status409Conflict;
+            await HttpContext.Response.WriteAsJsonAsync(character.Combat, ct);
+            return;
+        }
+
+        character.UpdateCombat(req with { Version = 1, Received = character.Combat.Received });
         await _persistence.SaveChangesAsync();
         await Send.OkAsync(character.Combat, ct);
     }

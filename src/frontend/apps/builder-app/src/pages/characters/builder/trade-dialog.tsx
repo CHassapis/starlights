@@ -1,12 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { apiClient } from "@/lib/api-client";
-import { useCampaigns } from "@/lib/api/campaigns";
+import { usePartyMembers } from "@/lib/api/campaigns";
 import { useTrade } from "@/lib/api/inventory";
 import { COIN_NAMES, COINS, type Coin } from "@/lib/rules/items";
 
@@ -21,16 +19,9 @@ export interface TradeItem {
  * leaves this character's equipment at once and shows up, unequipped, in the other's; the campaign's Gold tab notes it.
  */
 export function TradeDialog({ characterId, item, purse, onClose }: { characterId: string; item: TradeItem | null; purse: Partial<Record<Coin, number>>; onClose: () => void }) {
-  const campaigns = useCampaigns();
-  const characters = useQuery({
-    queryKey: ["campaign-settings-characters"],
-    queryFn: () => apiClient.get<{ characters: { characterId: string; name: string; playerName: string }[] }>("/api/characters"),
-  });
+  const party = usePartyMembers(characterId);
   const trade = useTrade(characterId);
-  const nameOf = (id: string) => characters.data?.characters.find((c) => c.characterId === id)?.name;
-  const choices = (campaigns.data?.campaigns ?? [])
-    .filter((c) => c.party.includes(characterId))
-    .flatMap((c) => c.party.filter((id) => id !== characterId && nameOf(id)).map((id) => ({ key: `${c.id}|${id}`, campaign: c.name, name: nameOf(id)! })));
+  const choices = party.choices;
   const [to, setTo] = useState("");
   const [quantity, setQuantity] = useState(item?.quantity ?? 1);
   const [coins, setCoins] = useState<Partial<Record<Coin, number>>>({});
@@ -59,7 +50,7 @@ export function TradeDialog({ characterId, item, purse, onClose }: { characterId
           <DialogTitle>{item ? `Give ${item.name}` : "Give coins"}</DialogTitle>
           <DialogDescription>To another character in one of your campaigns. It arrives in their equipment, unequipped.</DialogDescription>
         </DialogHeader>
-        {campaigns.isLoading || characters.isLoading ? (
+        {party.isLoading ? (
           <Spinner className="mx-auto my-6 size-5" />
         ) : choices.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nobody to give it to yet: this character needs to be in a campaign with the others (Campaigns button at the top).</p>
@@ -71,7 +62,7 @@ export function TradeDialog({ characterId, item, purse, onClose }: { characterId
                 {choices.map((c) => (
                   <option key={c.key} value={c.key}>
                     {c.name}
-                    {new Set(choices.map((x) => x.campaign)).size > 1 ? ` (${c.campaign})` : ""}
+                    {new Set(choices.map((x) => x.campaignId)).size > 1 ? ` (${c.campaignName})` : ""}
                   </option>
                 ))}
               </select>

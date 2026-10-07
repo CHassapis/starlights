@@ -55,11 +55,25 @@ public sealed record CharacterCombat
     /// <summary>Familiars, companions, steeds and summons in the fight, each with its own hit points.</summary>
     public List<CharacterCompanion> Companions { get; init; } = [];
 
+    /// <summary>
+    /// How many times someone else changed this state (a party member's potion or charm healing the character).
+    /// Kept by the server alone: a simulator that loaded an older count is refused when it saves, reloads and
+    /// makes its change again, so it never undoes what the other character did.
+    /// </summary>
+    public int Received { get; init; }
+
+    /// <summary>Healing up to the maximum; any healing ends the death saves (the simulator's heal).</summary>
+    public CharacterCombat Healed(int amount) =>
+        amount <= 0 ? this : this with { Damage = Math.Max(0, Damage - amount), DeathSaveSuccesses = 0, DeathSaveFailures = 0 };
+
+    /// <summary>Temporary hit points do not add up: the new amount replaces the old if it is higher.</summary>
+    public CharacterCombat WithTemporaryHitPoints(int amount) => this with { TemporaryHitPoints = Math.Max(TemporaryHitPoints, Math.Max(0, amount)) };
+
     /// <summary>What is wrong with the state, or null when it is fine.</summary>
     public string? Validate()
     {
         if (Damage is < 0 or > 100_000 || TemporaryHitPoints is < 0 or > 100_000 || HitDiceSpent is < 0 or > 100 || MaxHitPoints is < 0 or > 100_000
-            || ArmorClass is < 0 or > 100 || PassivePerception is < 0 or > 100)
+            || ArmorClass is < 0 or > 100 || PassivePerception is < 0 or > 100 || Received < 0)
         {
             return "Damage, temporary hit points and hit dice spent must be zero or more (and not absurdly large).";
         }

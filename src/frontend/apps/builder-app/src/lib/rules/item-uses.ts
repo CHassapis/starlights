@@ -2,7 +2,8 @@
  * What a magic item lets its owner do on a turn, read from its text, so the simulator can put it under the action
  * it takes (Action, Bonus Action, Reaction): "As a bonus action, spend 1 charge: gain 1d6 temporary hit points",
  * "When an ally takes damage, you can use your reaction to reduce that damage by 1d8", drinking a potion. Spells an
- * item casts are its item spells (item-spells.ts), not uses.
+ * item casts are its item spells (item-spells.ts), not uses. Healing and temporary hit points that can go to someone
+ * else (a potion given to an ally, "you or a creature you touch regains 10d4 hit points") are marked forOthers.
  */
 import { itemHealing, parseRoll, plainSpellText, type Roll } from "./battle";
 
@@ -21,10 +22,15 @@ export interface ItemUse {
   consumes: boolean;
   /** the item's own words for it */
   text: string;
+  /** healing or temporary hit points that can go to another creature (a party member) instead of the user */
+  forOthers: boolean;
 }
 
 const WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5 };
 const DICE = String.raw`(\d+d\d+(?:\s*[+-]\s*\d+)?)`;
+// the healing or temporary hit points can be for someone else: "you or a creature you touch", "the target regains"
+const OTHERS =
+  /\b(?:you or (?:a|an|one|another) (?:willing )?(?:creature|ally)|another creature|an ally|(?:a|one) (?:willing )?creature (?:you touch|you can see|of your choice|within)|touch a creature|the target (?:regains|gains)|the creature that (?:receives|drinks|eats)|the drinker)\b/i;
 
 function slotOf(sentence: string): UseSlot | null {
   if (/\bbonus action\b/i.test(sentence)) return "Bonus Action";
@@ -47,7 +53,8 @@ export function itemUses(html: string, opts: { consumable: boolean; edition: "20
   if (opts.consumable) {
     const heals = itemHealing(html);
     if (heals) {
-      uses.push({ id: "drink", slot: opts.edition === "2024" ? "Bonus Action" : "Action", label: "Drink it: heal", kind: "heal", roll: heals, charges: 0, consumes: true, text: "" });
+      // (drinking or giving it to someone else takes the same action)
+      uses.push({ id: "drink", slot: opts.edition === "2024" ? "Bonus Action" : "Action", label: "Drink it: heal", kind: "heal", roll: heals, charges: 0, consumes: true, text: "", forOthers: true });
       return uses;
     }
   }
@@ -64,7 +71,7 @@ export function itemUses(html: string, opts: { consumable: boolean; edition: "20
     // the effect can be in the same sentence or the next ("Bonus action: spend 1 charge. You gain 1d6 temporary hit points.")
     const scope = `${sentence} ${sentences[i + 1] ?? ""}`;
     const charges = chargesOf(sentence) || chargesOf(sentences[i + 1] ?? "");
-    const found: Omit<ItemUse, "id" | "slot" | "charges" | "consumes" | "text">[] = [];
+    const found: Omit<ItemUse, "id" | "slot" | "charges" | "consumes" | "text" | "forOthers">[] = [];
     const temp = scope.match(new RegExp(`${DICE}\\s+temporary hit points`, "i"));
     if (temp) found.push({ label: `Gain ${temp[1]} temporary hit points`, kind: "tempHp", roll: parseRoll(temp[1]) });
     const save = scope.match(new RegExp(`add\\s+${DICE}\\s+to\\s+(?:your next |a |one |the |its )?saving throw`, "i"));
@@ -74,7 +81,8 @@ export function itemUses(html: string, opts: { consumable: boolean; edition: "20
     const heal = !temp && scope.match(new RegExp(`regains?\\s+${DICE}\\s+hit points`, "i"));
     if (heal) found.push({ label: `Regain ${heal[1]} hit points`, kind: "heal", roll: { ...parseRoll(heal[1])!, type: "healing" } });
     if (found.length === 0) found.push({ label: sentence.length > 90 ? `${sentence.slice(0, 87)}…` : sentence, kind: "other", roll: null });
-    for (const f of found) uses.push({ ...f, id: `${i}-${f.kind}`, slot, charges, consumes: false, text: sentence });
+    const others = OTHERS.test(scope);
+    for (const f of found) uses.push({ ...f, id: `${i}-${f.kind}`, slot, charges, consumes: false, text: sentence, forOthers: others && (f.kind === "heal" || f.kind === "tempHp") });
   });
   // the same use read twice (an action sentence and the next one) counts once
   return uses.filter((u, i) => uses.findIndex((v) => v.kind === u.kind && v.label === u.label) === i);

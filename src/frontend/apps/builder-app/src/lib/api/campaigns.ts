@@ -109,6 +109,34 @@ export function useCampaigns() {
   });
 }
 
+/** Another character of a campaign this one plays in: whom it can trade with or use an item on. */
+export interface PartyMemberChoice {
+  /** "<campaign id>|<character id>" */
+  key: string;
+  campaignId: string;
+  campaignName: string;
+  characterId: string;
+  name: string;
+}
+
+/** The other characters of every campaign this character's party is in (the campaigns the reader may open). */
+export function usePartyMembers(characterId: string) {
+  const campaigns = useCampaigns();
+  const characters = useQuery({
+    queryKey: ["campaign-settings-characters"],
+    queryFn: () => apiClient.get<{ characters: { characterId: string; name: string; playerName: string }[] }>("/api/characters"),
+  });
+  const nameOf = (id: string) => characters.data?.characters.find((c) => c.characterId === id)?.name;
+  const choices: PartyMemberChoice[] = (campaigns.data?.campaigns ?? [])
+    .filter((c) => c.party.includes(characterId))
+    .flatMap((c) =>
+      c.party
+        .filter((id) => id !== characterId && nameOf(id))
+        .map((id) => ({ key: `${c.id}|${id}`, campaignId: c.id, campaignName: c.name, characterId: id, name: nameOf(id)! })),
+    );
+  return { choices, isLoading: campaigns.isLoading || characters.isLoading };
+}
+
 /**
  * A campaign as the reader may see it. With asPlayer the DM's own token is left out of the request, so the server
  * answers as it would a player: that is what "view as player" shows, never a filter in the browser.

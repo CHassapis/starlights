@@ -32,7 +32,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCombat, useSaveCombat } from "@/lib/api/combat";
+import { usePartyMembers, type PartyMemberChoice } from "@/lib/api/campaigns";
+import { useCombat, useItemEffect, useSaveCombat } from "@/lib/api/combat";
 import { useActiveFights, useMarkFight, type FightView } from "@/lib/api/encounters";
 import { useInventory, useSaveInventory } from "@/lib/api/inventory";
 import { useMagic, useSaveMagic, useSpellcasting } from "@/lib/api/magic";
@@ -137,6 +138,9 @@ export function CharacterBattlePage() {
   // encounter mode: the fights this character's party is in, and the creature it aims at (or one described by hand)
   const fights = useActiveFights(id);
   const markFight = useMarkFight();
+  // the party members of its campaigns, for a magic item used on one of them (a potion given)
+  const party = usePartyMembers(id);
+  const itemEffect = useItemEffect(id);
   const [targetPick, setTargetPick] = useState<TargetPick | null>(null);
   // the target is within 5 ft of the character: for ranged attacks (melee ones are always within reach)
   const [within5, setWithin5] = useState(false);
@@ -369,7 +373,9 @@ export function CharacterBattlePage() {
       failed,
     );
 
-  const ctx: Ctx = { data, model, state, targetAc: usedAc, rollFor, targetSaveFor, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, castAnyway, casters, magicState, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf, fx, effects, setEffect, effectCtx };
+  const applyToAlly = async (target: PartyMemberChoice, kind: "heal" | "tempHp", amount: number) =>
+    (await itemEffect.mutateAsync({ campaignId: target.campaignId, toCharacterId: target.characterId, kind, amount })).name;
+  const ctx: Ctx = { data, model, state, targetAc: usedAc, rollFor, targetSaveFor, d20Penalty, turn, incapacitated, noReactions, use: markUsed, spendFeature, cast, castable, castAnyway, casters, magicState, slotsLeft, slotTotals, pact, pactLeft, updateMagic, updateCombat, setCharges, consume, chargedItemOf, fx, effects, setEffect, effectCtx, party: party.choices, applyToAlly };
 
   return (
     <Shell>
@@ -459,6 +465,10 @@ interface Ctx {
   effectCtx: Parameters<typeof effectFor>[1];
   consume: (entryId: string) => void;
   chargedItemOf: (spell: BattleSpell) => SheetData["items"][number] | undefined;
+  /** the other characters of its campaigns' parties */
+  party: PartyMemberChoice[];
+  /** a magic item's healing or temporary hit points for one of them; answers their name */
+  applyToAlly: (target: PartyMemberChoice, kind: "heal" | "tempHp", amount: number) => Promise<string>;
 }
 
 // ---- layout pieces
@@ -892,6 +902,8 @@ function Choices({ ctx, speed }: { ctx: Ctx; speed: number }) {
       tempHp={(n) => ctx.updateCombat((c) => gainTemporary(c, n))}
       heal={(n) => ctx.updateCombat((c) => heal(c, n))}
       markUsed={ctx.use}
+      party={ctx.party}
+      applyToAlly={ctx.applyToAlly}
     />
   );
   const limited = model.features.filter((f) => f.parsedUsage);

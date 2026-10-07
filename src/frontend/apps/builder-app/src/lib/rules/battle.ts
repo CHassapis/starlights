@@ -360,6 +360,8 @@ export interface CombatState {
   active: string[];
   /** spells, features and situations affecting the character now ("Shield", "Bladesong", "Aid@3"); see effectFor */
   effects: string[];
+  /** how many times a party member changed this state (a potion they gave): kept by the server, sent back as loaded */
+  received?: number;
 }
 
 export const EMPTY_COMBAT: CombatState = {
