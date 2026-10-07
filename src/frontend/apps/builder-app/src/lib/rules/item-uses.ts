@@ -28,7 +28,8 @@ const DICE = String.raw`(\d+d\d+(?:\s*[+-]\s*\d+)?)`;
 
 function slotOf(sentence: string): UseSlot | null {
   if (/\bbonus action\b/i.test(sentence)) return "Bonus Action";
-  if (/\b(?:your |a |its )?reaction\b/i.test(sentence)) return "Reaction";
+  // only an activation: "as a reaction", "use your reaction", "Reaction:" (never "can't take reactions")
+  if (/\b(?:as a|use (?:your|a|its)|take (?:your|a)) reaction\b|\breaction:/i.test(sentence) && !/\bcan(?:no|')t take reactions?\b/i.test(sentence)) return "Reaction";
   if (/\bas an action\b|\buse an action\b|\btake the (?:magic|use an object|utilize) action\b|\baction:/i.test(sentence)) return "Action";
   return null;
 }
@@ -55,6 +56,9 @@ export function itemUses(html: string, opts: { consumable: boolean; edition: "20
   sentences.forEach((sentence, i) => {
     const slot = slotOf(sentence);
     if (!slot) return;
+    // not a use of the item: ending or dismissing what it did, or what other creatures can do
+    if (/\b(?:to end|ends?|dismiss(?:es|ed)?)\b[^.]*\b(?:bonus action|action)\b|\b(?:bonus action|action) to (?:end|dismiss)\b/i.test(sentence)) return;
+    if (/^(?:other|another) creatures?\b/i.test(sentence)) return;
     // casting a spell is the item's spells, shown with the other spells of that action
     if (opts.castsSpells && /\bcast\b/i.test(sentence)) return;
     // the effect can be in the same sentence or the next ("Bonus action: spend 1 charge. You gain 1d6 temporary hit points.")

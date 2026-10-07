@@ -26,5 +26,9 @@ describe("what a magic item does on a turn", () => {
     const lantern = itemUses("<p>As an action, you can light or douse the lantern.</p>", opts);
     expect(lantern).toEqual([expect.objectContaining({ slot: "Action", kind: "other", charges: 0 })]);
     expect(itemUses("<p>While lit, invisible undead within its light show as silhouettes.</p>", opts)).toEqual([]);
+    expect(itemUses("<p>While wearing this armor, you can't take reactions.</p>", opts)).toEqual([]);
+    expect(itemUses("<p>Its reaction time is slow, and it has no other powers.</p>", opts)).toEqual([]);
+    expect(itemUses("<p>The shield remains animate for 1 minute, until you take a Bonus Action to end this effect.</p>", opts)).toEqual([]);
+    expect(itemUses("<p>Other creatures can open the hatch as an action with a successful check.</p>", opts)).toEqual([]);
   });
 });
