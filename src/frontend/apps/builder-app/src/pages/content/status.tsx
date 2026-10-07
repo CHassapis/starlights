@@ -75,6 +75,7 @@ interface ServerStatus {
   counts?: { characters: number; players: number; campaigns: number; campaignEntries: number; elements: number; homebrewFiles: number; homebrewItems: number; homebrewMonsters: number } | null;
 }
 
+const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : null);
 const short = (commit?: string | null) => (commit && /^[0-9a-f]{40}$/.test(commit) ? commit.slice(0, 7) : commit);
 // "20261006175931_CampaignUseHomebrew" → "CampaignUseHomebrew (2026-10-06)"
@@ -123,12 +124,12 @@ export function ServerSection() {
             <>
               <dt className="text-muted-foreground">In it</dt>
               <dd>
-                {data.counts.characters} characters · {data.counts.players} players with a password · {data.counts.campaigns} campaigns with {data.counts.campaignEntries} entries ·{" "}
-                {data.counts.elements.toLocaleString()} rules elements
+                {count(data.counts.characters, "character")} · {count(data.counts.players, "player")} with a password · {count(data.counts.campaigns, "campaign")} with{" "}
+                {count(data.counts.campaignEntries, "entry", "entries")} · {count(data.counts.elements, "rules element")}
               </dd>
               <dt className="text-muted-foreground">Homebrew</dt>
               <dd>
-                {data.counts.homebrewFiles} element files, {data.counts.homebrewItems} items made on the Homebrew page, {data.counts.homebrewMonsters} monsters
+                {count(data.counts.homebrewFiles, "element file")}, {count(data.counts.homebrewItems, "item")} made on the Homebrew page, {count(data.counts.homebrewMonsters, "monster")}
               </dd>
             </>
           )}

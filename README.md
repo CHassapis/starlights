@@ -158,6 +158,12 @@ server then:
 4. builds the Compendium of Lore;
 5. runs every character through the rules again, so they get new choices.
 
+The page also shows where things stand: the **server** (the Starlights version it was built from, whether every
+database change is applied, and how many characters, campaigns, elements and homebrew items there are) and the
+**content** (Aurora Legacy's commit, the 5etools release, the last update that worked, and whether one is running).
+**Check for updates** asks GitHub, only when you press it, what is newer: Aurora Legacy's new commits and the files
+they change, 5etools' new release and its notes, and what **Update now** would download. Nothing updates by itself.
+
 Only GitHub links are accepted. The downloads live in `deploy/data/content`, the Compendium in `deploy/data/lore`, and
 your homebrew (`deploy/data/homebrew`) is never touched. Optional extras:
 
