@@ -19,7 +19,8 @@
   imports and wires everything: the builder's rules, the Compendium of Lore, and every character updated.
 - **Character wizard** for new players: class, species, background, ability scores, the books' starting equipment
   (packages or gold) and spells, one step at a time, with a skip to the full builder.
-- **Character sheets like Aurora's**, on screen and as PDF; bring in players' Aurora character files.
+- **Character sheets like Aurora's**, on screen and as PDF, with the portrait sized and placed as you like and a last
+  page showing the whole picture; bring in players' Aurora character files.
 - **Builder**: multiclassing, 2014 and 2024 rules (or both), Save / Discard, items that cast spells, extra feats,
   languages and proficiencies.
 - **Battle Action Simulator**: attacks, spells, slots and charges, familiars, conditions; magic items under the action

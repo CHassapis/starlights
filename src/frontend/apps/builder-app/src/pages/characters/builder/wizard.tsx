@@ -6,6 +6,8 @@ import type { BuilderChoice } from "@/lib/api/builder";
 import { cn } from "@/lib/utils";
 import { AbilitiesTab } from "./abilities-tab";
 import { MagicTab } from "./magic-tab";
+import { useCharacterHeader } from "@/lib/api/builder";
+import { PortraitFramer } from "./portrait-framer";
 import { StartingEquipment } from "./starting-equipment";
 
 interface Step {
@@ -48,6 +50,7 @@ export function Wizard({
   onExit: () => void;
 }) {
   const [at, setAt] = useState(0);
+  const portraitUrl = useCharacterHeader(characterId).data?.character.portraitUrl;
   const step = STEPS[at];
   const heading = useRef<HTMLElement>(null);
   const pills = useRef<HTMLOListElement>(null);
@@ -133,6 +136,14 @@ export function Wizard({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">The full builder has everything else: the Story tab, extra feats and languages, levelling up, and the Equipment tab.</p>
+              <section className="space-y-3 rounded-lg border p-3">
+                <h3 className="font-medium">Your portrait on the sheet</h3>
+                {portraitUrl ? (
+                  <PortraitFramer characterId={characterId} portraitUrl={portraitUrl} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">No portrait yet: add one with the picture box at the top of the page, then place it here.</p>
+                )}
+              </section>
             </div>
           )}
 

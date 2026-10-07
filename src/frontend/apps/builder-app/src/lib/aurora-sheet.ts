@@ -2,6 +2,8 @@ import fontkit from "@pdf-lib/fontkit";
 import { PDFCheckBox, PDFDocument, PDFTextField, StandardFonts, rgb, type Color, type PDFEmbeddedPage, type PDFFont, type PDFPage } from "pdf-lib";
 import type { SheetData, SheetFeature, SheetSpell } from "@/lib/api/sheet";
 import { spellLevelLine } from "@/lib/api/sheet";
+import { canvasJpeg, loadPicture, renderFramed } from "@/lib/portrait-render";
+import { parseFrame } from "@/lib/rules/portrait-frame";
 
 /*
  * The character sheet as Aurora Builder makes it: Aurora's own sheet templates (taken from its installer, served by
@@ -510,6 +512,41 @@ async function drawPicture(b: SheetBuilder, page: PDFPage, box: Box | undefined,
   }
 }
 
+/** The portrait as the player framed it (size and the part that shows), filling the box; the whole picture otherwise. */
+async function drawFramedPortrait(b: SheetBuilder, page: PDFPage, box: Box | undefined, url: string | null | undefined, frameText: string | undefined) {
+  const frame = parseFrame(frameText);
+  if (!frame) return drawPicture(b, page, box, url);
+  if (!box || !url) return;
+  try {
+    const inner = { w: box.w - 4, h: box.h - 4 };
+    // four pixels a point: sharp when printed, small enough for the file
+    const image = await b.doc.embedJpg(await canvasJpeg(renderFramed(await loadPicture(url), inner, frame, 4)));
+    page.drawImage(image, { x: box.x + 2, y: box.y + 2, width: inner.w, height: inner.h });
+  } catch {
+    // a picture that cannot be read is left out rather than failing the sheet
+  }
+}
+
+/** A last page with the character's whole picture, as large as the page allows, under the name. */
+async function portraitPage(b: SheetBuilder, data: SheetData) {
+  if (!data.portraitUrl) return;
+  try {
+    const image = await b.doc.embedJpg(await toJpeg(data.portraitUrl));
+    const page = b.doc.addPage([612, 792]);
+    const margin = 36;
+    const title = data.name;
+    const size = 20;
+    page.drawText(title, { x: (612 - b.fonts.bold.widthOfTextAtSize(title, size)) / 2, y: 792 - margin - size, size, font: b.fonts.bold });
+    const room = { w: 612 - 2 * margin, h: 792 - 2 * margin - size - 18 };
+    const scale = Math.min(room.w / image.width, room.h / image.height);
+    const w = image.width * scale;
+    const h = image.height * scale;
+    page.drawImage(image, { x: (612 - w) / 2, y: margin + (room.h - h) / 2, width: w, height: h });
+  } catch {
+    // no page for a picture that cannot be read
+  }
+}
+
 /** Any browser-readable picture as JPEG bytes (pdf-lib takes JPEG and PNG only; uploads may be WebP). */
 async function toJpeg(url: string): Promise<ArrayBuffer> {
   const blob = await (await fetch(url)).blob();
@@ -562,7 +599,7 @@ async function backgroundPage(b: SheetBuilder, data: SheetData): Promise<Paragra
     if (box) drawParagraphs(page, box, textParagraphs(data.backgroundFeature.text), b.fonts, { size: 7, minSize: 4 });
   }
 
-  await drawPicture(b, page, field(fields, "background_portrait_image"), data.portraitUrl);
+  await drawFramedPortrait(b, page, field(fields, "background_portrait_image"), data.portraitUrl, data.story.portraitFrame);
   await drawPicture(b, page, field(fields, "background_organization_image"), s.organizationSymbol);
   return overflow;
 }
@@ -802,6 +839,7 @@ export async function buildAuroraSheet(data: SheetData): Promise<Uint8Array> {
     await spellCards(b, data);
   }
   await itemCards(b, data);
+  await portraitPage(b, data);
   b.doc.setTitle(`${data.name}: character sheet`);
   return b.doc.save();
 }
