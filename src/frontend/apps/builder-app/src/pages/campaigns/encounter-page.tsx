@@ -137,7 +137,7 @@ export function EncounterPage() {
       <header className="flex flex-wrap items-center gap-3">
         <SwordsIcon className="size-6 text-amber-500" />
         <div className="min-w-0 flex-1">
-          <h1 className="font-heading text-2xl font-semibold">{title}</h1>
+          <h1 className="font-heading text-xl font-semibold sm:text-2xl">{title}</h1>
           <p className="text-sm text-muted-foreground">
             {f.active ? `Round ${f.round}${f.turn ? ` · ${f.combatants.find((c) => c.id === f.turn)?.name ?? ""}'s turn` : ""}` : dm ? "Set up the fight, then start it: players see it in their simulators." : "Not running."}
           </p>

@@ -71,7 +71,7 @@ export function CampaignPage() {
               {view.campaign.locked && <LockIcon className="size-5 text-muted-foreground" aria-label="Has a password" />}
             </h1>
             {view.campaign.dmName && <p className="text-sm text-muted-foreground">DM: {view.campaign.dmName}</p>}
-            <Prose text={view.campaign.description} className="mt-1 text-muted-foreground" />
+            <Description text={view.campaign.description} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Player | DM: the DM side asks for the DM password (or the site's admin password) the first time */}
@@ -319,7 +319,7 @@ function Codex({ view, canEdit, onEdit, kinds }: TabProps & { kinds: EntryKind[]
       {entries.length === 0 && <p className="text-sm text-muted-foreground">Nothing here yet.</p>}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {entries.map((e) => (
-          <button key={e.id} type="button" onClick={() => setOpen(e)} className="flex gap-3 rounded-lg border p-3 text-left hover:bg-muted/50">
+          <button key={e.id} type="button" onClick={() => setOpen(e)} className="flex min-w-0 gap-3 rounded-lg border p-3 text-left hover:bg-muted/50">
             {e.imageUrl ? (
               <img src={e.imageUrl} alt="" className="size-16 shrink-0 rounded-md object-cover" />
             ) : (
@@ -327,12 +327,16 @@ function Codex({ view, canEdit, onEdit, kinds }: TabProps & { kinds: EntryKind[]
                 <ScrollTextIcon className="size-5 text-muted-foreground" />
               </span>
             )}
-            <span className="min-w-0 space-y-1">
-              <span className="block font-medium">{e.title}</span>
+            <span className="min-w-0 flex-1 space-y-1">
+              <span className="block break-words font-medium">{e.title}</span>
               {typeof e.data.role === "string" && e.data.role && <span className="block text-xs text-muted-foreground">{e.data.role}</span>}
               <span className="flex flex-wrap gap-1">
                 {CODEX_KINDS.length > 1 && <Badge variant="secondary">{KIND_NAMES[e.kind]}</Badge>}
-                {typeof e.data.status === "string" && e.data.status && <Badge variant="outline">{e.data.status}</Badge>}
+                {typeof e.data.status === "string" && e.data.status && (
+                  <Badge variant="outline" className="max-w-full truncate" title={e.data.status}>
+                    {e.data.status}
+                  </Badge>
+                )}
                 <HiddenBadge entry={e} canEdit={canEdit} />
               </span>
               <span className="line-clamp-2 block text-xs text-muted-foreground">{e.body}</span>
@@ -768,6 +772,25 @@ function Whereabouts({ entry, holders, canEdit }: { entry: CampaignEntry; holder
   const where = typeof entry.data.whereabouts === "string" ? entry.data.whereabouts : "";
   if (!where && !canEdit) return null;
   return <span className="block text-xs text-muted-foreground">{whereaboutsLabel(where)}</span>;
+}
+
+/** The campaign's description: on a phone its first lines and "Read more", so the tabs are not a long scroll away. */
+function Description({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 400;
+  return (
+    <div className="mt-1">
+      <div className={cn("relative", long && !open && "max-h-40 overflow-hidden sm:max-h-none sm:overflow-visible")}>
+        <Prose text={text} className="text-muted-foreground" />
+        {long && !open && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-background to-transparent sm:hidden" />}
+      </div>
+      {long && (
+        <button type="button" className="mt-1 text-sm underline sm:hidden" onClick={() => setOpen((o) => !o)}>
+          {open ? "Show less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** The DM side, locked: the campaign's DM password (or the site's admin password) opens it on this device. */

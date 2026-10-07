@@ -498,10 +498,10 @@ function Panel({ title, icon, children, className, action }: { title?: string; i
 
 function Stat({ label, value, sub, className }: { label: string; value: ReactNode; sub?: ReactNode; className?: string }) {
   return (
-    <div className={cn("flex min-w-0 flex-col items-center justify-center rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-center", className)}>
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-white/55">{label}</span>
-      <span className="font-heading text-2xl leading-tight text-white">{value}</span>
-      {sub && <span className="text-[11px] leading-tight text-white/60">{sub}</span>}
+    <div className={cn("flex min-w-0 flex-col items-center justify-center rounded-lg border border-white/10 bg-black/30 px-1 py-1.5 text-center sm:px-2 sm:py-2", className)}>
+      <span className="text-[9px] font-semibold uppercase leading-tight tracking-wide text-white/55 sm:text-[10px] sm:tracking-wider">{label}</span>
+      <span className="font-heading text-xl leading-tight text-white sm:text-2xl">{value}</span>
+      {sub && <span className="line-clamp-2 break-words text-[10px] leading-tight text-white/60 sm:text-[11px]">{sub}</span>}
     </div>
   );
 }
@@ -624,7 +624,8 @@ function Vitals({
           Hit dice {hitDiceLeft} of {data.hitDice || `${data.level}`} left · damage takes temporary hit points first
         </p>
       </Panel>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      {/* four to a row on a phone too: two rows instead of three before the actions */}
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
         <Stat label="Armor class" value={ac.total} sub={ac.changes.length ? ac.changes.join(" · ") : data.armor.label + (data.armor.shield ? ` + ${data.armor.shield}` : "")} className={ac.total !== data.armorClass ? "border-sky-300/50" : undefined} />
         <Stat label="Initiative" value={signed(data.initiative)} />
         <Stat label="Speed" value={`${speed} ft`} sub={[data.speeds.fly && `fly ${data.speeds.fly}`, data.speeds.climb && `climb ${data.speeds.climb}`, data.speeds.swim && `swim ${data.speeds.swim}`].filter(Boolean).join(" · ") || undefined} />
@@ -754,7 +755,9 @@ function Effects({ ctx }: { ctx: Ctx }) {
       }
     >
       {ctx.effects.length === 0 ? (
-        <p className="text-xs text-white/55">Nothing yet. Casting a spell or using a feature that changes your numbers (Shield, Mage Armor, Bladesong, Rage) turns it on here; so can you.</p>
+        <p className="text-xs text-white/55">
+          Nothing yet.<span className="hidden sm:inline"> Casting a spell or using a feature that changes your numbers (Shield, Mage Armor, Bladesong, Rage) turns it on here; so can you.</span>
+        </p>
       ) : (
         <ul className="space-y-1.5">
           {ctx.effects.map((e) => (
