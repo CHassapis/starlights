@@ -135,9 +135,8 @@ public sealed class UploadHomebrewEndpoint : Endpoint<UploadHomebrewRequest>
         await HomebrewContent.Gate.WaitAsync(ct);
         try
         {
-            document.Save(Path.Combine(folder, name));
-
-            var result = await _importer.ImportAsync(AuroraImporterIndex.Homebrew, replace: false, update: true, ct);
+            var result = await HomebrewFileChange.ApplyAsync(Path.Combine(folder, name), document,
+                () => _importer.ImportAsync(AuroraImporterIndex.Homebrew, replace: false, update: true, ct));
             await Send.OkAsync(new { File = name, result.ElementsImported, result.ElementsReplaced, result.Warnings }, ct);
         }
         finally
@@ -176,11 +175,14 @@ public sealed class DeleteHomebrewEndpoint : EndpointWithoutRequest
                 return;
             }
 
-            File.Delete(path);
-            var removed = await _importer.RemoveAsync("homebrew/" + name, ct);
-            // Rebuild patched targets from source after removing this file. Other files’ appends still apply.
-            var result = await _importer.ImportAsync(AuroraImporterIndex.Homebrew, replace: false, update: true, ct);
-            await Send.OkAsync(new { Removed = removed, result.Warnings }, ct);
+            var result = await HomebrewFileChange.ApplyAsync(path, null, async () =>
+            {
+                var removed = await _importer.RemoveAsync("homebrew/" + name, ct);
+                // Removal and rebuilding remaining patches commit together.
+                var imported = await _importer.ImportAsync(AuroraImporterIndex.Homebrew, replace: false, update: true, ct);
+                return new { Removed = removed, imported.Warnings };
+            });
+            await Send.OkAsync(result, ct);
         }
         finally
         {

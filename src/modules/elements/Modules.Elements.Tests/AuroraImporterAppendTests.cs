@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using System.Transactions;
 using Starlights.Modules.Elements.Data;
 using Starlights.Modules.Elements.Domain;
 using Starlights.Modules.Elements.Domain.Components;
@@ -78,6 +79,36 @@ public class AuroraImporterAppendTests
     }
 
     [TestMethod]
+    public async Task FailedRebuild_RollsBackTheEarlierSave()
+    {
+        var repository = new Mock<IElementsRepository>();
+        repository.Setup(x => x.GetElementSummariesAsync()).ReturnsAsync([]);
+        repository.Setup(x => x.GetAuroraXmlAsync()).ReturnsAsync(new Dictionary<Guid, string>());
+        var persistence = new Mock<IPersistence>();
+        persistence.Setup(x => x.GetRepository<IElementsRepository>()).Returns(repository.Object);
+        var probe = new TransactionProbe();
+        var saves = 0;
+        persistence.Setup(x => x.SaveChangesAsync()).Returns(() =>
+        {
+            Transaction.Current.Should().NotBeNull();
+            if (++saves == 1)
+            {
+                Transaction.Current!.EnlistVolatile(probe, EnlistmentOptions.None);
+                return Task.FromResult(1);
+            }
+            throw new InvalidOperationException("synthetic rebuild save failure");
+        });
+        var importer = new AuroraImporter(NullLogger<AuroraImporter>.Instance, persistence.Object,
+            new AuroraImporterOptions(Path.Combine(_root, "content"), HomebrewPath: Path.Combine(_root, "homebrew")),
+            new FiveEToolsData(new FiveEToolsOptions(Path.Combine(_root, "no-5etools")), NullLogger<FiveEToolsData>.Instance));
+        Func<Task> import = async () => await importer.ImportAsync(AuroraImporterOptions.HomebrewIndex, update: true);
+        await import.Should().ThrowAsync<InvalidOperationException>();
+        saves.Should().Be(2);
+        probe.RolledBack.Should().BeTrue();
+        probe.Committed.Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task AppendedSupports_AreMergedOnce()
     {
         var elements = await ImportAsync();
@@ -117,6 +148,24 @@ public class AuroraImporterAppendTests
         second.Values.Select(e => e.GetRequiredComponent<AuroraSourceComponent>().RawXml)
             .Should().Equal(first.Values.Select(e => e.GetRequiredComponent<AuroraSourceComponent>().RawXml));
     }
+    [TestMethod]
+    [DataRow("Class")]
+    [DataRow("Race")]
+    [DataRow("Archetype")]
+    [DataRow("Feat")]
+    [DataRow("Spell")]
+    [DataRow("Proficiency")]
+    public async Task AppendOnlyFile_ChangesExistingElementOfSupportedType(string type)
+    {
+        File.WriteAllText(Path.Combine(_root, "content", "fixture.xml"),
+            $"<elements><element id='ID_APPEND_FIXTURE' name='Append fixture' type='{type}' source='Test'><supports>Original</supports></element></elements>");
+        File.WriteAllText(Path.Combine(_root, "homebrew", "fixture-patch.xml"),
+            "<elements><append id='ID_APPEND_FIXTURE'><supports>AdditionalSupport</supports></append></elements>");
+        var elements = await ImportAsync();
+        elements["ID_APPEND_FIXTURE"].GetRequiredComponent<SupportsComponent>().Supports.Should().Equal("Original", "AdditionalSupport");
+        elements["ID_APPEND_FIXTURE"].GetRequiredComponent<AuroraSourceComponent>().File.Should().Be("fixture.xml");
+    }
+
     [TestMethod]
     public async Task FirstImport_AlsoIncludesAppendTargetsOutsideHomebrew()
     {
@@ -161,6 +210,21 @@ public class AuroraImporterAppendTests
         Get("ID_TEST_SKILL").GetRequiredComponent<AuroraSourceComponent>().File.Should().Be("base.xml");
         var skillId = Get("ID_TEST_SKILL").Id;
         (await importer.ImportAsync(AuroraImporterOptions.HomebrewIndex, update: true)).ElementsReplaced.Should().Be(0);
+
+        // Updating or replacing installed Aurora content must retain homebrew contributions and IDs.
+        var untouchedId = Get("ID_TEST_PLAN").Id;
+        var untouchedXml = Get("ID_TEST_PLAN").GetRequiredComponent<AuroraSourceComponent>().RawXml;
+        File.WriteAllText(Path.Combine(_root, "content", "base.xml"), Elements.Replace("Skill,Intelligence", "Skill,Intelligence,Upstream"));
+        await importer.ImportAsync("base.index", update: true);
+        Get("ID_TEST_SKILL").Id.Should().Be(skillId);
+        Get("ID_TEST_SKILL").GetRequiredComponent<SupportsComponent>().Supports.Should().Equal("Skill", "Intelligence", "Upstream", "Artificer", "ID_TEST_CLASS");
+        await importer.ImportAsync("base.index", replace: true);
+        Get("ID_TEST_SKILL").Id.Should().Be(skillId);
+        Get("ID_TEST_FEATURE").GetComponents<IncludeRuleComponent>().Should().ContainSingle();
+        Get("ID_TEST_PLAN").Id.Should().Be(untouchedId);
+        Get("ID_TEST_PLAN").GetRequiredComponent<AuroraSourceComponent>().RawXml.Should().Be(untouchedXml);
+        File.WriteAllText(Path.Combine(_root, "content", "base.xml"), Elements);
+        await importer.ImportAsync("base.index", update: true);
 
         // A second patch must survive both replacement and deletion of the first.
         File.WriteAllText(Path.Combine(_root, "homebrew", "other.xml"),

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Transactions;
 using System.Xml;
 using System.Xml.Linq;
 using Microsoft.Extensions.Logging;
@@ -197,6 +198,11 @@ internal sealed class AuroraImporter : IAuroraImporter
             }
         }
 
+        // Replacement needs two saves to remove tracked entities before adding their stable IDs again.
+        // Keep both saves in one transaction so a failed rebuild cannot commit only the deletions.
+        using var transaction = new TransactionScope(TransactionScopeOption.Required,
+            new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted, Timeout = TransactionManager.MaximumTimeout },
+            TransactionScopeAsyncFlowOption.Enabled);
         var existing = (await repository.GetElementSummariesAsync()).Select(e => e.Id).ToHashSet();
 
         // replace: re-create everything imported before; update: only what changed upstream. Component ids are
@@ -344,6 +350,7 @@ internal sealed class AuroraImporter : IAuroraImporter
         }
 
         await _persistence.SaveChangesAsync();
+        transaction.Complete();
         Items.ElementsContentVersion.Bump();
 
         var imported = importedByType.Values.Sum();
